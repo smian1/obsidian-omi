@@ -3,7 +3,7 @@
 	"name": "Omi Conversations",
 	"version": "1.0.0",
 	"minAppVersion": "0.15.0",
-	"description": "Sync your Omi conversation memories",
+	"description": "Sync your Omi AI conversation memories into organized markdown files.",
 	"author": "Salman M.",
 	"authorUrl": "https://github.com/smian1",
 	"isDesktopOnly": false
