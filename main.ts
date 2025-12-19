@@ -10,6 +10,43 @@ interface OmiConversationsSettings {
 	includeTranscript: boolean;
 }
 
+// Omi API response types
+interface ActionItem {
+	description: string;
+	completed: boolean;
+}
+
+interface CalendarEvent {
+	title: string;
+	start: string;
+	duration: number;
+	description?: string;
+}
+
+interface TranscriptSegment {
+	speaker?: string;
+	start: number;
+	text: string;
+}
+
+interface StructuredData {
+	title?: string;
+	emoji?: string;
+	category?: string;
+	overview?: string;
+	action_items?: ActionItem[];
+	events?: CalendarEvent[];
+}
+
+interface Conversation {
+	id: string;
+	created_at: string;
+	started_at: string;
+	finished_at: string;
+	structured?: StructuredData;
+	transcript_segments?: TranscriptSegment[];
+}
+
 const DEFAULT_SETTINGS: OmiConversationsSettings = {
 	apiKey: '',
 	folderPath: 'Omi Conversations',
@@ -100,7 +137,6 @@ export default class OmiConversationsPlugin extends Plugin {
 
 			// Fetch all conversations starting from the specified date
 			const startDate = this.settings.startDate;
-			console.log(`Using start date filter: ${startDate}`);
 			const allConversations = await this.api.getAllConversations(startDate);
 
 			if (!allConversations || allConversations.length === 0) {
@@ -109,7 +145,7 @@ export default class OmiConversationsPlugin extends Plugin {
 			}
 
 			// Group conversations by date (using local timezone)
-			const conversationsByDate = new Map<string, any[]>();
+			const conversationsByDate = new Map<string, Conversation[]>();
 			for (const conversation of allConversations) {
 				// Convert UTC timestamp to local date
 				const localDate = new Date(conversation.created_at);
@@ -161,7 +197,7 @@ export default class OmiConversationsPlugin extends Plugin {
 		}
 	}
 
-	private async createIndexFile(folderPath: string, dateStr: string, conversations: any[]) {
+	private async createIndexFile(folderPath: string, dateStr: string, conversations: Conversation[]) {
 		const content: string[] = [];
 		content.push(`# ${dateStr} - Conversations`);
 		content.push('');
@@ -215,7 +251,7 @@ export default class OmiConversationsPlugin extends Plugin {
 		await this.app.vault.adapter.write(filePath, content.join('\n'));
 	}
 
-	private async createOverviewFile(folderPath: string, conversations: any[]) {
+	private async createOverviewFile(folderPath: string, conversations: Conversation[]) {
 		const content: string[] = [];
 		// No top-level title - filename already shows "overview"
 
@@ -245,7 +281,7 @@ export default class OmiConversationsPlugin extends Plugin {
 		await this.app.vault.adapter.write(filePath, content.join('\n'));
 	}
 
-	private async createActionItemsFile(folderPath: string, conversations: any[]) {
+	private async createActionItemsFile(folderPath: string, conversations: Conversation[]) {
 		const content: string[] = [];
 		// No top-level title - filename already shows "action-items"
 
@@ -283,7 +319,7 @@ export default class OmiConversationsPlugin extends Plugin {
 		await this.app.vault.adapter.write(filePath, content.join('\n'));
 	}
 
-	private async createEventsFile(folderPath: string, conversations: any[]) {
+	private async createEventsFile(folderPath: string, conversations: Conversation[]) {
 		const content: string[] = [];
 		// No top-level title - filename already shows "events"
 
@@ -331,7 +367,7 @@ export default class OmiConversationsPlugin extends Plugin {
 		await this.app.vault.adapter.write(filePath, content.join('\n'));
 	}
 
-	private async createTranscriptFile(folderPath: string, conversations: any[]) {
+	private async createTranscriptFile(folderPath: string, conversations: Conversation[]) {
 		const content: string[] = [];
 		// No top-level title - filename already shows "transcript"
 
@@ -369,7 +405,7 @@ export default class OmiConversationsPlugin extends Plugin {
 		await this.app.vault.adapter.write(filePath, content.join('\n'));
 	}
 
-	private async getLastSyncedDate(): Promise<Date | null> {
+	private getLastSyncedDate(): Date | null {
 		const folderPath = normalizePath(this.settings.folderPath);
 		try {
 			const files = this.app.vault.getFiles()
@@ -386,7 +422,7 @@ export default class OmiConversationsPlugin extends Plugin {
 		}
 	}
 
-	private formatConversationMarkdown(conversation: any): string {
+	private formatConversationMarkdown(conversation: Conversation): string {
 		const content: string[] = [];
 
 		// Title with emoji
@@ -471,7 +507,7 @@ class OmiConversationsSettingTab extends PluginSettingTab {
 		containerEl.empty();
 
 		new Setting(containerEl)
-			.setName('API Key')
+			.setName('API key')
 			.setDesc('Your Omi Developer API key (starts with omi_dev_)')
 			.addText(text => text
 				.setPlaceholder('omi_dev_...')
@@ -503,11 +539,13 @@ class OmiConversationsSettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				}));
 
-		containerEl.createEl('h3', { text: 'Content Options' });
-		containerEl.createEl('p', { text: 'Choose which sections to include in synced conversations:', cls: 'setting-item-description' });
+		new Setting(containerEl)
+			.setName('Content options')
+			.setDesc('Choose which sections to include in synced conversations')
+			.setHeading();
 
 		new Setting(containerEl)
-			.setName('Include Overview')
+			.setName('Include overview')
 			.setDesc('Include the AI-generated overview/summary')
 			.addToggle(toggle => toggle
 				.setValue(this.plugin.settings.includeOverview)
@@ -517,7 +555,7 @@ class OmiConversationsSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(containerEl)
-			.setName('Include Action Items')
+			.setName('Include action items')
 			.setDesc('Include extracted action items and tasks')
 			.addToggle(toggle => toggle
 				.setValue(this.plugin.settings.includeActionItems)
@@ -527,7 +565,7 @@ class OmiConversationsSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(containerEl)
-			.setName('Include Events')
+			.setName('Include events')
 			.setDesc('Include calendar events extracted from conversation')
 			.addToggle(toggle => toggle
 				.setValue(this.plugin.settings.includeEvents)
@@ -537,7 +575,7 @@ class OmiConversationsSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(containerEl)
-			.setName('Include Transcript')
+			.setName('Include transcript')
 			.setDesc('Include full conversation transcript with timestamps')
 			.addToggle(toggle => toggle
 				.setValue(this.plugin.settings.includeTranscript)
@@ -563,8 +601,8 @@ class OmiAPI {
 		this.apiKey = apiKey;
 	}
 
-	async getAllConversations(startDate?: string): Promise<any[]> {
-		const allConversations: any[] = [];
+	async getAllConversations(startDate?: string): Promise<Conversation[]> {
+		const allConversations: Conversation[] = [];
 		let offset = 0;
 		const startDateTime = startDate ? new Date(startDate + 'T00:00:00Z').getTime() : 0;
 
@@ -577,8 +615,6 @@ class OmiAPI {
 					include_transcript: 'true'
 				});
 
-				console.log(`Fetching conversations: offset=${offset}, limit=${this.batchSize}`);
-
 				const conversations = await this.makeRequest(
 					`${this.baseUrl}/v1/dev/user/conversations`,
 					params
@@ -588,10 +624,8 @@ class OmiAPI {
 
 				// Filter by start date if provided
 				const filteredConversations = startDate
-					? conversations.filter((c: any) => new Date(c.created_at).getTime() >= startDateTime)
+					? conversations.filter((c: Conversation) => new Date(c.created_at).getTime() >= startDateTime)
 					: conversations;
-
-				console.log(`Received ${conversations.length} conversations, ${filteredConversations.length} after date filter`);
 
 				if (filteredConversations.length > 0) {
 					allConversations.push(...filteredConversations);
@@ -602,7 +636,6 @@ class OmiAPI {
 
 				// If all conversations in this batch are older than start date, we can stop
 				if (startDate && filteredConversations.length === 0) {
-					console.log('All remaining conversations are older than start date, stopping pagination');
 					break;
 				}
 
@@ -612,7 +645,6 @@ class OmiAPI {
 				await new Promise(resolve => setTimeout(resolve, 500)); // 500ms delay
 			}
 
-			console.log(`Total conversations fetched: ${allConversations.length}`);
 			return allConversations;
 		} catch (error) {
 			console.error('Error fetching conversations:', error);
@@ -620,7 +652,7 @@ class OmiAPI {
 		}
 	}
 
-	private async makeRequest(url: string, params: URLSearchParams): Promise<any> {
+	private async makeRequest(url: string, params: URLSearchParams): Promise<Conversation[]> {
 		let retries = 0;
 		while (true) {
 			try {
