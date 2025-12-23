@@ -25,6 +25,7 @@ interface CalendarEvent {
 
 interface TranscriptSegment {
 	speaker?: string;
+	speaker_id?: number;
 	start: number;
 	text: string;
 }
@@ -388,7 +389,7 @@ export default class OmiConversationsPlugin extends Plugin {
 
 			if (conv.transcript_segments && conv.transcript_segments.length > 0) {
 				for (const segment of conv.transcript_segments) {
-					const speaker = segment.speaker || 'Unknown';
+					const speaker = segment.speaker || (segment.speaker_id !== undefined ? `Speaker ${segment.speaker_id}` : 'Unknown');
 					const startMin = Math.floor(segment.start / 60);
 					const startSec = Math.floor(segment.start % 60);
 					const timestamp = `${startMin}:${startSec.toString().padStart(2, '0')}`;
@@ -481,7 +482,7 @@ export default class OmiConversationsPlugin extends Plugin {
 		if (this.settings.includeTranscript && conversation.transcript_segments && conversation.transcript_segments.length > 0) {
 			content.push('## Transcript');
 			for (const segment of conversation.transcript_segments) {
-				const speaker = segment.speaker || 'Unknown';
+				const speaker = segment.speaker || (segment.speaker_id !== undefined ? `Speaker ${segment.speaker_id}` : 'Unknown');
 				const startMin = Math.floor(segment.start / 60);
 				const startSec = Math.floor(segment.start % 60);
 				const timestamp = `${startMin}:${startSec.toString().padStart(2, '0')}`;
