@@ -94,13 +94,13 @@ export default class OmiConversationsPlugin extends Plugin {
 		this.addSettingTab(new OmiConversationsSettingTab(this.app, this));
 
 		// Add ribbon icon for syncing
-		this.addRibbonIcon('brain', 'Sync Omi Conversations', async () => {
+		this.addRibbonIcon('brain', 'Sync Omi conversations', async () => {
 			await this.syncConversations();
 		});
 
 		// Add command for syncing
 		this.addCommand({
-			id: 'sync-omi-conversations',
+			id: 'sync',
 			name: 'Sync',
 			callback: async () => {
 				await this.syncConversations();
@@ -509,7 +509,7 @@ class OmiConversationsSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('API key')
-			.setDesc('Your Omi Developer API key (starts with omi_dev_)')
+			.setDesc('Your Omi developer API key (starts with omi_dev_)')
 			.addText(text => text
 				.setPlaceholder('omi_dev_...')
 				.setValue(this.plugin.settings.apiKey)
@@ -541,7 +541,7 @@ class OmiConversationsSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(containerEl)
-			.setName('Content options')
+			.setName('Sections to include')
 			.setDesc('Choose which sections to include in synced conversations')
 			.setHeading();
 
