@@ -1,4 +1,37 @@
-/* Omi Tasks View Styling */
+/* ========================================
+   OMI DESIGN TOKENS
+   Inspired by Material 3 design system
+   ======================================== */
+:root {
+    /* Timing */
+    --omi-duration-short: 100ms;
+    --omi-duration-medium: 200ms;
+    --omi-duration-long: 400ms;
+    --omi-easing-standard: cubic-bezier(0.2, 0, 0, 1);
+    --omi-easing-emphasized: cubic-bezier(0.2, 0, 0, 1);
+
+    /* Spacing scale */
+    --omi-spacing-xs: 4px;
+    --omi-spacing-sm: 8px;
+    --omi-spacing-md: 12px;
+    --omi-spacing-lg: 16px;
+    --omi-spacing-xl: 24px;
+
+    /* Border radius */
+    --omi-radius-sm: 4px;
+    --omi-radius-md: 8px;
+    --omi-radius-lg: 12px;
+    --omi-radius-full: 9999px;
+
+    /* Status colors - use Obsidian's theme variables with fallbacks */
+    --omi-status-pending: var(--text-warning, #e6a700);
+    --omi-status-completed: var(--text-success, #28a745);
+    --omi-status-overdue: var(--text-error, #dc3545);
+}
+
+/* ========================================
+   OMI TASKS VIEW STYLING
+   ======================================== */
 .omi-tasks-container {
     padding: 16px;
     height: 100%;
@@ -460,7 +493,9 @@
 }
 
 .omi-kanban-task-list.drag-over {
-    background: var(--background-modifier-hover);
+    background: rgba(var(--interactive-accent-rgb, 99, 102, 241), 0.1);
+    border: 2px dashed var(--interactive-accent);
+    border-radius: var(--omi-radius-sm);
 }
 
 .omi-kanban-empty {
@@ -473,12 +508,17 @@
 
 .omi-kanban-card {
     background: var(--background-primary);
-    border-radius: 6px;
+    border-radius: var(--omi-radius-md);
     padding: 10px;
     margin-bottom: 8px;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
     cursor: grab;
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    transition: transform var(--omi-duration-medium) var(--omi-easing-standard),
+                box-shadow var(--omi-duration-medium) var(--omi-easing-standard);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: var(--omi-spacing-sm);
 }
 
 .omi-kanban-card:hover {
@@ -486,8 +526,9 @@
 }
 
 .omi-kanban-card.dragging {
-    opacity: 0.5;
-    transform: rotate(2deg);
+    opacity: 0.6;
+    transform: rotate(2deg) scale(1.02);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
     cursor: grabbing;
 }
 
@@ -498,20 +539,21 @@
 }
 
 .omi-kanban-card-desc {
-    display: inline;
+    flex: 1;
     font-size: 13px;
     line-height: 1.4;
+    min-width: 0;
 }
 
 .omi-kanban-card-due {
-    display: block;
-    margin-top: 8px;
+    width: 100%;
+    margin-top: var(--omi-spacing-xs);
     font-size: 11px;
     color: var(--text-muted);
     background: var(--background-modifier-hover);
     padding: 2px 6px;
-    border-radius: 4px;
-    width: fit-content;
+    border-radius: var(--omi-radius-full);
+    display: inline-block;
 }
 
 /* ========================================
@@ -964,5 +1006,140 @@
 
     .omi-tasks-sync-btn {
         width: 100%;
+    }
+}
+
+/* ========================================
+   STATUS DOT (TaskNotes Inspired)
+   ======================================== */
+.omi-task__status {
+    width: 10px;
+    height: 10px;
+    border-radius: var(--omi-radius-full);
+    flex-shrink: 0;
+    transition: all var(--omi-duration-medium) var(--omi-easing-standard);
+}
+
+.omi-task__status--pending {
+    background: var(--omi-status-pending);
+    box-shadow: 0 0 0 2px rgba(230, 167, 0, 0.2);
+}
+
+.omi-task__status--completed {
+    background: var(--omi-status-completed);
+}
+
+.omi-task__status--overdue {
+    background: var(--omi-status-overdue);
+    animation: status-pulse 2s infinite;
+}
+
+@keyframes status-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.4); }
+    50% { box-shadow: 0 0 0 4px rgba(220, 53, 69, 0); }
+}
+
+/* ========================================
+   METADATA PILLS (TaskNotes Inspired)
+   ======================================== */
+.omi-task__metadata {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--omi-spacing-xs);
+    margin-top: var(--omi-spacing-xs);
+    margin-left: 26px;
+}
+
+.omi-task__pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    font-size: 11px;
+    border-radius: var(--omi-radius-full);
+    background: var(--background-modifier-hover);
+    color: var(--text-muted);
+    transition: all var(--omi-duration-short) var(--omi-easing-standard);
+}
+
+.omi-task__pill:hover {
+    background: var(--background-modifier-border);
+}
+
+.omi-task__pill--overdue {
+    background: rgba(220, 53, 69, 0.15);
+    color: var(--omi-status-overdue);
+}
+
+.omi-task__pill--today {
+    background: rgba(230, 167, 0, 0.15);
+    color: var(--omi-status-pending);
+}
+
+.omi-task__pill--source {
+    cursor: pointer;
+}
+
+.omi-task__pill--source:hover {
+    color: var(--interactive-accent);
+}
+
+/* ========================================
+   CHECKBOX ANIMATION (TaskNotes Inspired)
+   ======================================== */
+.omi-task-row input[type="checkbox"]:checked {
+    animation: checkbox-pop 0.3s var(--omi-easing-emphasized);
+}
+
+@keyframes checkbox-pop {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.2); }
+    100% { transform: scale(1); }
+}
+
+/* ========================================
+   LOADING SPINNER
+   ======================================== */
+.omi-loading-spinner {
+    width: 24px;
+    height: 24px;
+    border: 2px solid var(--background-modifier-border);
+    border-top-color: var(--interactive-accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ========================================
+   FOCUS VISIBLE STATES (Accessibility)
+   ======================================== */
+.omi-task-row:focus-visible,
+.omi-kanban-card:focus-visible,
+.omi-view-tab:focus-visible,
+.omi-tasks-sync-btn:focus-visible,
+.omi-tasks-add-btn:focus-visible,
+.omi-calendar-day-cell:focus-visible {
+    outline: 2px solid var(--interactive-accent);
+    outline-offset: 2px;
+}
+
+.omi-task-description:focus-visible {
+    outline: 2px solid var(--interactive-accent);
+    outline-offset: 1px;
+}
+
+/* ========================================
+   REDUCED MOTION (Accessibility)
+   ======================================== */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
     }
 }

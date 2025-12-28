@@ -1709,9 +1709,16 @@ class OmiTasksView extends ItemView {
 	}
 
 	private renderKanbanCard(container: HTMLElement, task: TaskWithUI): void {
-		const card = container.createDiv('omi-kanban-card');
+		const isOverdueTask = task.dueAt && this.isOverdue(task.dueAt) && !task.completed;
+		const cardClasses = ['omi-kanban-card'];
+		if (isOverdueTask) cardClasses.push('overdue');
+
+		const card = container.createDiv(cardClasses.join(' '));
 		card.draggable = true;
 		card.dataset.taskId = task.id || '';
+		card.setAttribute('role', 'article');
+		card.setAttribute('aria-label', `Task: ${task.description}${task.completed ? ' (completed)' : ''}${isOverdueTask ? ' (overdue)' : ''}`);
+		card.setAttribute('tabindex', '0');
 
 		// Setup drag events
 		card.addEventListener('dragstart', (e) => {
@@ -1728,9 +1735,20 @@ class OmiTasksView extends ItemView {
 			document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
 		});
 
+		// Status dot (TaskNotes inspired)
+		let statusClass = 'omi-task__status--pending';
+		if (task.completed) {
+			statusClass = 'omi-task__status--completed';
+		} else if (isOverdueTask) {
+			statusClass = 'omi-task__status--overdue';
+		}
+		const statusDot = card.createDiv(`omi-task__status ${statusClass}`);
+		statusDot.setAttribute('aria-hidden', 'true');
+
 		// Checkbox
 		const checkbox = card.createEl('input', { type: 'checkbox' });
 		checkbox.checked = task.completed;
+		checkbox.setAttribute('aria-label', `Mark as ${task.completed ? 'pending' : 'completed'}`);
 		checkbox.addEventListener('change', () => this.toggleTaskCompletion(task));
 
 		// Description
@@ -2132,6 +2150,18 @@ class OmiTasksView extends ItemView {
 		if (task.completed) rowClasses.push('completed');
 		const row = container.createDiv(rowClasses.join(' '));
 		row.setAttribute('role', 'listitem');
+		row.setAttribute('tabindex', '0');
+
+		// Status dot (TaskNotes inspired)
+		const isOverdueTask = task.dueAt && this.isOverdue(task.dueAt) && !task.completed;
+		let statusClass = 'omi-task__status--pending';
+		if (task.completed) {
+			statusClass = 'omi-task__status--completed';
+		} else if (isOverdueTask) {
+			statusClass = 'omi-task__status--overdue';
+		}
+		const statusDot = row.createDiv(`omi-task__status ${statusClass}`);
+		statusDot.setAttribute('aria-hidden', 'true'); // Decorative element
 
 		// Checkbox
 		const checkbox = row.createEl('input', { type: 'checkbox' });
