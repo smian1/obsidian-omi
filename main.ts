@@ -11,6 +11,7 @@ interface OmiConversationsSettings {
 	includeActionItems: boolean;
 	includeEvents: boolean;
 	includeTranscript: boolean;
+	conversationAutoSync: number;  // Auto-sync interval for conversations (minutes, 0 = disabled)
 	// Tasks Hub settings
 	enableTasksHub: boolean;
 	tasksHubFilePath: string;
@@ -89,6 +90,7 @@ const DEFAULT_SETTINGS: OmiConversationsSettings = {
 	includeActionItems: true,
 	includeEvents: true,
 	includeTranscript: true,
+	conversationAutoSync: 0,  // Disabled by default (0 = manual only)
 	// Tasks Hub defaults
 	enableTasksHub: false,
 	tasksHubFilePath: 'Tasks.md',  // Relative to folderPath
@@ -129,6 +131,7 @@ export default class OmiConversationsPlugin extends Plugin {
 	api: OmiAPI;
 	tasksHubSync: TasksHubSync;
 	private tasksHubSyncInterval: number | null = null;
+	private conversationSyncInterval: number | null = null;
 
 	async onload() {
 		await this.loadSettings();
@@ -193,6 +196,9 @@ export default class OmiConversationsPlugin extends Plugin {
 		if (this.settings.enableTasksHub) {
 			await this.initializeTasksHub();
 		}
+
+		// Set up conversation auto-sync if enabled
+		this.setupConversationAutoSync();
 	}
 
 	async activateTasksView(): Promise<void> {
@@ -245,8 +251,27 @@ export default class OmiConversationsPlugin extends Plugin {
 		}
 	}
 
+	setupConversationAutoSync() {
+		// Clear existing interval if any
+		if (this.conversationSyncInterval !== null) {
+			window.clearInterval(this.conversationSyncInterval);
+			this.conversationSyncInterval = null;
+		}
+
+		// Set up new interval if enabled
+		if (this.settings.conversationAutoSync > 0) {
+			const intervalMs = this.settings.conversationAutoSync * 60 * 1000;
+			this.conversationSyncInterval = window.setInterval(() => {
+				this.syncConversations();
+			}, intervalMs);
+		}
+	}
+
 	onunload() {
 		this.stopTasksHubPeriodicSync();
+		if (this.conversationSyncInterval !== null) {
+			window.clearInterval(this.conversationSyncInterval);
+		}
 	}
 
 	async loadSettings() {
@@ -760,6 +785,22 @@ class OmiConversationsSettingTab extends PluginSettingTab {
 				.onChange(async (value) => {
 					this.plugin.settings.startDate = value;
 					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Auto-sync conversations')
+			.setDesc('Automatically import new conversations in the background')
+			.addDropdown(dropdown => dropdown
+				.addOption('0', 'Manual only')
+				.addOption('30', 'Every 30 minutes')
+				.addOption('60', 'Every hour')
+				.addOption('120', 'Every 2 hours')
+				.addOption('360', 'Every 6 hours')
+				.setValue(this.plugin.settings.conversationAutoSync.toString())
+				.onChange(async (value) => {
+					this.plugin.settings.conversationAutoSync = parseInt(value, 10);
+					await this.plugin.saveSettings();
+					this.plugin.setupConversationAutoSync();
 				}));
 
 		// Content toggles
