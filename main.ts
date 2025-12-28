@@ -1,4 +1,7 @@
-import { App, Plugin, PluginSettingTab, Setting, normalizePath, Notice, requestUrl, TFile, debounce } from 'obsidian';
+import { App, Plugin, PluginSettingTab, Setting, normalizePath, Notice, requestUrl, ItemView, WorkspaceLeaf, Modal } from 'obsidian';
+
+// View type constant for Omi Tasks custom view
+const VIEW_TYPE_OMI_TASKS = 'omi-tasks-view';
 
 interface OmiConversationsSettings {
 	apiKey: string;
@@ -12,6 +15,7 @@ interface OmiConversationsSettings {
 	enableTasksHub: boolean;
 	tasksHubFilePath: string;
 	tasksHubSyncInterval: number;
+	tasksViewAutoRefresh: number;  // Auto-refresh interval for tasks view (minutes, 0 = disabled)
 }
 
 // Omi API response types
@@ -84,7 +88,8 @@ const DEFAULT_SETTINGS: OmiConversationsSettings = {
 	// Tasks Hub defaults
 	enableTasksHub: false,
 	tasksHubFilePath: 'Tasks.md',  // Relative to folderPath
-	tasksHubSyncInterval: 5
+	tasksHubSyncInterval: 5,
+	tasksViewAutoRefresh: 10  // Auto-refresh every 10 minutes by default
 }
 
 // Helper function to get emoji based on category
@@ -122,12 +127,23 @@ export default class OmiConversationsPlugin extends Plugin {
 		this.api = new OmiAPI(this.settings.apiKey);
 		this.tasksHubSync = new TasksHubSync(this);
 
+		// Register the Omi Tasks view
+		this.registerView(
+			VIEW_TYPE_OMI_TASKS,
+			(leaf) => new OmiTasksView(leaf, this)
+		);
+
 		// Add settings tab
 		this.addSettingTab(new OmiConversationsSettingTab(this.app, this));
 
 		// Add ribbon icon for syncing conversations
 		this.addRibbonIcon('brain', 'Sync Omi conversations', async () => {
 			await this.syncConversations();
+		});
+
+		// Add ribbon icon for opening Omi Tasks view
+		this.addRibbonIcon('check-circle', 'Open Omi Tasks', () => {
+			this.activateTasksView();
 		});
 
 		// Add command for syncing conversations
@@ -154,20 +170,44 @@ export default class OmiConversationsPlugin extends Plugin {
 			}
 		});
 
+		// Add command for opening Omi Tasks view
+		this.addCommand({
+			id: 'open-omi-tasks-view',
+			name: 'Open Omi Tasks',
+			callback: () => {
+				this.activateTasksView();
+			}
+		});
+
 		// Initialize Tasks Hub if enabled
 		if (this.settings.enableTasksHub) {
 			await this.initializeTasksHub();
 		}
 	}
 
-	async initializeTasksHub() {
-		// Register file watcher
-		this.tasksHubSync.registerFileWatcher();
+	async activateTasksView(): Promise<void> {
+		const { workspace } = this.app;
 
-		// Initial pull from API
+		let leaf = workspace.getLeavesOfType(VIEW_TYPE_OMI_TASKS)[0];
+
+		if (!leaf) {
+			const rightLeaf = workspace.getRightLeaf(false);
+			if (rightLeaf) {
+				leaf = rightLeaf;
+				await leaf.setViewState({ type: VIEW_TYPE_OMI_TASKS, active: true });
+			}
+		}
+
+		if (leaf) {
+			workspace.revealLeaf(leaf);
+		}
+	}
+
+	async initializeTasksHub() {
+		// Initial pull from API (writes backup file)
 		await this.tasksHubSync.pullFromAPI();
 
-		// Set up periodic sync
+		// Set up periodic sync for backup
 		this.startTasksHubPeriodicSync();
 	}
 
@@ -719,8 +759,8 @@ class OmiConversationsSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(containerEl)
-			.setName('Sync interval (minutes)')
-			.setDesc('How often to auto-pull tasks from Omi (1-60 minutes)')
+			.setName('Backup file sync interval (minutes)')
+			.setDesc('How often to update the backup Tasks.md file')
 			.addSlider(slider => slider
 				.setLimits(1, 60, 1)
 				.setValue(this.plugin.settings.tasksHubSyncInterval)
@@ -732,6 +772,20 @@ class OmiConversationsSettingTab extends PluginSettingTab {
 					if (this.plugin.settings.enableTasksHub) {
 						this.plugin.startTasksHubPeriodicSync();
 					}
+				}));
+
+		new Setting(containerEl)
+			.setName('Tasks view auto-refresh')
+			.setDesc('How often to automatically refresh tasks in the Omi Tasks view')
+			.addDropdown(dropdown => dropdown
+				.addOption('10', 'Every 10 minutes')
+				.addOption('15', 'Every 15 minutes')
+				.addOption('30', 'Every 30 minutes')
+				.addOption('60', 'Every hour')
+				.setValue(this.plugin.settings.tasksViewAutoRefresh.toString())
+				.onChange(async (value) => {
+					this.plugin.settings.tasksViewAutoRefresh = parseInt(value, 10);
+					await this.plugin.saveSettings();
 				}));
 	}
 }
@@ -961,97 +1015,26 @@ class OmiAPI {
 
 class TasksHubSync {
 	private plugin: OmiConversationsPlugin;
-	private isWriting = false;
-	private cachedItems: Map<string, ActionItemFromAPI> = new Map();
-	private debouncedHandleFileChange: (file: TFile) => void;
 
 	constructor(plugin: OmiConversationsPlugin) {
 		this.plugin = plugin;
-		this.debouncedHandleFileChange = debounce(
-			(file: TFile) => this.handleFileChange(file),
-			20000,  // 20 seconds - give user time to finish typing new tasks
-			true
-		);
 	}
 
 	// Get full path to tasks file (inside the conversations folder)
-	private getTasksFilePath(): string {
+	public getTasksFilePath(): string {
 		const folderPath = this.plugin.settings.folderPath;
 		const fileName = this.plugin.settings.tasksHubFilePath;
 		return normalizePath(`${folderPath}/${fileName}`);
 	}
 
-	registerFileWatcher(): void {
-		this.plugin.registerEvent(
-			this.plugin.app.vault.on('modify', (file) => {
-				if (file instanceof TFile &&
-					file.path === this.getTasksFilePath() &&
-					!this.isWriting) {
-					this.debouncedHandleFileChange(file);
-				}
-			})
-		);
-	}
-
-	private async handleFileChange(file: TFile): Promise<void> {
-		if (!this.plugin.settings.enableTasksHub) return;
-
-		try {
-			const content = await this.plugin.app.vault.read(file);
-			const localTasks = this.parseMarkdownTasks(content);
-
-			// Compare with cached items and sync changes
-			await this.syncChangesToAPI(localTasks);
-		} catch (error) {
-			console.error('Error handling file change:', error);
-		}
-	}
-
-	parseMarkdownTasks(content: string): ParsedTask[] {
-		const tasks: ParsedTask[] = [];
-		const lines = content.split('\n');
-
-		// New format: - [x] Description 📅 2025-12-29 %%id:abc123%%
-		// Also supports old format for backward compatibility during migration
-		const newPattern = /^- \[([ x])\] (.+?)(?:\s*📅\s*(\d{4}-\d{2}-\d{2}))?(?:\s*%%id:([a-zA-Z0-9_-]+)%%)?$/;
-		const oldPattern = /^- \[([ x])\] (.+?)(?:\s*\(Due: ([^)]+)\))?(?:\s*→\s*\[\[([^\]]+)\]\])?(?:\s*<!--id:([a-zA-Z0-9_-]+)-->)?$/;
-
-		for (let i = 0; i < lines.length; i++) {
-			const line = lines[i];
-
-			// Try new format first
-			let match = line.match(newPattern);
-			if (match) {
-				tasks.push({
-					completed: match[1] === 'x',
-					description: match[2].trim(),
-					dueAt: match[3] || null,  // Already in YYYY-MM-DD format
-					sourceLink: null,
-					id: match[4] || null,
-					lineIndex: i
-				});
-				continue;
-			}
-
-			// Fall back to old format for migration
-			match = line.match(oldPattern);
-			if (match) {
-				tasks.push({
-					completed: match[1] === 'x',
-					description: match[2].trim(),
-					dueAt: match[3] || null,  // "Dec 29, 2025" format - will be parsed by parseDueDate
-					sourceLink: match[4] || null,
-					id: match[5] || null,
-					lineIndex: i
-				});
-			}
-		}
-
-		return tasks;
-	}
-
 	generateMarkdown(items: ActionItemFromAPI[]): string {
 		const lines: string[] = [];
+
+		// Add header explaining this is read-only backup
+		lines.push('# Omi Tasks');
+		lines.push('');
+		lines.push('> This file is auto-generated for backup/search. Use the **Omi Tasks** view to edit tasks.');
+		lines.push('');
 
 		// Separate pending and completed
 		const pending = items.filter(item => !item.completed);
@@ -1091,10 +1074,9 @@ class TasksHubSync {
 		const checkbox = item.completed ? '[x]' : '[ ]';
 		let line = `- ${checkbox} ${item.description}`;
 
-		// Add due date with emoji (cleaner, Tasks plugin compatible)
+		// Add due date/time with emoji
 		if (item.due_at) {
-			const datePart = item.due_at.split('T')[0];
-			line += ` 📅 ${datePart}`;
+			line += ` 📅 ${this.formatDueAt(item.due_at)}`;
 		}
 
 		// Use Obsidian-native comment %%...%% (invisible in ALL view modes)
@@ -1103,188 +1085,1205 @@ class TasksHubSync {
 		return line;
 	}
 
-	private async syncChangesToAPI(localTasks: ParsedTask[]): Promise<void> {
-		const api = this.plugin.api;
-
-		for (const task of localTasks) {
-			if (!task.id) {
-				// New task - validate before creating
-				const description = task.description.trim();
-
-				// Skip if description is too short (user probably still typing)
-				if (description.length < 3) {
-					console.log('Skipping task creation - description too short:', description);
-					continue;
-				}
-
-				// Create in API
-				try {
-					const dueAt = task.dueAt ? this.parseDueDate(task.dueAt) ?? undefined : undefined;
-					const created = await api.createActionItem(description, dueAt);
-					console.log('Created new task:', created.id);
-					// Update the file with the new ID
-					await this.updateTaskIdInFile(task.lineIndex, created.id);
-				} catch (error) {
-					console.error('Error creating task:', error);
-					new Notice('Failed to create task in Omi');
-				}
-			} else {
-				// Existing task - check for changes
-				const cached = this.cachedItems.get(task.id);
-				if (cached) {
-					const updates: { description?: string; completed?: boolean; due_at?: string | null } = {};
-
-					if (task.completed !== cached.completed) {
-						updates.completed = task.completed;
-					}
-					if (task.description !== cached.description) {
-						updates.description = task.description;
-					}
-
-					const localDueAt = task.dueAt ? this.parseDueDate(task.dueAt) : null;
-					const cachedDueAt = cached.due_at ? cached.due_at.split('T')[0] : null;
-					if (localDueAt !== cachedDueAt) {
-						updates.due_at = localDueAt;
-					}
-
-					if (Object.keys(updates).length > 0) {
-						try {
-							await api.updateActionItem(task.id, updates);
-							console.log('Updated task:', task.id, updates);
-						} catch (error) {
-							console.error('Error updating task:', error);
-							new Notice('Failed to update task in Omi');
-						}
-					}
-				}
-			}
-		}
-
-		// Check for deleted tasks
-		const localIds = new Set(localTasks.filter(t => t.id).map(t => t.id));
-		for (const [cachedId] of this.cachedItems) {
-			if (!localIds.has(cachedId)) {
-				try {
-					await api.deleteActionItem(cachedId);
-					console.log('Deleted task:', cachedId);
-				} catch (error) {
-					console.error('Error deleting task:', error);
-					new Notice('Failed to delete task from Omi');
-				}
-			}
-		}
-
-		// Refresh cache after sync
-		await this.pullFromAPI();
-	}
-
-	private parseDueDate(dueDateStr: string): string | null {
-		// Parse due date strings and return YYYY-MM-DD format
-		// Supports:
-		// - ISO format: "2025-12-29" (new format, return as-is)
-		// - Human format: "Dec 27, 2025" (old format, parse and convert)
-
-		// Check if already in ISO format (YYYY-MM-DD)
-		if (/^\d{4}-\d{2}-\d{2}$/.test(dueDateStr)) {
-			return dueDateStr;
-		}
-
-		try {
-			// Try parsing human-readable format like "Dec 27, 2025"
-			const date = new Date(dueDateStr);
-			if (!isNaN(date.getTime()) && date.getFullYear() > 2000) {
-				// Use LOCAL date components to avoid timezone shift
-				const year = date.getFullYear();
-				const month = String(date.getMonth() + 1).padStart(2, '0');
-				const day = String(date.getDate()).padStart(2, '0');
+	// Format due_at from API for display in backup file
+	private formatDueAt(isoString: string): string {
+		if (isoString.includes('T')) {
+			const date = new Date(isoString);
+			const year = date.getFullYear();
+			const month = String(date.getMonth() + 1).padStart(2, '0');
+			const day = String(date.getDate()).padStart(2, '0');
+			const hours = date.getHours();
+			const minutes = date.getMinutes();
+			// Only include time if it's not midnight
+			if (hours === 0 && minutes === 0) {
 				return `${year}-${month}-${day}`;
 			}
-
-			// Fallback: try parsing with current year appended (for "Mon DD" format)
-			const currentYear = new Date().getFullYear();
-			const dateWithYear = new Date(`${dueDateStr}, ${currentYear}`);
-			if (!isNaN(dateWithYear.getTime())) {
-				const year = dateWithYear.getFullYear();
-				const month = String(dateWithYear.getMonth() + 1).padStart(2, '0');
-				const day = String(dateWithYear.getDate()).padStart(2, '0');
-				return `${year}-${month}-${day}`;
-			}
-		} catch {
-			// Ignore parse errors
+			const ampm = hours >= 12 ? 'PM' : 'AM';
+			const hour12 = hours % 12 || 12;
+			return `${year}-${month}-${day} ${hour12}:${minutes.toString().padStart(2, '0')} ${ampm}`;
 		}
-		return null;
-	}
-
-	private async updateTaskIdInFile(lineIndex: number, newId: string): Promise<void> {
-		const filePath = this.getTasksFilePath();
-		const file = this.plugin.app.vault.getFileByPath(filePath);
-		if (!file) return;
-
-		this.isWriting = true;
-		try {
-			const content = await this.plugin.app.vault.read(file);
-			const lines = content.split('\n');
-
-			if (lineIndex < lines.length) {
-				// Remove any existing ID (both old and new formats) and add the new one
-				lines[lineIndex] = lines[lineIndex]
-					.replace(/\s*<!--id:[^>]+-->/, '')  // Old format
-					.replace(/\s*%%id:[^%]+%%/, '')     // New format
-					+ ` %%id:${newId}%%`;
-				await this.plugin.app.vault.modify(file, lines.join('\n'));
-			}
-		} finally {
-			// Small delay to prevent immediate re-triggering
-			setTimeout(() => { this.isWriting = false; }, 100);
-		}
+		return isoString;
 	}
 
 	async pullFromAPI(): Promise<void> {
-		console.log('Tasks Hub: pullFromAPI called');
-		console.log('Tasks Hub: enableTasksHub =', this.plugin.settings.enableTasksHub);
-		console.log('Tasks Hub: apiKey present =', !!this.plugin.settings.apiKey);
-
 		if (!this.plugin.settings.enableTasksHub || !this.plugin.settings.apiKey) {
-			console.log('Tasks Hub: Skipping pull - not enabled or no API key');
 			return;
 		}
 
 		try {
-			console.log('Tasks Hub: Fetching action items from API...');
 			const items = await this.plugin.api.getAllActionItems();
-			console.log('Tasks Hub: Fetched', items.length, 'items');
-
-			// Update cache
-			this.cachedItems.clear();
-			for (const item of items) {
-				this.cachedItems.set(item.id, item);
-			}
-
-			// Write to file
-			console.log('Tasks Hub: Writing to file:', this.getTasksFilePath());
 			await this.writeToFile(items);
-			console.log('Tasks Hub: File written successfully');
 		} catch (error) {
 			console.error('Tasks Hub: Error pulling from API:', error);
-			new Notice('Failed to sync tasks from Omi');
+			new Notice('Failed to sync tasks backup from Omi');
 		}
 	}
 
 	private async writeToFile(items: ActionItemFromAPI[]): Promise<void> {
 		const filePath = this.getTasksFilePath();
+		const content = this.generateMarkdown(items);
 
-		this.isWriting = true;
-		try {
-			const content = this.generateMarkdown(items);
-			// Use proper vault methods so Obsidian registers the file immediately
-			const existingFile = this.plugin.app.vault.getFileByPath(filePath);
-			if (existingFile) {
-				await this.plugin.app.vault.modify(existingFile, content);
-			} else {
-				await this.plugin.app.vault.create(filePath, content);
-			}
-		} finally {
-			setTimeout(() => { this.isWriting = false; }, 100);
+		const existingFile = this.plugin.app.vault.getFileByPath(filePath);
+		if (existingFile) {
+			await this.plugin.app.vault.modify(existingFile, content);
+		} else {
+			await this.plugin.app.vault.create(filePath, content);
 		}
+	}
+}
+
+// Extended ParsedTask with UI state
+interface TaskWithUI extends ParsedTask {
+	isEditing: boolean;
+}
+
+class OmiTasksView extends ItemView {
+	plugin: OmiConversationsPlugin;
+	tasks: TaskWithUI[] = [];
+	searchQuery = '';
+	pendingCollapsed = false;
+	completedCollapsed = false;
+	private autoRefreshInterval: number | null = null;
+
+	// View mode state
+	viewMode: 'list' | 'kanban' | 'calendar' = 'list';
+	kanbanLayout: 'status' | 'date' = 'status';
+	calendarViewType: 'monthly' | 'weekly' = 'monthly';
+	calendarCurrentDate: Date = new Date();
+	private draggedTask: TaskWithUI | null = null;
+
+	constructor(leaf: WorkspaceLeaf, plugin: OmiConversationsPlugin) {
+		super(leaf);
+		this.plugin = plugin;
+	}
+
+	getViewType(): string {
+		return VIEW_TYPE_OMI_TASKS;
+	}
+
+	getDisplayText(): string {
+		return 'Omi Tasks';
+	}
+
+	getIcon(): string {
+		return 'check-circle';
+	}
+
+	async onOpen(): Promise<void> {
+		await this.loadTasks();
+		this.render();
+		this.startAutoRefresh();
+	}
+
+	async onClose(): Promise<void> {
+		this.stopAutoRefresh();
+	}
+
+	private startAutoRefresh(): void {
+		this.stopAutoRefresh();  // Clear any existing interval
+
+		const intervalMinutes = this.plugin.settings.tasksViewAutoRefresh;
+		if (intervalMinutes > 0) {
+			const intervalMs = intervalMinutes * 60 * 1000;
+			this.autoRefreshInterval = window.setInterval(async () => {
+				await this.loadTasks();
+				this.render();
+			}, intervalMs);
+		}
+	}
+
+	private stopAutoRefresh(): void {
+		if (this.autoRefreshInterval !== null) {
+			window.clearInterval(this.autoRefreshInterval);
+			this.autoRefreshInterval = null;
+		}
+	}
+
+	async loadTasks(): Promise<void> {
+		try {
+			const items = await this.plugin.api.getAllActionItems();
+			this.tasks = items.map(item => ({
+				id: item.id,
+				description: item.description,
+				completed: item.completed,
+				dueAt: item.due_at ? this.parseDueAt(item.due_at) : null,
+				sourceLink: item.conversation_id ? `conversation:${item.conversation_id}` : null,
+				lineIndex: -1,  // Not used in API-first mode
+				isEditing: false
+			}));
+		} catch (error) {
+			console.error('Error loading tasks from API:', error);
+			new Notice('Failed to load tasks from Omi');
+			this.tasks = [];
+		}
+	}
+
+	// Parse due_at from API (ISO format) to local format for storage
+	private parseDueAt(isoString: string): string {
+		// API returns full ISO: "2025-12-29T14:30:00Z" or just date: "2025-12-29"
+		if (isoString.includes('T')) {
+			// Has time component - preserve date and time (HH:MM)
+			const date = new Date(isoString);
+			const year = date.getFullYear();
+			const month = String(date.getMonth() + 1).padStart(2, '0');
+			const day = String(date.getDate()).padStart(2, '0');
+			const hours = String(date.getHours()).padStart(2, '0');
+			const minutes = String(date.getMinutes()).padStart(2, '0');
+			// Only include time if it's not midnight (00:00)
+			if (hours === '00' && minutes === '00') {
+				return `${year}-${month}-${day}`;
+			}
+			return `${year}-${month}-${day}T${hours}:${minutes}`;
+		}
+		return isoString;  // Just date
+	}
+
+	// Format due date/time for display
+	private formatDueDateTime(dueAt: string): string {
+		if (dueAt.includes('T')) {
+			const [date, time] = dueAt.split('T');
+			// Format time nicely (e.g., "2:30 PM")
+			const [hours, minutes] = time.split(':').map(Number);
+			const ampm = hours >= 12 ? 'PM' : 'AM';
+			const hour12 = hours % 12 || 12;
+			return `${date} ${hour12}:${minutes.toString().padStart(2, '0')} ${ampm}`;
+		}
+		return dueAt;  // Just date
+	}
+
+	// Convert local datetime string to UTC ISO format for API
+	// Input: "2025-12-29" or "2025-12-29T11:00" (local time)
+	// Output: "2025-12-29" or "2025-12-29T19:00:00.000Z" (UTC ISO)
+	private localToUTC(localDateTime: string | null): string | null {
+		if (!localDateTime) return null;
+
+		if (localDateTime.includes('T')) {
+			// Has time component - convert local to UTC
+			// Parse as local time by creating Date from the local datetime string
+			const date = new Date(localDateTime);
+			return date.toISOString();
+		}
+		// Date only - return as-is (API handles date-only strings correctly)
+		return localDateTime;
+	}
+
+	render(): void {
+		const container = this.containerEl.children[1] as HTMLElement;
+		container.empty();
+		container.addClass('omi-tasks-container');
+
+		// Header
+		const header = container.createDiv('omi-tasks-header');
+		header.createEl('h2', { text: 'Omi Tasks' });
+
+		// View Mode Tabs
+		this.renderViewModeTabs(container);
+
+		// Toolbar: Search + Sync button
+		const toolbar = container.createDiv('omi-tasks-toolbar');
+
+		const searchInput = toolbar.createEl('input', {
+			type: 'text',
+			placeholder: 'Search tasks...',
+			cls: 'omi-tasks-search'
+		});
+		searchInput.value = this.searchQuery;
+		searchInput.addEventListener('input', (e) => {
+			this.searchQuery = (e.target as HTMLInputElement).value;
+			this.render();
+		});
+
+		const syncBtn = toolbar.createEl('button', { text: 'Sync', cls: 'omi-tasks-sync-btn' });
+		syncBtn.addEventListener('click', async () => {
+			await this.loadTasks();
+			this.render();
+			new Notice('Tasks synced');
+		});
+
+		// Render the appropriate view based on viewMode
+		switch (this.viewMode) {
+			case 'list':
+				this.renderListView(container);
+				break;
+			case 'kanban':
+				this.renderKanbanView(container);
+				break;
+			case 'calendar':
+				this.renderCalendarView(container);
+				break;
+		}
+
+		// Add new task button
+		const addBtn = container.createEl('button', { text: '+ Add Task', cls: 'omi-tasks-add-btn' });
+		addBtn.addEventListener('click', () => this.showAddTaskDialog());
+	}
+
+	private renderViewModeTabs(container: HTMLElement): void {
+		const tabs = container.createDiv('omi-tasks-view-tabs');
+		const modes: Array<{ id: 'list' | 'kanban' | 'calendar'; label: string }> = [
+			{ id: 'list', label: '☰ List' },
+			{ id: 'kanban', label: '⧉ Kanban' },
+			{ id: 'calendar', label: '📅 Calendar' }
+		];
+
+		for (const mode of modes) {
+			const tab = tabs.createEl('button', {
+				text: mode.label,
+				cls: `omi-view-tab ${this.viewMode === mode.id ? 'active' : ''}`
+			});
+			tab.addEventListener('click', () => {
+				this.viewMode = mode.id;
+				this.render();
+			});
+		}
+	}
+
+	private renderListView(container: HTMLElement): void {
+		// Filter tasks
+		const filtered = this.getFilteredTasks();
+		const pending = filtered.filter(t => !t.completed);
+		const completed = filtered.filter(t => t.completed);
+
+		// Pending Section
+		this.renderSection(container, 'Pending', pending, 'pending');
+
+		// Completed Section
+		this.renderSection(container, 'Completed', completed, 'completed');
+	}
+
+	private getFilteredTasks(): TaskWithUI[] {
+		return this.tasks.filter(t =>
+			t.description.toLowerCase().includes(this.searchQuery.toLowerCase())
+		);
+	}
+
+	// ==================== KANBAN VIEW ====================
+
+	private renderKanbanView(container: HTMLElement): void {
+		// Layout toggle (Status vs Date)
+		const layoutToggle = container.createDiv('omi-kanban-layout-toggle');
+		const statusBtn = layoutToggle.createEl('button', {
+			text: '⏳ Status',
+			cls: `omi-layout-toggle-btn ${this.kanbanLayout === 'status' ? 'active' : ''}`
+		});
+		const dateBtn = layoutToggle.createEl('button', {
+			text: '📅 Date',
+			cls: `omi-layout-toggle-btn ${this.kanbanLayout === 'date' ? 'active' : ''}`
+		});
+
+		statusBtn.addEventListener('click', () => {
+			this.kanbanLayout = 'status';
+			this.render();
+		});
+		dateBtn.addEventListener('click', () => {
+			this.kanbanLayout = 'date';
+			this.render();
+		});
+
+		const board = container.createDiv('omi-kanban-board');
+		const filtered = this.getFilteredTasks();
+
+		if (this.kanbanLayout === 'status') {
+			this.renderKanbanColumn(board, '⏳ Pending', filtered.filter(t => !t.completed), 'pending');
+			this.renderKanbanColumn(board, '✅ Completed', filtered.filter(t => t.completed), 'completed');
+		} else {
+			const grouped = this.groupTasksByDateColumn(filtered);
+			this.renderKanbanColumn(board, '🔴 Overdue', grouped.overdue, 'overdue');
+			this.renderKanbanColumn(board, '📌 Today', grouped.today, 'today');
+			this.renderKanbanColumn(board, '📆 This Week', grouped.thisWeek, 'thisWeek');
+			this.renderKanbanColumn(board, '🔮 Later', grouped.later, 'later');
+			this.renderKanbanColumn(board, '❓ No Date', grouped.noDate, 'noDate');
+		}
+	}
+
+	private renderKanbanColumn(board: HTMLElement, title: string, tasks: TaskWithUI[], columnId: string): void {
+		const column = board.createDiv('omi-kanban-column');
+		column.dataset.columnId = columnId;
+
+		const header = column.createDiv('omi-kanban-column-header');
+		header.createEl('span', { text: `${title} (${tasks.length})` });
+
+		const taskList = column.createDiv('omi-kanban-task-list');
+
+		// Setup as drop target
+		taskList.addEventListener('dragover', (e) => {
+			e.preventDefault();
+			if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+			taskList.classList.add('drag-over');
+		});
+		taskList.addEventListener('dragleave', () => {
+			taskList.classList.remove('drag-over');
+		});
+		taskList.addEventListener('drop', (e) => {
+			e.preventDefault();
+			taskList.classList.remove('drag-over');
+			this.handleKanbanDrop(columnId);
+		});
+
+		for (const task of tasks) {
+			this.renderKanbanCard(taskList, task);
+		}
+
+		if (tasks.length === 0) {
+			taskList.createEl('div', { text: 'No tasks', cls: 'omi-kanban-empty' });
+		}
+	}
+
+	private renderKanbanCard(container: HTMLElement, task: TaskWithUI): void {
+		const card = container.createDiv('omi-kanban-card');
+		card.draggable = true;
+		card.dataset.taskId = task.id || '';
+
+		// Setup drag events
+		card.addEventListener('dragstart', (e) => {
+			this.draggedTask = task;
+			card.classList.add('dragging');
+			if (e.dataTransfer) {
+				e.dataTransfer.effectAllowed = 'move';
+				e.dataTransfer.setData('text/plain', task.id || '');
+			}
+		});
+		card.addEventListener('dragend', () => {
+			this.draggedTask = null;
+			card.classList.remove('dragging');
+			document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+		});
+
+		// Checkbox
+		const checkbox = card.createEl('input', { type: 'checkbox' });
+		checkbox.checked = task.completed;
+		checkbox.addEventListener('change', () => this.toggleTaskCompletion(task));
+
+		// Description
+		const desc = card.createEl('div', { text: task.description, cls: 'omi-kanban-card-desc' });
+		desc.addEventListener('click', () => {
+			// Could open edit modal in future
+		});
+
+		// Due date pill
+		if (task.dueAt) {
+			card.createEl('span', {
+				text: `📅 ${this.formatDueDateTime(task.dueAt)}`,
+				cls: 'omi-kanban-card-due'
+			});
+		}
+	}
+
+	private async handleKanbanDrop(columnId: string): Promise<void> {
+		const task = this.draggedTask;
+		if (!task?.id) return;
+
+		try {
+			if (this.kanbanLayout === 'status') {
+				// Status-based: update completed status
+				const newCompleted = columnId === 'completed';
+				if (task.completed !== newCompleted) {
+					await this.plugin.api.updateActionItem(task.id, { completed: newCompleted });
+					task.completed = newCompleted;
+					this.render();
+				}
+			} else {
+				// Date-based: update due date
+				const newDueAt = this.getDateForColumn(columnId);
+				const utcDate = this.localToUTC(newDueAt);
+				await this.plugin.api.updateActionItem(task.id, { due_at: utcDate });
+				task.dueAt = newDueAt;
+				this.render();
+			}
+		} catch (error) {
+			console.error('Error updating task via drag:', error);
+			new Notice('Failed to update task');
+		}
+	}
+
+	private groupTasksByDateColumn(tasks: TaskWithUI[]): {
+		overdue: TaskWithUI[];
+		today: TaskWithUI[];
+		thisWeek: TaskWithUI[];
+		later: TaskWithUI[];
+		noDate: TaskWithUI[];
+	} {
+		const now = new Date();
+		now.setHours(0, 0, 0, 0);
+
+		const result = {
+			overdue: [] as TaskWithUI[],
+			today: [] as TaskWithUI[],
+			thisWeek: [] as TaskWithUI[],
+			later: [] as TaskWithUI[],
+			noDate: [] as TaskWithUI[]
+		};
+
+		for (const task of tasks) {
+			if (!task.dueAt) {
+				result.noDate.push(task);
+				continue;
+			}
+
+			const dueDate = new Date(task.dueAt.split('T')[0]);
+			dueDate.setHours(0, 0, 0, 0);
+			const diffDays = Math.floor((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+			if (diffDays < 0) {
+				result.overdue.push(task);
+			} else if (diffDays === 0) {
+				result.today.push(task);
+			} else if (diffDays <= 7) {
+				result.thisWeek.push(task);
+			} else {
+				result.later.push(task);
+			}
+		}
+
+		return result;
+	}
+
+	private getDateForColumn(columnId: string): string | null {
+		const now = new Date();
+		switch (columnId) {
+			case 'today':
+				return this.formatDateOnly(now);
+			case 'thisWeek':
+				now.setDate(now.getDate() + 3);
+				return this.formatDateOnly(now);
+			case 'later':
+				now.setDate(now.getDate() + 14);
+				return this.formatDateOnly(now);
+			case 'noDate':
+				return null;
+			case 'overdue':
+				// Keep existing date for overdue (don't change)
+				return this.draggedTask?.dueAt?.split('T')[0] || null;
+			default:
+				return null;
+		}
+	}
+
+	private formatDateOnly(date: Date): string {
+		const year = date.getFullYear();
+		const month = String(date.getMonth() + 1).padStart(2, '0');
+		const day = String(date.getDate()).padStart(2, '0');
+		return `${year}-${month}-${day}`;
+	}
+
+	// ==================== CALENDAR VIEW ====================
+
+	private renderCalendarView(container: HTMLElement): void {
+		// View type toggle (Monthly vs Weekly)
+		const viewToggle = container.createDiv('omi-calendar-view-toggle');
+		const monthlyBtn = viewToggle.createEl('button', {
+			text: 'Monthly',
+			cls: `omi-calendar-toggle-btn ${this.calendarViewType === 'monthly' ? 'active' : ''}`
+		});
+		const weeklyBtn = viewToggle.createEl('button', {
+			text: 'Weekly',
+			cls: `omi-calendar-toggle-btn ${this.calendarViewType === 'weekly' ? 'active' : ''}`
+		});
+
+		monthlyBtn.addEventListener('click', () => {
+			this.calendarViewType = 'monthly';
+			this.render();
+		});
+		weeklyBtn.addEventListener('click', () => {
+			this.calendarViewType = 'weekly';
+			this.render();
+		});
+
+		// Navigation
+		this.renderCalendarNavigation(container);
+
+		// Calendar grid
+		if (this.calendarViewType === 'monthly') {
+			this.renderMonthlyCalendar(container);
+		} else {
+			this.renderWeeklyCalendar(container);
+		}
+	}
+
+	private renderCalendarNavigation(container: HTMLElement): void {
+		const nav = container.createDiv('omi-calendar-nav');
+
+		const prevBtn = nav.createEl('button', { text: '◀', cls: 'omi-calendar-nav-btn' });
+		prevBtn.addEventListener('click', () => {
+			if (this.calendarViewType === 'monthly') {
+				this.calendarCurrentDate.setMonth(this.calendarCurrentDate.getMonth() - 1);
+			} else {
+				this.calendarCurrentDate.setDate(this.calendarCurrentDate.getDate() - 7);
+			}
+			this.render();
+		});
+
+		const label = nav.createEl('span', {
+			text: this.calendarViewType === 'monthly'
+				? this.calendarCurrentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+				: `Week of ${this.getWeekStartDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
+			cls: 'omi-calendar-nav-label'
+		});
+
+		const nextBtn = nav.createEl('button', { text: '▶', cls: 'omi-calendar-nav-btn' });
+		nextBtn.addEventListener('click', () => {
+			if (this.calendarViewType === 'monthly') {
+				this.calendarCurrentDate.setMonth(this.calendarCurrentDate.getMonth() + 1);
+			} else {
+				this.calendarCurrentDate.setDate(this.calendarCurrentDate.getDate() + 7);
+			}
+			this.render();
+		});
+
+		const todayBtn = nav.createEl('button', { text: 'Today', cls: 'omi-calendar-today-btn' });
+		todayBtn.addEventListener('click', () => {
+			this.calendarCurrentDate = new Date();
+			this.render();
+		});
+	}
+
+	private renderMonthlyCalendar(container: HTMLElement): void {
+		const calendar = container.createDiv('omi-calendar-grid-monthly');
+
+		// Day headers
+		const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+		const headerRow = calendar.createDiv('omi-calendar-header-row');
+		for (const day of dayNames) {
+			headerRow.createEl('div', { text: day, cls: 'omi-calendar-day-header' });
+		}
+
+		// Get days for the grid
+		const days = this.getMonthGridDays();
+		const gridBody = calendar.createDiv('omi-calendar-body');
+
+		for (const day of days) {
+			const dayCell = gridBody.createDiv('omi-calendar-day-cell');
+			if (!day.isCurrentMonth) dayCell.addClass('other-month');
+			if (day.isToday) dayCell.addClass('today');
+
+			dayCell.createEl('div', { text: String(day.date.getDate()), cls: 'omi-calendar-day-number' });
+
+			// Get tasks for this day
+			const dayTasks = this.getTasksForDate(day.date);
+			const taskContainer = dayCell.createDiv('omi-calendar-day-tasks');
+
+			// Show up to 3 tasks
+			const maxVisible = 3;
+			for (let i = 0; i < Math.min(dayTasks.length, maxVisible); i++) {
+				const taskPill = taskContainer.createEl('div', {
+					text: dayTasks[i].description.substring(0, 15) + (dayTasks[i].description.length > 15 ? '...' : ''),
+					cls: `omi-calendar-task-pill ${dayTasks[i].completed ? 'completed' : ''}`
+				});
+				taskPill.addEventListener('click', (e) => {
+					e.stopPropagation();
+					this.showEditTaskModal(dayTasks[i]);
+				});
+			}
+
+			if (dayTasks.length > maxVisible) {
+				taskContainer.createEl('div', {
+					text: `+${dayTasks.length - maxVisible} more`,
+					cls: 'omi-calendar-more-tasks'
+				});
+			}
+
+			// Click on day to add task with that date
+			dayCell.addEventListener('click', () => this.showAddTaskDialogWithDate(day.date));
+		}
+	}
+
+	private renderWeeklyCalendar(container: HTMLElement): void {
+		const calendar = container.createDiv('omi-calendar-grid-weekly');
+		const weekStart = this.getWeekStartDate();
+
+		for (let i = 0; i < 7; i++) {
+			const day = new Date(weekStart);
+			day.setDate(weekStart.getDate() + i);
+
+			const dayColumn = calendar.createDiv('omi-calendar-week-day');
+			const isToday = this.isSameDay(day, new Date());
+			if (isToday) dayColumn.addClass('today');
+
+			// Day header
+			const dayHeader = dayColumn.createDiv('omi-calendar-week-day-header');
+			dayHeader.createEl('span', { text: day.toLocaleDateString('en-US', { weekday: 'short' }) });
+			dayHeader.createEl('span', { text: String(day.getDate()), cls: 'omi-calendar-week-day-num' });
+
+			// Tasks for this day
+			const dayTasks = this.getTasksForDate(day);
+			const taskList = dayColumn.createDiv('omi-calendar-week-day-tasks');
+
+			for (const task of dayTasks) {
+				const taskRow = taskList.createDiv('omi-calendar-week-task');
+
+				const checkbox = taskRow.createEl('input', { type: 'checkbox' });
+				checkbox.checked = task.completed;
+				checkbox.addEventListener('change', () => this.toggleTaskCompletion(task));
+
+				const desc = taskRow.createEl('span', {
+					text: task.description.substring(0, 25) + (task.description.length > 25 ? '...' : ''),
+					cls: task.completed ? 'completed' : ''
+				});
+				desc.addEventListener('click', () => this.showEditTaskModal(task));
+			}
+
+			// Add task button for this day
+			const addBtn = dayColumn.createEl('button', { text: '+', cls: 'omi-calendar-add-task' });
+			addBtn.addEventListener('click', () => this.showAddTaskDialogWithDate(day));
+		}
+	}
+
+	private getMonthGridDays(): Array<{ date: Date; isCurrentMonth: boolean; isToday: boolean }> {
+		const year = this.calendarCurrentDate.getFullYear();
+		const month = this.calendarCurrentDate.getMonth();
+
+		// First day of the month
+		const firstDay = new Date(year, month, 1);
+		// Last day of the month
+		const lastDay = new Date(year, month + 1, 0);
+
+		const days: Array<{ date: Date; isCurrentMonth: boolean; isToday: boolean }> = [];
+		const today = new Date();
+
+		// Days from previous month to fill first week
+		const firstDayOfWeek = firstDay.getDay();
+		for (let i = firstDayOfWeek - 1; i >= 0; i--) {
+			const date = new Date(year, month, -i);
+			days.push({ date, isCurrentMonth: false, isToday: this.isSameDay(date, today) });
+		}
+
+		// Days of current month
+		for (let d = 1; d <= lastDay.getDate(); d++) {
+			const date = new Date(year, month, d);
+			days.push({ date, isCurrentMonth: true, isToday: this.isSameDay(date, today) });
+		}
+
+		// Days from next month to fill last week
+		const remainingDays = 42 - days.length; // 6 rows × 7 days
+		for (let i = 1; i <= remainingDays; i++) {
+			const date = new Date(year, month + 1, i);
+			days.push({ date, isCurrentMonth: false, isToday: this.isSameDay(date, today) });
+		}
+
+		return days;
+	}
+
+	private getWeekStartDate(): Date {
+		const date = new Date(this.calendarCurrentDate);
+		const day = date.getDay();
+		date.setDate(date.getDate() - day); // Go to Sunday
+		return date;
+	}
+
+	private getTasksForDate(date: Date): TaskWithUI[] {
+		return this.getFilteredTasks().filter(task => {
+			if (!task.dueAt) return false;
+			const taskDate = new Date(task.dueAt.split('T')[0]);
+			return this.isSameDay(taskDate, date);
+		});
+	}
+
+	private isSameDay(d1: Date, d2: Date): boolean {
+		return d1.getFullYear() === d2.getFullYear()
+			&& d1.getMonth() === d2.getMonth()
+			&& d1.getDate() === d2.getDate();
+	}
+
+	private showAddTaskDialogWithDate(date: Date): void {
+		const modal = new AddTaskModal(this.app, async (description: string, dueDate?: string) => {
+			// Use the pre-selected date if no date was entered in modal
+			const finalDueDate = dueDate || this.formatDateOnly(date);
+			await this.addNewTask(description, finalDueDate);
+		});
+		modal.open();
+	}
+
+	private renderSection(container: HTMLElement, title: string, tasks: TaskWithUI[], sectionId: string): void {
+		const section = container.createDiv(`omi-tasks-section omi-tasks-${sectionId}`);
+
+		const isCollapsed = sectionId === 'pending' ? this.pendingCollapsed : this.completedCollapsed;
+		const emoji = sectionId === 'pending' ? '⏳' : '✅';
+
+		const sectionHeader = section.createDiv('omi-tasks-section-header');
+		const collapseBtn = sectionHeader.createEl('span', {
+			text: isCollapsed ? '▶' : '▼',
+			cls: 'omi-tasks-collapse-btn'
+		});
+		sectionHeader.createEl('span', { text: ` ${emoji} ${title} (${tasks.length})` });
+
+		sectionHeader.addEventListener('click', () => {
+			if (sectionId === 'pending') {
+				this.pendingCollapsed = !this.pendingCollapsed;
+			} else {
+				this.completedCollapsed = !this.completedCollapsed;
+			}
+			this.render();
+		});
+
+		if (!isCollapsed) {
+			const taskList = section.createDiv('omi-tasks-list');
+			for (const task of tasks) {
+				this.renderTaskRow(taskList, task);
+			}
+
+			if (tasks.length === 0) {
+				taskList.createEl('div', {
+					text: sectionId === 'pending' ? 'No pending tasks' : 'No completed tasks',
+					cls: 'omi-tasks-empty'
+				});
+			}
+		}
+	}
+
+	private renderTaskRow(container: HTMLElement, task: TaskWithUI): void {
+		const row = container.createDiv('omi-task-row');
+
+		// Checkbox
+		const checkbox = row.createEl('input', { type: 'checkbox' });
+		checkbox.checked = task.completed;
+		checkbox.addEventListener('change', async () => {
+			await this.toggleTaskCompletion(task);
+		});
+
+		// Description (editable)
+		const descEl = row.createEl('span', {
+			text: task.description,
+			cls: 'omi-task-description'
+		});
+		descEl.contentEditable = 'true';
+		descEl.addEventListener('blur', async (e) => {
+			const newDesc = (e.target as HTMLElement).textContent?.trim() || '';
+			if (newDesc !== task.description && newDesc.length >= 3) {
+				await this.updateTaskDescription(task, newDesc);
+			} else if (newDesc !== task.description) {
+				// Revert to original if too short
+				descEl.textContent = task.description;
+			}
+		});
+		descEl.addEventListener('keydown', (e) => {
+			if (e.key === 'Enter') {
+				e.preventDefault();
+				descEl.blur();
+			}
+			if (e.key === 'Escape') {
+				descEl.textContent = task.description;
+				descEl.blur();
+			}
+		});
+
+		// Due date pill
+		if (task.dueAt) {
+			const duePill = row.createEl('span', {
+				text: `📅 ${this.formatDueDateTime(task.dueAt)}`,
+				cls: 'omi-task-due-pill'
+			});
+			duePill.addEventListener('click', () => this.showDatePicker(task));
+		} else {
+			const addDateBtn = row.createEl('span', {
+				text: '+ Date',
+				cls: 'omi-task-add-date'
+			});
+			addDateBtn.addEventListener('click', () => this.showDatePicker(task));
+		}
+
+		// Source indicator (if from conversation)
+		if (task.sourceLink) {
+			const sourceEl = row.createEl('span', { text: '💬', cls: 'omi-task-source' });
+			sourceEl.title = 'From conversation';
+		}
+
+		// Delete button
+		const deleteBtn = row.createEl('span', { text: '🗑️', cls: 'omi-task-delete' });
+		deleteBtn.addEventListener('click', async () => {
+			if (confirm(`Delete task: "${task.description}"?`)) {
+				await this.deleteTask(task);
+			}
+		});
+	}
+
+	private async toggleTaskCompletion(task: TaskWithUI): Promise<void> {
+		if (!task.id) return;
+		const newCompleted = !task.completed;
+		try {
+			await this.plugin.api.updateActionItem(task.id, { completed: newCompleted });
+			task.completed = newCompleted;
+			this.render();  // Just re-render, no file operations
+		} catch (error) {
+			console.error('Error updating task:', error);
+			new Notice('Failed to update task');
+		}
+	}
+
+	private async updateTaskDescription(task: TaskWithUI, newDescription: string): Promise<void> {
+		if (!task.id) return;
+		try {
+			await this.plugin.api.updateActionItem(task.id, { description: newDescription });
+			task.description = newDescription;
+			this.render();
+		} catch (error) {
+			console.error('Error updating task:', error);
+			new Notice('Failed to update task');
+		}
+	}
+
+	private async deleteTask(task: TaskWithUI): Promise<void> {
+		if (!task.id) return;
+		try {
+			await this.plugin.api.deleteActionItem(task.id);
+			this.tasks = this.tasks.filter(t => t.id !== task.id);
+			this.render();
+		} catch (error) {
+			console.error('Error deleting task:', error);
+			new Notice('Failed to delete task');
+		}
+	}
+
+	private showAddTaskDialog(): void {
+		const modal = new AddTaskModal(this.app, async (description: string, dueDate?: string) => {
+			await this.addNewTask(description, dueDate);
+		});
+		modal.open();
+	}
+
+	private async addNewTask(description: string, dueDateTime?: string): Promise<void> {
+		try {
+			// Convert local datetime to UTC before sending to API
+			const utcDueDateTime = dueDateTime ? this.localToUTC(dueDateTime) ?? undefined : undefined;
+			const created = await this.plugin.api.createActionItem(description, utcDueDateTime);
+			// Add to local list immediately
+			this.tasks.unshift({
+				id: created.id,
+				description: created.description,
+				completed: created.completed,
+				dueAt: created.due_at ? this.parseDueAt(created.due_at) : null,
+				sourceLink: null,
+				lineIndex: -1,
+				isEditing: false
+			});
+			this.render();
+			new Notice('Task created');
+		} catch (error) {
+			console.error('Error creating task:', error);
+			new Notice('Failed to create task');
+		}
+	}
+
+	private showDatePicker(task: TaskWithUI): void {
+		const modal = new DatePickerModal(this.app, task.dueAt, async (newDate: string | null) => {
+			if (!task.id) return;
+			try {
+				// Convert local datetime to UTC before sending to API
+				const utcDate = this.localToUTC(newDate);
+				await this.plugin.api.updateActionItem(task.id, { due_at: utcDate });
+				task.dueAt = newDate;  // Store local time for display
+				this.render();
+			} catch (error) {
+				console.error('Error updating due date:', error);
+				new Notice('Failed to update due date');
+			}
+		});
+		modal.open();
+	}
+
+	private showEditTaskModal(task: TaskWithUI): void {
+		const modal = new EditTaskModal(
+			this.app,
+			task,
+			async (updates) => {
+				if (!task.id) return;
+				try {
+					const apiUpdates: { description?: string; due_at?: string | null } = {};
+
+					if (updates.description !== undefined && updates.description !== task.description) {
+						apiUpdates.description = updates.description;
+					}
+
+					if (updates.dueAt !== undefined) {
+						// Convert local datetime to UTC before sending to API
+						apiUpdates.due_at = this.localToUTC(updates.dueAt);
+					}
+
+					if (Object.keys(apiUpdates).length > 0) {
+						await this.plugin.api.updateActionItem(task.id, apiUpdates);
+						if (updates.description !== undefined) {
+							task.description = updates.description;
+						}
+						if (updates.dueAt !== undefined) {
+							task.dueAt = updates.dueAt;
+						}
+						this.render();
+						new Notice('Task updated');
+					}
+				} catch (error) {
+					console.error('Error updating task:', error);
+					new Notice('Failed to update task');
+				}
+			},
+			async () => {
+				if (!task.id) return;
+				try {
+					await this.plugin.api.deleteActionItem(task.id);
+					this.tasks = this.tasks.filter(t => t.id !== task.id);
+					this.render();
+					new Notice('Task deleted');
+				} catch (error) {
+					console.error('Error deleting task:', error);
+					new Notice('Failed to delete task');
+				}
+			}
+		);
+		modal.open();
+	}
+}
+
+class AddTaskModal extends Modal {
+	onSubmit: (description: string, dueDateTime?: string) => void;
+
+	constructor(app: App, onSubmit: (description: string, dueDateTime?: string) => void) {
+		super(app);
+		this.onSubmit = onSubmit;
+	}
+
+	onOpen(): void {
+		const { contentEl } = this;
+		contentEl.addClass('omi-add-task-modal');
+
+		contentEl.createEl('h3', { text: 'Add new task' });
+
+		// Description input
+		const descContainer = contentEl.createDiv('omi-modal-field');
+		descContainer.createEl('label', { text: 'Description' });
+		const descInput = descContainer.createEl('input', {
+			type: 'text',
+			placeholder: 'Enter task description...'
+		});
+		descInput.addClass('omi-modal-input');
+
+		// Due date input
+		const dateContainer = contentEl.createDiv('omi-modal-field');
+		dateContainer.createEl('label', { text: 'Due date (optional)' });
+		const dateInput = dateContainer.createEl('input', { type: 'date' });
+		dateInput.addClass('omi-modal-input');
+
+		// Due time input
+		const timeContainer = contentEl.createDiv('omi-modal-field');
+		timeContainer.createEl('label', { text: 'Due time (optional)' });
+		const timeInput = timeContainer.createEl('input', { type: 'time' });
+		timeInput.addClass('omi-modal-input');
+
+		// Buttons
+		const btnContainer = contentEl.createDiv('modal-button-container');
+
+		const saveBtn = btnContainer.createEl('button', { text: 'Add Task', cls: 'mod-cta' });
+		saveBtn.addEventListener('click', () => {
+			const description = descInput.value.trim();
+			if (description.length >= 3) {
+				let dueDateTime: string | undefined;
+				if (dateInput.value) {
+					if (timeInput.value) {
+						dueDateTime = `${dateInput.value}T${timeInput.value}`;
+					} else {
+						dueDateTime = dateInput.value;
+					}
+				}
+				this.onSubmit(description, dueDateTime);
+				this.close();
+			} else {
+				new Notice('Description must be at least 3 characters');
+			}
+		});
+
+		const cancelBtn = btnContainer.createEl('button', { text: 'Cancel' });
+		cancelBtn.addEventListener('click', () => this.close());
+
+		// Focus description input
+		descInput.focus();
+
+		// Handle Enter key
+		descInput.addEventListener('keydown', (e) => {
+			if (e.key === 'Enter') {
+				saveBtn.click();
+			}
+		});
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
+}
+
+class DatePickerModal extends Modal {
+	currentDateTime: string | null;  // Can be "YYYY-MM-DD" or "YYYY-MM-DDTHH:MM"
+	onSubmit: (dateTime: string | null) => void;
+
+	constructor(app: App, currentDateTime: string | null, onSubmit: (dateTime: string | null) => void) {
+		super(app);
+		this.currentDateTime = currentDateTime;
+		this.onSubmit = onSubmit;
+	}
+
+	onOpen(): void {
+		const { contentEl } = this;
+		contentEl.addClass('omi-date-picker-modal');
+
+		contentEl.createEl('h3', { text: 'Set due date & time' });
+
+		// Parse existing date/time
+		let existingDate = '';
+		let existingTime = '';
+		if (this.currentDateTime) {
+			if (this.currentDateTime.includes('T')) {
+				const [date, time] = this.currentDateTime.split('T');
+				existingDate = date;
+				existingTime = time.substring(0, 5);  // HH:MM
+			} else {
+				existingDate = this.currentDateTime;
+			}
+		}
+
+		// Date input
+		const dateContainer = contentEl.createDiv('omi-modal-field');
+		dateContainer.createEl('label', { text: 'Date' });
+		const dateInput = dateContainer.createEl('input', { type: 'date' });
+		dateInput.addClass('omi-modal-input');
+		dateInput.value = existingDate;
+
+		// Time input
+		const timeContainer = contentEl.createDiv('omi-modal-field');
+		timeContainer.createEl('label', { text: 'Time (optional)' });
+		const timeInput = timeContainer.createEl('input', { type: 'time' });
+		timeInput.addClass('omi-modal-input');
+		timeInput.value = existingTime;
+
+		const btnContainer = contentEl.createDiv('modal-button-container');
+
+		const saveBtn = btnContainer.createEl('button', { text: 'Save', cls: 'mod-cta' });
+		saveBtn.addEventListener('click', () => {
+			if (!dateInput.value) {
+				this.onSubmit(null);
+			} else if (timeInput.value) {
+				// Combine date and time
+				this.onSubmit(`${dateInput.value}T${timeInput.value}`);
+			} else {
+				// Date only
+				this.onSubmit(dateInput.value);
+			}
+			this.close();
+		});
+
+		const clearBtn = btnContainer.createEl('button', { text: 'Clear' });
+		clearBtn.addEventListener('click', () => {
+			this.onSubmit(null);
+			this.close();
+		});
+
+		const cancelBtn = btnContainer.createEl('button', { text: 'Cancel' });
+		cancelBtn.addEventListener('click', () => this.close());
+
+		dateInput.focus();
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
+}
+
+class EditTaskModal extends Modal {
+	task: TaskWithUI;
+	onSave: (updates: { description?: string; dueAt?: string | null }) => void;
+	onDelete: () => void;
+
+	constructor(
+		app: App,
+		task: TaskWithUI,
+		onSave: (updates: { description?: string; dueAt?: string | null }) => void,
+		onDelete: () => void
+	) {
+		super(app);
+		this.task = task;
+		this.onSave = onSave;
+		this.onDelete = onDelete;
+	}
+
+	onOpen(): void {
+		const { contentEl } = this;
+		contentEl.addClass('omi-edit-task-modal');
+
+		contentEl.createEl('h3', { text: 'Edit task' });
+
+		// Description input
+		const descContainer = contentEl.createDiv('omi-modal-field');
+		descContainer.createEl('label', { text: 'Description' });
+		const descInput = descContainer.createEl('textarea', {
+			placeholder: 'Task description...'
+		});
+		descInput.addClass('omi-modal-input', 'omi-modal-textarea');
+		descInput.value = this.task.description;
+		descInput.rows = 3;
+
+		// Parse existing date/time
+		let existingDate = '';
+		let existingTime = '';
+		if (this.task.dueAt) {
+			if (this.task.dueAt.includes('T')) {
+				const [date, time] = this.task.dueAt.split('T');
+				existingDate = date;
+				existingTime = time.substring(0, 5);
+			} else {
+				existingDate = this.task.dueAt;
+			}
+		}
+
+		// Due date input
+		const dateContainer = contentEl.createDiv('omi-modal-field');
+		dateContainer.createEl('label', { text: 'Due date' });
+		const dateInput = dateContainer.createEl('input', { type: 'date' });
+		dateInput.addClass('omi-modal-input');
+		dateInput.value = existingDate;
+
+		// Due time input
+		const timeContainer = contentEl.createDiv('omi-modal-field');
+		timeContainer.createEl('label', { text: 'Due time' });
+		const timeInput = timeContainer.createEl('input', { type: 'time' });
+		timeInput.addClass('omi-modal-input');
+		timeInput.value = existingTime;
+
+		// Buttons
+		const btnContainer = contentEl.createDiv('modal-button-container');
+
+		const saveBtn = btnContainer.createEl('button', { text: 'Save', cls: 'mod-cta' });
+		saveBtn.addEventListener('click', () => {
+			const description = descInput.value.trim();
+			if (description.length < 3) {
+				new Notice('Description must be at least 3 characters');
+				return;
+			}
+
+			let dueAt: string | null = null;
+			if (dateInput.value) {
+				if (timeInput.value) {
+					dueAt = `${dateInput.value}T${timeInput.value}`;
+				} else {
+					dueAt = dateInput.value;
+				}
+			}
+
+			this.onSave({ description, dueAt });
+			this.close();
+		});
+
+		const deleteBtn = btnContainer.createEl('button', { text: 'Delete', cls: 'mod-warning' });
+		deleteBtn.addEventListener('click', () => {
+			if (confirm('Delete this task?')) {
+				this.onDelete();
+				this.close();
+			}
+		});
+
+		const cancelBtn = btnContainer.createEl('button', { text: 'Cancel' });
+		cancelBtn.addEventListener('click', () => this.close());
+
+		// Focus description
+		descInput.focus();
+		descInput.setSelectionRange(descInput.value.length, descInput.value.length);
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
 	}
 }

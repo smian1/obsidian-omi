@@ -1,0 +1,699 @@
+/* Omi Tasks View Styling */
+.omi-tasks-container {
+    padding: 16px;
+    height: 100%;
+    overflow-y: auto;
+}
+
+.omi-tasks-header h2 {
+    margin: 0 0 16px 0;
+    font-size: 1.4em;
+    font-weight: 600;
+}
+
+.omi-tasks-toolbar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.omi-tasks-search {
+    flex: 1;
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--background-modifier-border);
+    background: var(--background-primary);
+    color: var(--text-normal);
+    font-size: 14px;
+}
+
+.omi-tasks-search:focus {
+    outline: none;
+    border-color: var(--interactive-accent);
+    box-shadow: 0 0 0 2px var(--interactive-accent-hover);
+}
+
+.omi-tasks-sync-btn,
+.omi-tasks-add-btn {
+    padding: 8px 16px;
+    border-radius: 6px;
+    border: none;
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background-color 0.15s ease;
+}
+
+.omi-tasks-sync-btn:hover,
+.omi-tasks-add-btn:hover {
+    background: var(--interactive-accent-hover);
+}
+
+.omi-tasks-add-btn {
+    margin-top: 16px;
+    width: 100%;
+}
+
+.omi-tasks-section {
+    margin-bottom: 24px;
+}
+
+.omi-tasks-section-header {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--background-modifier-border);
+    user-select: none;
+}
+
+.omi-tasks-section-header:hover {
+    color: var(--text-accent);
+}
+
+.omi-tasks-collapse-btn {
+    font-size: 10px;
+    opacity: 0.6;
+    width: 14px;
+    text-align: center;
+}
+
+.omi-tasks-list {
+    margin-top: 8px;
+}
+
+.omi-tasks-empty {
+    color: var(--text-muted);
+    font-style: italic;
+    padding: 8px 0;
+    font-size: 13px;
+}
+
+.omi-task-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px;
+    border-radius: 6px;
+    margin-bottom: 4px;
+    transition: background-color 0.1s ease;
+}
+
+.omi-task-row:hover {
+    background: var(--background-secondary);
+}
+
+.omi-task-row input[type="checkbox"] {
+    margin: 0;
+    cursor: pointer;
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+}
+
+.omi-task-description {
+    flex: 1;
+    padding: 4px 6px;
+    border-radius: 4px;
+    min-width: 100px;
+    line-height: 1.4;
+    cursor: text;
+}
+
+.omi-task-description:focus {
+    outline: none;
+    background: var(--background-modifier-form-field);
+    box-shadow: 0 0 0 2px var(--interactive-accent-hover);
+}
+
+.omi-task-due-pill {
+    padding: 2px 8px;
+    font-size: 12px;
+    background: var(--background-modifier-hover);
+    border-radius: 12px;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background-color 0.1s ease;
+}
+
+.omi-task-due-pill:hover {
+    background: var(--background-modifier-border);
+}
+
+.omi-task-add-date {
+    font-size: 12px;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+    flex-shrink: 0;
+    transition: all 0.1s ease;
+}
+
+.omi-task-add-date:hover {
+    color: var(--text-normal);
+    background: var(--background-modifier-hover);
+}
+
+.omi-task-source {
+    opacity: 0.5;
+    font-size: 12px;
+    flex-shrink: 0;
+}
+
+.omi-task-delete {
+    opacity: 0;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 4px;
+    border-radius: 4px;
+    flex-shrink: 0;
+    transition: all 0.1s ease;
+}
+
+.omi-task-row:hover .omi-task-delete {
+    opacity: 0.4;
+}
+
+.omi-task-delete:hover {
+    opacity: 1 !important;
+    background: var(--background-modifier-error);
+}
+
+/* Modal styling */
+.omi-add-task-modal,
+.omi-date-picker-modal,
+.omi-edit-task-modal {
+    padding: 8px 0;
+}
+
+.omi-add-task-modal h3,
+.omi-date-picker-modal h3,
+.omi-edit-task-modal h3 {
+    margin: 0 0 16px 0;
+    font-size: 1.2em;
+}
+
+.omi-modal-textarea {
+    resize: vertical;
+    min-height: 60px;
+    font-family: inherit;
+    line-height: 1.5;
+}
+
+.omi-modal-field {
+    margin-bottom: 16px;
+}
+
+.omi-modal-field label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 13px;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.omi-modal-input {
+    width: 100%;
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--background-modifier-border);
+    background: var(--background-primary);
+    color: var(--text-normal);
+    font-size: 14px;
+}
+
+.omi-modal-input:focus {
+    outline: none;
+    border-color: var(--interactive-accent);
+    box-shadow: 0 0 0 2px var(--interactive-accent-hover);
+}
+
+.modal-button-container {
+    display: flex;
+    gap: 8px;
+    margin-top: 20px;
+    justify-content: flex-end;
+}
+
+.modal-button-container button {
+    padding: 8px 16px;
+    border-radius: 6px;
+    border: 1px solid var(--background-modifier-border);
+    background: var(--background-primary);
+    color: var(--text-normal);
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.1s ease;
+}
+
+.modal-button-container button:hover {
+    background: var(--background-secondary);
+}
+
+.modal-button-container button.mod-cta {
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+    border: none;
+}
+
+.modal-button-container button.mod-cta:hover {
+    background: var(--interactive-accent-hover);
+}
+
+/* ========================================
+   VIEW MODE TABS
+   ======================================== */
+.omi-tasks-view-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--background-modifier-border);
+    padding-bottom: 8px;
+}
+
+.omi-view-tab {
+    padding: 6px 12px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 4px;
+    font-size: 13px;
+    transition: all 0.15s ease;
+}
+
+.omi-view-tab:hover {
+    background: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+
+.omi-view-tab.active {
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+}
+
+/* ========================================
+   KANBAN BOARD
+   ======================================== */
+.omi-kanban-layout-toggle {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 12px;
+}
+
+.omi-layout-toggle-btn {
+    padding: 4px 10px;
+    border: 1px solid var(--background-modifier-border);
+    background: var(--background-primary);
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 4px;
+    font-size: 12px;
+    transition: all 0.15s ease;
+}
+
+.omi-layout-toggle-btn:hover {
+    background: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+
+.omi-layout-toggle-btn.active {
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+    border-color: var(--interactive-accent);
+}
+
+.omi-kanban-board {
+    display: flex;
+    gap: 12px;
+    overflow-x: auto;
+    padding-bottom: 16px;
+    min-height: 300px;
+}
+
+.omi-kanban-column {
+    flex: 1;
+    min-width: 180px;
+    max-width: 280px;
+    background: var(--background-secondary);
+    border-radius: 8px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+}
+
+.omi-kanban-column-header {
+    font-weight: 600;
+    font-size: 13px;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.omi-kanban-task-list {
+    flex: 1;
+    min-height: 100px;
+    transition: background-color 0.2s ease;
+    border-radius: 4px;
+}
+
+.omi-kanban-task-list.drag-over {
+    background: var(--background-modifier-hover);
+}
+
+.omi-kanban-empty {
+    color: var(--text-muted);
+    font-size: 12px;
+    font-style: italic;
+    text-align: center;
+    padding: 16px 8px;
+}
+
+.omi-kanban-card {
+    background: var(--background-primary);
+    border-radius: 6px;
+    padding: 10px;
+    margin-bottom: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    cursor: grab;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.omi-kanban-card:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.omi-kanban-card.dragging {
+    opacity: 0.5;
+    transform: rotate(2deg);
+    cursor: grabbing;
+}
+
+.omi-kanban-card input[type="checkbox"] {
+    margin: 0 8px 0 0;
+    cursor: pointer;
+    vertical-align: middle;
+}
+
+.omi-kanban-card-desc {
+    display: inline;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.omi-kanban-card-due {
+    display: block;
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--text-muted);
+    background: var(--background-modifier-hover);
+    padding: 2px 6px;
+    border-radius: 4px;
+    width: fit-content;
+}
+
+/* ========================================
+   CALENDAR VIEW
+   ======================================== */
+.omi-calendar-view-toggle {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 12px;
+}
+
+.omi-calendar-toggle-btn {
+    padding: 4px 10px;
+    border: 1px solid var(--background-modifier-border);
+    background: var(--background-primary);
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 4px;
+    font-size: 12px;
+    transition: all 0.15s ease;
+}
+
+.omi-calendar-toggle-btn:hover {
+    background: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+
+.omi-calendar-toggle-btn.active {
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+    border-color: var(--interactive-accent);
+}
+
+.omi-calendar-nav {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.omi-calendar-nav-btn {
+    padding: 6px 10px;
+    border-radius: 4px;
+    border: 1px solid var(--background-modifier-border);
+    background: var(--background-primary);
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.15s ease;
+}
+
+.omi-calendar-nav-btn:hover {
+    background: var(--background-modifier-hover);
+}
+
+.omi-calendar-nav-label {
+    font-weight: 600;
+    font-size: 14px;
+    min-width: 150px;
+    text-align: center;
+}
+
+.omi-calendar-today-btn {
+    padding: 6px 12px;
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    transition: all 0.15s ease;
+}
+
+.omi-calendar-today-btn:hover {
+    background: var(--interactive-accent-hover);
+}
+
+/* Monthly Calendar */
+.omi-calendar-grid-monthly {
+    width: 100%;
+}
+
+.omi-calendar-header-row {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    text-align: center;
+    font-weight: 600;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.omi-calendar-body {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+}
+
+.omi-calendar-day-cell {
+    min-height: 70px;
+    padding: 4px;
+    background: var(--background-secondary);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+    overflow: hidden;
+}
+
+.omi-calendar-day-cell:hover {
+    background: var(--background-modifier-hover);
+}
+
+.omi-calendar-day-cell.today {
+    border: 2px solid var(--interactive-accent);
+}
+
+.omi-calendar-day-cell.other-month {
+    opacity: 0.4;
+}
+
+.omi-calendar-day-number {
+    font-weight: 600;
+    font-size: 12px;
+    margin-bottom: 4px;
+}
+
+.omi-calendar-day-tasks {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.omi-calendar-task-pill {
+    font-size: 10px;
+    padding: 2px 4px;
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+    border-radius: 3px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: opacity 0.15s ease;
+}
+
+.omi-calendar-task-pill:hover {
+    opacity: 0.8;
+}
+
+.omi-calendar-task-pill.completed {
+    background: var(--background-modifier-success);
+    text-decoration: line-through;
+    opacity: 0.7;
+}
+
+.omi-calendar-more-tasks {
+    font-size: 10px;
+    color: var(--text-muted);
+    padding: 2px 4px;
+}
+
+/* Weekly Calendar */
+.omi-calendar-grid-weekly {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+}
+
+.omi-calendar-week-day {
+    flex: 1;
+    min-width: 100px;
+    background: var(--background-secondary);
+    border-radius: 6px;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+}
+
+.omi-calendar-week-day.today {
+    border: 2px solid var(--interactive-accent);
+}
+
+.omi-calendar-week-day-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: 600;
+    font-size: 12px;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.omi-calendar-week-day-num {
+    font-size: 16px;
+}
+
+.omi-calendar-week-day-tasks {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.omi-calendar-week-task {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 6px;
+    background: var(--background-primary);
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.omi-calendar-week-task input[type="checkbox"] {
+    margin: 0;
+    flex-shrink: 0;
+}
+
+.omi-calendar-week-task span {
+    flex: 1;
+    line-height: 1.3;
+    cursor: pointer;
+}
+
+.omi-calendar-week-task span.completed {
+    text-decoration: line-through;
+    opacity: 0.6;
+}
+
+.omi-calendar-add-task {
+    width: 100%;
+    margin-top: 8px;
+    padding: 4px;
+    font-size: 16px;
+    background: transparent;
+    border: 1px dashed var(--background-modifier-border);
+    border-radius: 4px;
+    cursor: pointer;
+    color: var(--text-muted);
+    transition: all 0.15s ease;
+}
+
+.omi-calendar-add-task:hover {
+    background: var(--background-modifier-hover);
+    color: var(--text-normal);
+    border-color: var(--text-muted);
+}
+
+/* ========================================
+   RESPONSIVE / MOBILE
+   ======================================== */
+@media (max-width: 600px) {
+    .omi-kanban-board {
+        flex-direction: column;
+    }
+
+    .omi-kanban-column {
+        max-width: 100%;
+        min-width: 100%;
+    }
+
+    .omi-calendar-grid-monthly .omi-calendar-day-cell {
+        min-height: 50px;
+    }
+
+    .omi-calendar-task-pill {
+        font-size: 9px;
+        padding: 1px 3px;
+    }
+
+    .omi-calendar-grid-weekly {
+        flex-direction: column;
+    }
+
+    .omi-calendar-week-day {
+        min-width: 100%;
+    }
+}
