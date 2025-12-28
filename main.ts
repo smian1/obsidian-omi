@@ -191,11 +191,9 @@ export default class OmiConversationsPlugin extends Plugin {
 		let leaf = workspace.getLeavesOfType(VIEW_TYPE_OMI_TASKS)[0];
 
 		if (!leaf) {
-			const rightLeaf = workspace.getRightLeaf(false);
-			if (rightLeaf) {
-				leaf = rightLeaf;
-				await leaf.setViewState({ type: VIEW_TYPE_OMI_TASKS, active: true });
-			}
+			// Open in main content area as a new tab (not sidebar)
+			leaf = workspace.getLeaf('tab');
+			await leaf.setViewState({ type: VIEW_TYPE_OMI_TASKS, active: true });
 		}
 
 		if (leaf) {
