@@ -148,8 +148,15 @@ export default class OmiConversationsPlugin extends Plugin {
 		this.addSettingTab(new OmiConversationsSettingTab(this.app, this));
 
 		// Add ribbon icon for syncing conversations
-		this.addRibbonIcon('brain', 'Sync Omi conversations', async () => {
-			await this.syncConversations();
+		this.addRibbonIcon('brain', 'Sync Omi conversations', () => {
+			new ConfirmSyncModal(
+				this.app,
+				'Sync Omi Conversations',
+				'This will fetch your latest conversations from Omi and save them as markdown files. Continue?',
+				async () => {
+					await this.syncConversations();
+				}
+			).open();
 		});
 
 		// Add ribbon icon for opening Omi Tasks view
@@ -2273,6 +2280,42 @@ class OmiTasksView extends ItemView {
 			}
 		);
 		modal.open();
+	}
+}
+
+class ConfirmSyncModal extends Modal {
+	title: string;
+	message: string;
+	onConfirm: () => void;
+
+	constructor(app: App, title: string, message: string, onConfirm: () => void) {
+		super(app);
+		this.title = title;
+		this.message = message;
+		this.onConfirm = onConfirm;
+	}
+
+	onOpen(): void {
+		const { contentEl } = this;
+		contentEl.addClass('omi-confirm-modal');
+
+		contentEl.createEl('h3', { text: this.title });
+		contentEl.createEl('p', { text: this.message });
+
+		const buttonContainer = contentEl.createDiv('omi-modal-buttons');
+
+		const cancelBtn = buttonContainer.createEl('button', { text: 'Cancel' });
+		cancelBtn.addEventListener('click', () => this.close());
+
+		const confirmBtn = buttonContainer.createEl('button', { text: 'Sync', cls: 'mod-cta' });
+		confirmBtn.addEventListener('click', () => {
+			this.close();
+			this.onConfirm();
+		});
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
 	}
 }
 

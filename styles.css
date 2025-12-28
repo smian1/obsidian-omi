@@ -199,13 +199,15 @@
 /* Modal styling */
 .omi-add-task-modal,
 .omi-date-picker-modal,
-.omi-edit-task-modal {
+.omi-edit-task-modal,
+.omi-confirm-modal {
     padding: 8px 0;
 }
 
 .omi-add-task-modal h3,
 .omi-date-picker-modal h3,
-.omi-edit-task-modal h3 {
+.omi-edit-task-modal h3,
+.omi-confirm-modal h3 {
     margin: 0 0 16px 0;
     font-size: 1.2em;
 }
@@ -274,6 +276,44 @@
 }
 
 .modal-button-container button.mod-cta:hover {
+    background: var(--interactive-accent-hover);
+}
+
+/* Confirmation modal */
+.omi-confirm-modal p {
+    margin: 0 0 20px 0;
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+
+.omi-modal-buttons {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+.omi-modal-buttons button {
+    padding: 8px 16px;
+    border-radius: 6px;
+    border: 1px solid var(--background-modifier-border);
+    background: var(--background-primary);
+    color: var(--text-normal);
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.1s ease;
+}
+
+.omi-modal-buttons button:hover {
+    background: var(--background-secondary);
+}
+
+.omi-modal-buttons button.mod-cta {
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+    border: none;
+}
+
+.omi-modal-buttons button.mod-cta:hover {
     background: var(--interactive-accent-hover);
 }
 
