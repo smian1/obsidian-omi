@@ -21,6 +21,9 @@ interface OmiConversationsSettings {
 	tasksViewMode: 'list' | 'kanban' | 'calendar';
 	tasksKanbanLayout: 'status' | 'date';
 	tasksCalendarType: 'monthly' | 'weekly';
+	// Incremental conversation sync tracking
+	lastConversationSyncTimestamp: string | null;
+	syncedConversationIds: string[];
 }
 
 // Omi API response types
@@ -99,7 +102,10 @@ const DEFAULT_SETTINGS: OmiConversationsSettings = {
 	// Tasks View preferences defaults
 	tasksViewMode: 'list',
 	tasksKanbanLayout: 'status',
-	tasksCalendarType: 'monthly'
+	tasksCalendarType: 'monthly',
+	// Incremental conversation sync tracking defaults
+	lastConversationSyncTimestamp: null,
+	syncedConversationIds: []
 }
 
 // Helper function to get emoji based on category
@@ -152,9 +158,9 @@ export default class OmiConversationsPlugin extends Plugin {
 			new ConfirmSyncModal(
 				this.app,
 				'Sync Omi Conversations',
-				'This will fetch your latest conversations from Omi and save them as markdown files. Continue?',
-				async () => {
-					await this.syncConversations();
+				'This will fetch conversations from Omi and save them as markdown files.',
+				async (fullResync: boolean) => {
+					await this.syncConversations(fullResync);
 				}
 			).open();
 		});
@@ -292,20 +298,27 @@ export default class OmiConversationsPlugin extends Plugin {
 		}
 	}
 
-	async syncConversations() {
+	async syncConversations(fullResync = false) {
 		if (!this.settings.apiKey) {
 			new Notice('Please set your Omi API key in settings');
 			return;
 		}
 
 		try {
+			// If full resync, clear tracking data
+			if (fullResync) {
+				this.settings.lastConversationSyncTimestamp = null;
+				this.settings.syncedConversationIds = [];
+				await this.saveSettings();
+			}
+
 			// Ensure the folder exists
 			const folderPath = normalizePath(this.settings.folderPath);
 			await this.ensureFolderExists(folderPath);
 
-			new Notice('Starting Omi conversation sync...');
+			new Notice(fullResync ? 'Starting full Omi conversation sync...' : 'Syncing new Omi conversations...');
 
-			// Fetch all conversations starting from the specified date
+			// Fetch conversations - use last sync date for incremental, or start date for full
 			const startDate = this.settings.startDate;
 			const allConversations = await this.api.getAllConversations(startDate);
 
@@ -314,9 +327,19 @@ export default class OmiConversationsPlugin extends Plugin {
 				return;
 			}
 
+			// Filter to only new conversations (skip already synced)
+			const newConversations = fullResync
+				? allConversations
+				: allConversations.filter(conv => !this.settings.syncedConversationIds.includes(conv.id));
+
+			if (newConversations.length === 0) {
+				new Notice('No new conversations to sync');
+				return;
+			}
+
 			// Group conversations by date (using local timezone)
 			const conversationsByDate = new Map<string, Conversation[]>();
-			for (const conversation of allConversations) {
+			for (const conversation of newConversations) {
 				// Convert UTC timestamp to local date
 				const localDate = new Date(conversation.created_at);
 				const year = localDate.getFullYear();
@@ -330,30 +353,54 @@ export default class OmiConversationsPlugin extends Plugin {
 				conversationsByDate.get(dateStr)!.push(conversation);
 			}
 
-			// Write folder structure for each date
+			// For incremental sync, we need to merge with existing conversations for each date
 			for (const [dateStr, conversations] of conversationsByDate) {
 				const dateFolderPath = `${folderPath}/${dateStr}`;
 				await this.ensureFolderExists(dateFolderPath);
 
+				// For incremental sync, load existing conversations from the date folder
+				// and merge with new ones to create complete files
+				let allDateConversations = conversations;
+				if (!fullResync) {
+					const existingConversations = allConversations.filter(conv => {
+						const convDate = new Date(conv.created_at);
+						const convYear = convDate.getFullYear();
+						const convMonth = String(convDate.getMonth() + 1).padStart(2, '0');
+						const convDay = String(convDate.getDate()).padStart(2, '0');
+						return `${convYear}-${convMonth}-${convDay}` === dateStr;
+					});
+					allDateConversations = existingConversations;
+				}
+
 				// Create index file with links
-				await this.createIndexFile(dateFolderPath, dateStr, conversations);
+				await this.createIndexFile(dateFolderPath, dateStr, allDateConversations);
 
 				// Create separate files for each section (if enabled)
 				if (this.settings.includeOverview) {
-					await this.createOverviewFile(dateFolderPath, conversations);
+					await this.createOverviewFile(dateFolderPath, allDateConversations);
 				}
 				if (this.settings.includeActionItems) {
-					await this.createActionItemsFile(dateFolderPath, conversations);
+					await this.createActionItemsFile(dateFolderPath, allDateConversations);
 				}
 				if (this.settings.includeEvents) {
-					await this.createEventsFile(dateFolderPath, conversations);
+					await this.createEventsFile(dateFolderPath, allDateConversations);
 				}
 				if (this.settings.includeTranscript) {
-					await this.createTranscriptFile(dateFolderPath, conversations);
+					await this.createTranscriptFile(dateFolderPath, allDateConversations);
 				}
 			}
 
-			new Notice(`Synced ${allConversations.length} conversations across ${conversationsByDate.size} days`);
+			// Update tracking after successful sync
+			const newIds = newConversations.map(c => c.id);
+			this.settings.syncedConversationIds = [
+				...this.settings.syncedConversationIds,
+				...newIds
+			];
+			this.settings.lastConversationSyncTimestamp = new Date().toISOString();
+			await this.saveSettings();
+
+			const syncType = fullResync ? '' : 'new ';
+			new Notice(`Synced ${newConversations.length} ${syncType}conversations across ${conversationsByDate.size} days`);
 		} catch (error) {
 			console.error('Error syncing conversations:', error);
 			new Notice('Error syncing Omi conversations. Check console for details.');
@@ -808,6 +855,26 @@ class OmiConversationsSettingTab extends PluginSettingTab {
 					this.plugin.settings.conversationAutoSync = parseInt(value, 10);
 					await this.plugin.saveSettings();
 					this.plugin.setupConversationAutoSync();
+				}));
+
+		// Show sync status and reset button
+		const syncStatusDesc = this.plugin.settings.lastConversationSyncTimestamp
+			? `Last synced: ${new Date(this.plugin.settings.lastConversationSyncTimestamp).toLocaleString()}. ${this.plugin.settings.syncedConversationIds.length} conversations tracked.`
+			: 'No sync history yet. Run a sync to start tracking.';
+
+		new Setting(containerEl)
+			.setName('Sync history')
+			.setDesc(syncStatusDesc)
+			.addButton(button => button
+				.setButtonText('Reset')
+				.setTooltip('Clear sync history to force a full resync next time')
+				.onClick(async () => {
+					this.plugin.settings.lastConversationSyncTimestamp = null;
+					this.plugin.settings.syncedConversationIds = [];
+					await this.plugin.saveSettings();
+					new Notice('Sync history cleared. Next sync will fetch all conversations.');
+					// Refresh the settings display
+					this.display();
 				}));
 
 		// Content toggles
@@ -2286,13 +2353,16 @@ class OmiTasksView extends ItemView {
 class ConfirmSyncModal extends Modal {
 	title: string;
 	message: string;
-	onConfirm: () => void;
+	onConfirm: (fullResync: boolean) => void;
+	showSyncOptions: boolean;
+	private selectedMode: 'incremental' | 'full' = 'incremental';
 
-	constructor(app: App, title: string, message: string, onConfirm: () => void) {
+	constructor(app: App, title: string, message: string, onConfirm: (fullResync: boolean) => void, showSyncOptions = true) {
 		super(app);
 		this.title = title;
 		this.message = message;
 		this.onConfirm = onConfirm;
+		this.showSyncOptions = showSyncOptions;
 	}
 
 	onOpen(): void {
@@ -2302,6 +2372,36 @@ class ConfirmSyncModal extends Modal {
 		contentEl.createEl('h3', { text: this.title });
 		contentEl.createEl('p', { text: this.message });
 
+		// Add sync mode radio buttons if showing options
+		if (this.showSyncOptions) {
+			const optionsContainer = contentEl.createDiv('omi-sync-options');
+
+			// Incremental sync option (default)
+			const incrementalLabel = optionsContainer.createEl('label', { cls: 'omi-sync-option' });
+			const incrementalRadio = incrementalLabel.createEl('input', { type: 'radio' });
+			incrementalRadio.name = 'syncMode';
+			incrementalRadio.value = 'incremental';
+			incrementalRadio.checked = true;
+			incrementalLabel.createEl('span', { text: 'Sync new conversations only', cls: 'omi-option-label' });
+			incrementalLabel.createEl('span', { text: 'Only fetch conversations added since last sync', cls: 'omi-option-desc' });
+
+			// Full resync option
+			const fullLabel = optionsContainer.createEl('label', { cls: 'omi-sync-option' });
+			const fullRadio = fullLabel.createEl('input', { type: 'radio' });
+			fullRadio.name = 'syncMode';
+			fullRadio.value = 'full';
+			fullLabel.createEl('span', { text: 'Full resync', cls: 'omi-option-label' });
+			fullLabel.createEl('span', { text: 'Refetch all conversations from start date', cls: 'omi-option-desc' });
+
+			// Handle radio changes
+			incrementalRadio.addEventListener('change', () => {
+				if (incrementalRadio.checked) this.selectedMode = 'incremental';
+			});
+			fullRadio.addEventListener('change', () => {
+				if (fullRadio.checked) this.selectedMode = 'full';
+			});
+		}
+
 		const buttonContainer = contentEl.createDiv('omi-modal-buttons');
 
 		const cancelBtn = buttonContainer.createEl('button', { text: 'Cancel' });
@@ -2310,7 +2410,7 @@ class ConfirmSyncModal extends Modal {
 		const confirmBtn = buttonContainer.createEl('button', { text: 'Sync', cls: 'mod-cta' });
 		confirmBtn.addEventListener('click', () => {
 			this.close();
-			this.onConfirm();
+			this.onConfirm(this.selectedMode === 'full');
 		});
 	}
 

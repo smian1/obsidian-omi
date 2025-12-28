@@ -317,6 +317,51 @@
     background: var(--interactive-accent-hover);
 }
 
+/* Sync mode options */
+.omi-sync-options {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 20px;
+    padding: 12px;
+    background: var(--background-secondary);
+    border-radius: 8px;
+}
+
+.omi-sync-option {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+}
+
+.omi-sync-option:hover {
+    background: var(--background-modifier-hover);
+}
+
+.omi-sync-option input[type="radio"] {
+    margin: 3px 0 0 0;
+    flex-shrink: 0;
+}
+
+.omi-option-label {
+    font-weight: 500;
+    color: var(--text-normal);
+    flex: 1;
+    min-width: 150px;
+}
+
+.omi-option-desc {
+    width: 100%;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-left: 22px;
+}
+
 /* ========================================
    VIEW MODE TABS
    ======================================== */
