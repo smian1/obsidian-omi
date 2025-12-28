@@ -150,8 +150,10 @@ export default class OmiConversationsPlugin extends Plugin {
 		});
 
 		// Add ribbon icon for opening Omi Tasks view
-		this.addRibbonIcon('check-circle', 'Open Omi Tasks', () => {
-			this.activateTasksView();
+		this.addRibbonIcon('check-circle', 'Open Omi Tasks', async () => {
+			new Notice('Syncing Omi Tasks...');
+			await this.activateTasksView();
+			// The view will load tasks and show completion notice
 		});
 
 		// Add command for syncing conversations
@@ -197,6 +199,7 @@ export default class OmiConversationsPlugin extends Plugin {
 		const { workspace } = this.app;
 
 		let leaf = workspace.getLeavesOfType(VIEW_TYPE_OMI_TASKS)[0];
+		const wasAlreadyOpen = !!leaf;
 
 		if (!leaf) {
 			// Open in main content area as a new tab (not sidebar)
@@ -206,6 +209,12 @@ export default class OmiConversationsPlugin extends Plugin {
 
 		if (leaf) {
 			workspace.revealLeaf(leaf);
+			// If view was already open, trigger a refresh
+			if (wasAlreadyOpen) {
+				const view = leaf.view as OmiTasksView;
+				await view.loadTasks(true);
+				view.render();
+			}
 		}
 	}
 
@@ -1277,7 +1286,7 @@ class OmiTasksView extends ItemView {
 		}
 	}
 
-	async loadTasks(): Promise<void> {
+	async loadTasks(showNotice = false): Promise<void> {
 		this.isLoading = true;
 		this.render();  // Show loading skeleton
 		try {
@@ -1291,6 +1300,9 @@ class OmiTasksView extends ItemView {
 				lineIndex: -1,  // Not used in API-first mode
 				isEditing: false
 			}));
+			if (showNotice) {
+				new Notice(`Synced ${this.tasks.length} tasks from Omi`);
+			}
 		} catch (error) {
 			console.error('Error loading tasks from API:', error);
 			new Notice('Failed to load tasks from Omi');
@@ -1380,9 +1392,8 @@ class OmiTasksView extends ItemView {
 		const syncBtn = toolbar.createEl('button', { text: 'Sync', cls: 'omi-tasks-sync-btn' });
 		syncBtn.setAttribute('aria-label', 'Sync tasks from Omi');
 		syncBtn.addEventListener('click', async () => {
-			await this.loadTasks();
+			await this.loadTasks(true);  // Show notice with count
 			this.render();
-			new Notice('Tasks synced');
 		});
 
 		// Show loading skeleton if loading
