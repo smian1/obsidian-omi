@@ -16,6 +16,10 @@ interface OmiConversationsSettings {
 	tasksHubFilePath: string;
 	tasksHubSyncInterval: number;
 	tasksViewAutoRefresh: number;  // Auto-refresh interval for tasks view (minutes, 0 = disabled)
+	// Tasks View preferences (persisted)
+	tasksViewMode: 'list' | 'kanban' | 'calendar';
+	tasksKanbanLayout: 'status' | 'date';
+	tasksCalendarType: 'monthly' | 'weekly';
 }
 
 // Omi API response types
@@ -89,7 +93,11 @@ const DEFAULT_SETTINGS: OmiConversationsSettings = {
 	enableTasksHub: false,
 	tasksHubFilePath: 'Tasks.md',  // Relative to folderPath
 	tasksHubSyncInterval: 5,
-	tasksViewAutoRefresh: 10  // Auto-refresh every 10 minutes by default
+	tasksViewAutoRefresh: 10,  // Auto-refresh every 10 minutes by default
+	// Tasks View preferences defaults
+	tasksViewMode: 'list',
+	tasksKanbanLayout: 'status',
+	tasksCalendarType: 'monthly'
 }
 
 // Helper function to get emoji based on category
@@ -1142,6 +1150,7 @@ class OmiTasksView extends ItemView {
 	pendingCollapsed = false;
 	completedCollapsed = false;
 	private autoRefreshInterval: number | null = null;
+	isLoading = false;
 
 	// View mode state
 	viewMode: 'list' | 'kanban' | 'calendar' = 'list';
@@ -1168,13 +1177,43 @@ class OmiTasksView extends ItemView {
 	}
 
 	async onOpen(): Promise<void> {
+		// Load saved view preferences
+		this.viewMode = this.plugin.settings.tasksViewMode || 'list';
+		this.kanbanLayout = this.plugin.settings.tasksKanbanLayout || 'status';
+		this.calendarViewType = this.plugin.settings.tasksCalendarType || 'monthly';
+
 		await this.loadTasks();
 		this.render();
 		this.startAutoRefresh();
+
+		// Register keyboard shortcuts
+		this.containerEl.addEventListener('keydown', this.handleKeyDown.bind(this));
 	}
 
 	async onClose(): Promise<void> {
 		this.stopAutoRefresh();
+	}
+
+	private handleKeyDown(e: KeyboardEvent): void {
+		// Cmd/Ctrl + N: Add new task
+		if (e.key === 'n' && (e.metaKey || e.ctrlKey)) {
+			e.preventDefault();
+			this.showAddTaskDialog();
+		}
+		// Cmd/Ctrl + R: Refresh/sync tasks
+		if (e.key === 'r' && (e.metaKey || e.ctrlKey)) {
+			e.preventDefault();
+			this.loadTasks().then(() => {
+				this.render();
+				new Notice('Tasks synced');
+			});
+		}
+		// Escape: Clear search
+		if (e.key === 'Escape' && this.searchQuery) {
+			e.preventDefault();
+			this.searchQuery = '';
+			this.render();
+		}
 	}
 
 	private startAutoRefresh(): void {
@@ -1198,6 +1237,8 @@ class OmiTasksView extends ItemView {
 	}
 
 	async loadTasks(): Promise<void> {
+		this.isLoading = true;
+		this.render();  // Show loading skeleton
 		try {
 			const items = await this.plugin.api.getAllActionItems();
 			this.tasks = items.map(item => ({
@@ -1213,6 +1254,8 @@ class OmiTasksView extends ItemView {
 			console.error('Error loading tasks from API:', error);
 			new Notice('Failed to load tasks from Omi');
 			this.tasks = [];
+		} finally {
+			this.isLoading = false;
 		}
 	}
 
@@ -1279,6 +1322,7 @@ class OmiTasksView extends ItemView {
 
 		// Toolbar: Search + Sync button
 		const toolbar = container.createDiv('omi-tasks-toolbar');
+		toolbar.setAttribute('role', 'toolbar');
 
 		const searchInput = toolbar.createEl('input', {
 			type: 'text',
@@ -1286,17 +1330,35 @@ class OmiTasksView extends ItemView {
 			cls: 'omi-tasks-search'
 		});
 		searchInput.value = this.searchQuery;
+		searchInput.setAttribute('aria-label', 'Search tasks');
 		searchInput.addEventListener('input', (e) => {
 			this.searchQuery = (e.target as HTMLInputElement).value;
 			this.render();
 		});
 
 		const syncBtn = toolbar.createEl('button', { text: 'Sync', cls: 'omi-tasks-sync-btn' });
+		syncBtn.setAttribute('aria-label', 'Sync tasks from Omi');
 		syncBtn.addEventListener('click', async () => {
 			await this.loadTasks();
 			this.render();
 			new Notice('Tasks synced');
 		});
+
+		// Show loading skeleton if loading
+		if (this.isLoading) {
+			this.renderLoadingSkeleton(container);
+			return;
+		}
+
+		// Show empty state if no tasks
+		if (this.tasks.length === 0) {
+			this.renderEmptyState(container, 'all');
+			// Still show add button
+			const addBtn = container.createEl('button', { text: '+ Add Task', cls: 'omi-tasks-add-btn' });
+			addBtn.setAttribute('aria-label', 'Add new task');
+			addBtn.addEventListener('click', () => this.showAddTaskDialog());
+			return;
+		}
 
 		// Render the appropriate view based on viewMode
 		switch (this.viewMode) {
@@ -1313,11 +1375,53 @@ class OmiTasksView extends ItemView {
 
 		// Add new task button
 		const addBtn = container.createEl('button', { text: '+ Add Task', cls: 'omi-tasks-add-btn' });
+		addBtn.setAttribute('aria-label', 'Add new task');
 		addBtn.addEventListener('click', () => this.showAddTaskDialog());
+	}
+
+	private renderLoadingSkeleton(container: HTMLElement): void {
+		const skeleton = container.createDiv('omi-tasks-skeleton');
+		skeleton.setAttribute('aria-label', 'Loading tasks');
+		for (let i = 0; i < 5; i++) {
+			const row = skeleton.createDiv('omi-skeleton-row');
+			row.createDiv('omi-skeleton-checkbox');
+			row.createDiv('omi-skeleton-text');
+			row.createDiv('omi-skeleton-date');
+		}
+	}
+
+	private renderEmptyState(container: HTMLElement, context: string): void {
+		const empty = container.createDiv('omi-tasks-empty-state');
+
+		if (context === 'all') {
+			empty.createEl('div', { text: '🎯', cls: 'omi-empty-icon' });
+			empty.createEl('h3', { text: 'No tasks yet' });
+			empty.createEl('p', { text: 'Click "+ Add Task" to create your first task' });
+		} else if (context === 'pending') {
+			empty.createEl('div', { text: '🎉', cls: 'omi-empty-icon' });
+			empty.createEl('p', { text: 'All caught up!' });
+		} else if (context === 'completed') {
+			empty.createEl('div', { text: '📋', cls: 'omi-empty-icon' });
+			empty.createEl('p', { text: 'No completed tasks yet' });
+		} else if (context === 'search') {
+			empty.createEl('div', { text: '🔍', cls: 'omi-empty-icon' });
+			empty.createEl('p', { text: 'No tasks match your search' });
+		}
+	}
+
+	private isOverdue(dueAt: string | null): boolean {
+		if (!dueAt) return false;
+		const today = new Date();
+		today.setHours(0, 0, 0, 0);
+		const dueDate = new Date(dueAt.split('T')[0]);
+		return dueDate < today;
 	}
 
 	private renderViewModeTabs(container: HTMLElement): void {
 		const tabs = container.createDiv('omi-tasks-view-tabs');
+		tabs.setAttribute('role', 'tablist');
+		tabs.setAttribute('aria-label', 'Task view modes');
+
 		const modes: Array<{ id: 'list' | 'kanban' | 'calendar'; label: string }> = [
 			{ id: 'list', label: '☰ List' },
 			{ id: 'kanban', label: '⧉ Kanban' },
@@ -1329,8 +1433,14 @@ class OmiTasksView extends ItemView {
 				text: mode.label,
 				cls: `omi-view-tab ${this.viewMode === mode.id ? 'active' : ''}`
 			});
-			tab.addEventListener('click', () => {
+			tab.setAttribute('role', 'tab');
+			tab.setAttribute('aria-selected', String(this.viewMode === mode.id));
+			tab.setAttribute('aria-label', `${mode.label} view`);
+			tab.addEventListener('click', async () => {
 				this.viewMode = mode.id;
+				// Save preference
+				this.plugin.settings.tasksViewMode = mode.id;
+				await this.plugin.saveSettings();
 				this.render();
 			});
 		}
@@ -1369,12 +1479,16 @@ class OmiTasksView extends ItemView {
 			cls: `omi-layout-toggle-btn ${this.kanbanLayout === 'date' ? 'active' : ''}`
 		});
 
-		statusBtn.addEventListener('click', () => {
+		statusBtn.addEventListener('click', async () => {
 			this.kanbanLayout = 'status';
+			this.plugin.settings.tasksKanbanLayout = 'status';
+			await this.plugin.saveSettings();
 			this.render();
 		});
-		dateBtn.addEventListener('click', () => {
+		dateBtn.addEventListener('click', async () => {
 			this.kanbanLayout = 'date';
+			this.plugin.settings.tasksKanbanLayout = 'date';
+			await this.plugin.saveSettings();
 			this.render();
 		});
 
@@ -1578,12 +1692,16 @@ class OmiTasksView extends ItemView {
 			cls: `omi-calendar-toggle-btn ${this.calendarViewType === 'weekly' ? 'active' : ''}`
 		});
 
-		monthlyBtn.addEventListener('click', () => {
+		monthlyBtn.addEventListener('click', async () => {
 			this.calendarViewType = 'monthly';
+			this.plugin.settings.tasksCalendarType = 'monthly';
+			await this.plugin.saveSettings();
 			this.render();
 		});
-		weeklyBtn.addEventListener('click', () => {
+		weeklyBtn.addEventListener('click', async () => {
 			this.calendarViewType = 'weekly';
+			this.plugin.settings.tasksCalendarType = 'weekly';
+			await this.plugin.saveSettings();
 			this.render();
 		});
 
@@ -1798,43 +1916,63 @@ class OmiTasksView extends ItemView {
 		const emoji = sectionId === 'pending' ? '⏳' : '✅';
 
 		const sectionHeader = section.createDiv('omi-tasks-section-header');
+		sectionHeader.setAttribute('role', 'button');
+		sectionHeader.setAttribute('aria-expanded', String(!isCollapsed));
+		sectionHeader.setAttribute('aria-controls', `section-${sectionId}`);
+		sectionHeader.setAttribute('tabindex', '0');
+
 		const collapseBtn = sectionHeader.createEl('span', {
 			text: isCollapsed ? '▶' : '▼',
 			cls: 'omi-tasks-collapse-btn'
 		});
+		collapseBtn.setAttribute('aria-hidden', 'true');
 		sectionHeader.createEl('span', { text: ` ${emoji} ${title} (${tasks.length})` });
 
-		sectionHeader.addEventListener('click', () => {
+		const toggleSection = () => {
 			if (sectionId === 'pending') {
 				this.pendingCollapsed = !this.pendingCollapsed;
 			} else {
 				this.completedCollapsed = !this.completedCollapsed;
 			}
 			this.render();
+		};
+
+		sectionHeader.addEventListener('click', toggleSection);
+		sectionHeader.addEventListener('keydown', (e) => {
+			if (e.key === 'Enter' || e.key === ' ') {
+				e.preventDefault();
+				toggleSection();
+			}
 		});
 
 		if (!isCollapsed) {
 			const taskList = section.createDiv('omi-tasks-list');
+			taskList.setAttribute('id', `section-${sectionId}`);
+			taskList.setAttribute('role', 'list');
+
 			for (const task of tasks) {
 				this.renderTaskRow(taskList, task);
 			}
 
 			if (tasks.length === 0) {
-				taskList.createEl('div', {
-					text: sectionId === 'pending' ? 'No pending tasks' : 'No completed tasks',
-					cls: 'omi-tasks-empty'
-				});
+				this.renderEmptyState(taskList, sectionId);
 			}
 		}
 	}
 
 	private renderTaskRow(container: HTMLElement, task: TaskWithUI): void {
-		const row = container.createDiv('omi-task-row');
+		const rowClasses = ['omi-task-row'];
+		if (task.completed) rowClasses.push('completed');
+		const row = container.createDiv(rowClasses.join(' '));
+		row.setAttribute('role', 'listitem');
 
 		// Checkbox
 		const checkbox = row.createEl('input', { type: 'checkbox' });
 		checkbox.checked = task.completed;
+		checkbox.setAttribute('aria-label', `Mark "${task.description}" as ${task.completed ? 'pending' : 'completed'}`);
 		checkbox.addEventListener('change', async () => {
+			// Add completing animation
+			row.classList.add('completing');
 			await this.toggleTaskCompletion(task);
 		});
 
@@ -1844,6 +1982,8 @@ class OmiTasksView extends ItemView {
 			cls: 'omi-task-description'
 		});
 		descEl.contentEditable = 'true';
+		descEl.setAttribute('role', 'textbox');
+		descEl.setAttribute('aria-label', 'Task description, click to edit');
 		descEl.addEventListener('blur', async (e) => {
 			const newDesc = (e.target as HTMLElement).textContent?.trim() || '';
 			if (newDesc !== task.description && newDesc.length >= 3) {
@@ -1866,16 +2006,19 @@ class OmiTasksView extends ItemView {
 
 		// Due date pill
 		if (task.dueAt) {
+			const isOverdueTask = this.isOverdue(task.dueAt) && !task.completed;
 			const duePill = row.createEl('span', {
 				text: `📅 ${this.formatDueDateTime(task.dueAt)}`,
-				cls: 'omi-task-due-pill'
+				cls: `omi-task-due-pill ${isOverdueTask ? 'overdue' : ''}`
 			});
+			duePill.setAttribute('aria-label', `Due date: ${task.dueAt}${isOverdueTask ? ' (overdue)' : ''}. Click to change`);
 			duePill.addEventListener('click', () => this.showDatePicker(task));
 		} else {
 			const addDateBtn = row.createEl('span', {
 				text: '+ Date',
 				cls: 'omi-task-add-date'
 			});
+			addDateBtn.setAttribute('aria-label', 'Add due date');
 			addDateBtn.addEventListener('click', () => this.showDatePicker(task));
 		}
 
@@ -1883,13 +2026,24 @@ class OmiTasksView extends ItemView {
 		if (task.sourceLink) {
 			const sourceEl = row.createEl('span', { text: '💬', cls: 'omi-task-source' });
 			sourceEl.title = 'From conversation';
+			sourceEl.setAttribute('aria-label', 'Task from conversation');
 		}
 
 		// Delete button
 		const deleteBtn = row.createEl('span', { text: '🗑️', cls: 'omi-task-delete' });
-		deleteBtn.addEventListener('click', async () => {
+		deleteBtn.setAttribute('aria-label', `Delete task: ${task.description}`);
+		deleteBtn.setAttribute('role', 'button');
+		deleteBtn.setAttribute('tabindex', '0');
+		const handleDelete = async () => {
 			if (confirm(`Delete task: "${task.description}"?`)) {
 				await this.deleteTask(task);
+			}
+		};
+		deleteBtn.addEventListener('click', handleDelete);
+		deleteBtn.addEventListener('keydown', (e) => {
+			if (e.key === 'Enter' || e.key === ' ') {
+				e.preventDefault();
+				handleDelete();
 			}
 		});
 	}

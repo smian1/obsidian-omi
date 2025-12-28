@@ -76,10 +76,20 @@
 }
 
 .omi-tasks-collapse-btn {
-    font-size: 10px;
-    opacity: 0.6;
-    width: 14px;
-    text-align: center;
+    font-size: 12px;
+    opacity: 0.7;
+    width: 20px;
+    height: 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: all 0.15s ease;
+}
+
+.omi-tasks-section-header:hover .omi-tasks-collapse-btn {
+    opacity: 1;
+    background: var(--background-modifier-hover);
 }
 
 .omi-tasks-list {
@@ -166,21 +176,23 @@
 }
 
 .omi-task-delete {
-    opacity: 0;
+    opacity: 0.3;
     cursor: pointer;
     font-size: 14px;
-    padding: 4px;
+    padding: 4px 8px;
     border-radius: 4px;
     flex-shrink: 0;
     transition: all 0.1s ease;
 }
 
-.omi-task-row:hover .omi-task-delete {
-    opacity: 0.4;
+.omi-task-row:hover .omi-task-delete,
+.omi-task-delete:focus {
+    opacity: 0.6;
 }
 
-.omi-task-delete:hover {
-    opacity: 1 !important;
+.omi-task-delete:hover,
+.omi-task-delete:active {
+    opacity: 1;
     background: var(--background-modifier-error);
 }
 
@@ -668,8 +680,165 @@
 }
 
 /* ========================================
+   LOADING SKELETON
+   ======================================== */
+.omi-tasks-skeleton {
+    padding: 8px 0;
+}
+
+.omi-skeleton-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 8px;
+    margin-bottom: 4px;
+}
+
+.omi-skeleton-checkbox {
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+    background: linear-gradient(90deg,
+        var(--background-secondary) 25%,
+        var(--background-modifier-hover) 50%,
+        var(--background-secondary) 75%);
+    background-size: 200% 100%;
+    animation: skeleton-pulse 1.5s infinite;
+    flex-shrink: 0;
+}
+
+.omi-skeleton-text {
+    flex: 1;
+    height: 14px;
+    border-radius: 4px;
+    background: linear-gradient(90deg,
+        var(--background-secondary) 25%,
+        var(--background-modifier-hover) 50%,
+        var(--background-secondary) 75%);
+    background-size: 200% 100%;
+    animation: skeleton-pulse 1.5s infinite;
+}
+
+.omi-skeleton-date {
+    width: 80px;
+    height: 14px;
+    border-radius: 4px;
+    background: linear-gradient(90deg,
+        var(--background-secondary) 25%,
+        var(--background-modifier-hover) 50%,
+        var(--background-secondary) 75%);
+    background-size: 200% 100%;
+    animation: skeleton-pulse 1.5s infinite;
+    flex-shrink: 0;
+}
+
+@keyframes skeleton-pulse {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* ========================================
+   EMPTY STATE
+   ======================================== */
+.omi-tasks-empty-state {
+    text-align: center;
+    padding: 40px 16px;
+    color: var(--text-muted);
+}
+
+.omi-empty-icon {
+    font-size: 40px;
+    margin-bottom: 12px;
+}
+
+.omi-tasks-empty-state h3 {
+    margin: 0 0 8px 0;
+    font-weight: 600;
+    font-size: 16px;
+    color: var(--text-normal);
+}
+
+.omi-tasks-empty-state p {
+    margin: 0;
+    font-size: 13px;
+}
+
+/* ========================================
+   OVERDUE HIGHLIGHTING
+   ======================================== */
+.omi-task-due-pill.overdue {
+    background: #dc3545;
+    color: #ffffff;
+    font-weight: 500;
+}
+
+.omi-kanban-card.overdue {
+    border-left: 3px solid #dc3545;
+}
+
+.omi-calendar-task-pill.overdue {
+    background: #dc3545;
+    color: #ffffff;
+}
+
+/* ========================================
+   TASK COMPLETION ANIMATION
+   ======================================== */
+.omi-task-row.completing {
+    animation: task-complete 0.4s ease-out;
+}
+
+@keyframes task-complete {
+    0% { background: transparent; }
+    50% { background: var(--background-modifier-success); transform: scale(1.01); }
+    100% { background: transparent; }
+}
+
+.omi-task-row.completed .omi-task-description {
+    text-decoration: line-through;
+    opacity: 0.6;
+}
+
+/* ========================================
    RESPONSIVE / MOBILE
    ======================================== */
+
+/* Tablet */
+@media (max-width: 900px) {
+    .omi-kanban-column {
+        min-width: 160px;
+    }
+
+    .omi-calendar-day-cell {
+        min-height: 60px;
+    }
+}
+
+/* Mobile */
+@media (max-width: 768px) {
+    .omi-task-delete {
+        opacity: 0.5;
+        padding: 8px 12px;
+        min-width: 44px;
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .omi-task-add-date {
+        padding: 8px 12px;
+        min-height: 44px;
+    }
+
+    .omi-task-due-pill {
+        padding: 6px 12px;
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+    }
+}
+
 @media (max-width: 600px) {
     .omi-kanban-board {
         flex-direction: column;
@@ -695,5 +864,20 @@
 
     .omi-calendar-week-day {
         min-width: 100%;
+    }
+}
+
+/* Small mobile */
+@media (max-width: 400px) {
+    .omi-tasks-toolbar {
+        flex-direction: column;
+    }
+
+    .omi-tasks-search {
+        width: 100%;
+    }
+
+    .omi-tasks-sync-btn {
+        width: 100%;
     }
 }
