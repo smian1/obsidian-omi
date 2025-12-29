@@ -31,6 +31,9 @@ export class OmiHubView extends ItemView {
 	detailTab: 'summary' | 'transcript' = 'summary';
 	selectedConversationData: ConversationDetailData | null = null;
 	isLoadingDetail = false;
+	statsTimeRange: 'week' | 'month' | '30days' | 'all' = 'all';
+	timelineDateIndex = 0; // For daily timeline navigation
+	timelineWeekOffset = 0; // For weekly timeline navigation (0 = current week)
 
 	// Debounced backup sync
 	private requestBackupSync: () => void;
@@ -1118,17 +1121,20 @@ export class OmiHubView extends ItemView {
 		}
 
 		const sortedDates = Array.from(groupedByDate.keys()).sort((a, b) => b.localeCompare(a));
-		const today = this.formatDateOnly(new Date());
-		const displayDate = sortedDates.includes(today) ? today : sortedDates[0];
+		if (sortedDates.length === 0) return;
 
+		// Initialize date index if needed (0 = most recent)
+		if (this.timelineDateIndex < 0) this.timelineDateIndex = 0;
+		if (this.timelineDateIndex >= sortedDates.length) this.timelineDateIndex = sortedDates.length - 1;
+
+		const displayDate = sortedDates[this.timelineDateIndex];
 		if (!displayDate) return;
 
 		// Date header with navigation
 		const nav = container.createDiv('omi-timeline-nav');
-		const prevBtn = nav.createEl('button', { text: '◀', cls: 'omi-timeline-nav-btn' });
-		const dateIndex = sortedDates.indexOf(displayDate);
+		const prevBtn = nav.createEl('button', { text: '◀ Older', cls: 'omi-timeline-nav-btn' });
 
-		const dateLabel = nav.createEl('span', {
+		nav.createEl('span', {
 			text: new Date(displayDate + 'T00:00:00').toLocaleDateString('en-US', {
 				weekday: 'long',
 				month: 'long',
@@ -1138,11 +1144,25 @@ export class OmiHubView extends ItemView {
 			cls: 'omi-timeline-date-label'
 		});
 
-		const nextBtn = nav.createEl('button', { text: '▶', cls: 'omi-timeline-nav-btn' });
+		const nextBtn = nav.createEl('button', { text: 'Newer ▶', cls: 'omi-timeline-nav-btn' });
 
-		// For now, just show the most recent day (navigation could be added later)
-		prevBtn.disabled = dateIndex >= sortedDates.length - 1;
-		nextBtn.disabled = dateIndex <= 0;
+		// Enable navigation through all dates
+		prevBtn.disabled = this.timelineDateIndex >= sortedDates.length - 1;
+		nextBtn.disabled = this.timelineDateIndex <= 0;
+
+		prevBtn.addEventListener('click', () => {
+			if (this.timelineDateIndex < sortedDates.length - 1) {
+				this.timelineDateIndex++;
+				this.render();
+			}
+		});
+
+		nextBtn.addEventListener('click', () => {
+			if (this.timelineDateIndex > 0) {
+				this.timelineDateIndex--;
+				this.render();
+			}
+		});
 
 		// Timeline hours (6 AM to 11 PM)
 		const timeline = container.createDiv('omi-timeline-grid');
@@ -1186,15 +1206,45 @@ export class OmiHubView extends ItemView {
 		const sortedDates = Array.from(groupedByDate.keys()).sort((a, b) => b.localeCompare(a));
 		if (sortedDates.length === 0) return;
 
+		// Calculate current week based on offset (0 = most recent week)
 		const mostRecentDate = new Date(sortedDates[0] + 'T00:00:00');
-		const weekStart = this.getWeekStartDate(mostRecentDate);
+		const baseWeekStart = this.getWeekStartDate(mostRecentDate);
 
-		// Week header
+		// Apply week offset
+		const weekStart = new Date(baseWeekStart);
+		weekStart.setDate(weekStart.getDate() - (this.timelineWeekOffset * 7));
+
+		// Find oldest date to limit navigation
+		const oldestDate = new Date(sortedDates[sortedDates.length - 1] + 'T00:00:00');
+		const oldestWeekStart = this.getWeekStartDate(oldestDate);
+
+		// Week header with navigation
+		const nav = container.createDiv('omi-timeline-nav');
+		const prevBtn = nav.createEl('button', { text: '◀ Older', cls: 'omi-timeline-nav-btn' });
+
 		const weekEnd = new Date(weekStart);
 		weekEnd.setDate(weekEnd.getDate() + 6);
-		container.createEl('div', {
-			text: `Week of ${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`,
-			cls: 'omi-timeline-week-header'
+		nav.createEl('span', {
+			text: `${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`,
+			cls: 'omi-timeline-date-label'
+		});
+
+		const nextBtn = nav.createEl('button', { text: 'Newer ▶', cls: 'omi-timeline-nav-btn' });
+
+		// Enable navigation - can go back to oldest week, forward to most recent
+		prevBtn.disabled = weekStart <= oldestWeekStart;
+		nextBtn.disabled = this.timelineWeekOffset <= 0;
+
+		prevBtn.addEventListener('click', () => {
+			this.timelineWeekOffset++;
+			this.render();
+		});
+
+		nextBtn.addEventListener('click', () => {
+			if (this.timelineWeekOffset > 0) {
+				this.timelineWeekOffset--;
+				this.render();
+			}
 		});
 
 		// 7 rows (one per day)
@@ -1296,31 +1346,73 @@ export class OmiHubView extends ItemView {
 			return;
 		}
 
-		// Calculate stats for this week
+		// Time range selector
+		const timeRangeContainer = statsContainer.createDiv('omi-stats-time-range');
+		const ranges: { key: 'week' | 'month' | '30days' | 'all'; label: string }[] = [
+			{ key: 'all', label: 'All Time' },
+			{ key: '30days', label: 'Last 30 Days' },
+			{ key: 'month', label: 'This Month' },
+			{ key: 'week', label: 'This Week' }
+		];
+
+		for (const range of ranges) {
+			const btn = timeRangeContainer.createEl('button', {
+				text: range.label,
+				cls: `omi-stats-range-btn ${this.statsTimeRange === range.key ? 'active' : ''}`
+			});
+			btn.addEventListener('click', () => {
+				this.statsTimeRange = range.key;
+				this.render();
+			});
+		}
+
+		// Filter conversations based on selected time range
 		const now = new Date();
-		const weekStart = this.getWeekStartDate(now);
-		const weekConvs = conversationArray.filter(c => {
-			const convDate = new Date(c.date + 'T00:00:00');
-			return convDate >= weekStart;
-		});
+		let filteredConvs: SyncedConversationMeta[];
+		let rangeLabel: string;
+
+		switch (this.statsTimeRange) {
+			case 'week': {
+				const weekStart = this.getWeekStartDate(now);
+				filteredConvs = conversationArray.filter(c => new Date(c.date + 'T00:00:00') >= weekStart);
+				rangeLabel = 'This Week';
+				break;
+			}
+			case 'month': {
+				const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+				filteredConvs = conversationArray.filter(c => new Date(c.date + 'T00:00:00') >= monthStart);
+				rangeLabel = 'This Month';
+				break;
+			}
+			case '30days': {
+				const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+				filteredConvs = conversationArray.filter(c => new Date(c.date + 'T00:00:00') >= thirtyDaysAgo);
+				rangeLabel = 'Last 30 Days';
+				break;
+			}
+			case 'all':
+			default:
+				filteredConvs = conversationArray;
+				rangeLabel = 'All Time';
+		}
 
 		// Top stats cards
 		const topStats = statsContainer.createDiv('omi-stats-top-row');
 
 		// Conversation count
 		const countCard = topStats.createDiv('omi-stats-card');
-		countCard.createEl('div', { text: String(weekConvs.length), cls: 'omi-stats-value' });
+		countCard.createEl('div', { text: String(filteredConvs.length), cls: 'omi-stats-value' });
 		countCard.createEl('div', { text: 'conversations', cls: 'omi-stats-label' });
 
 		// Total time
-		const totalDuration = weekConvs.reduce((sum, c) => sum + (c.duration || 0), 0);
+		const totalDuration = filteredConvs.reduce((sum: number, c: SyncedConversationMeta) => sum + (c.duration || 0), 0);
 		const timeCard = topStats.createDiv('omi-stats-card');
 		timeCard.createEl('div', { text: this.formatDuration(totalDuration), cls: 'omi-stats-value' });
 		timeCard.createEl('div', { text: 'total time', cls: 'omi-stats-label' });
 
 		// Top category
 		const categoryCount = new Map<string, number>();
-		for (const conv of weekConvs) {
+		for (const conv of filteredConvs) {
 			const cat = conv.category || 'other';
 			categoryCount.set(cat, (categoryCount.get(cat) || 0) + 1);
 		}
@@ -1337,23 +1429,23 @@ export class OmiHubView extends ItemView {
 		topCatCard.createEl('div', { text: 'top category', cls: 'omi-stats-label' });
 
 		// Total tasks
-		const totalTasks = weekConvs.reduce((sum, c) => sum + (c.actionItemCount || 0), 0);
+		const totalTasks = filteredConvs.reduce((sum: number, c: SyncedConversationMeta) => sum + (c.actionItemCount || 0), 0);
 		const tasksCard = topStats.createDiv('omi-stats-card');
 		tasksCard.createEl('div', { text: String(totalTasks), cls: 'omi-stats-value' });
 		tasksCard.createEl('div', { text: 'tasks created', cls: 'omi-stats-label' });
 
 		// Total events
-		const totalEvents = weekConvs.reduce((sum, c) => sum + (c.eventCount || 0), 0);
+		const totalEvents = filteredConvs.reduce((sum: number, c: SyncedConversationMeta) => sum + (c.eventCount || 0), 0);
 		const eventsCard = topStats.createDiv('omi-stats-card');
 		eventsCard.createEl('div', { text: String(totalEvents), cls: 'omi-stats-value' });
 		eventsCard.createEl('div', { text: 'events', cls: 'omi-stats-label' });
 
 		// Category breakdown
 		const categorySection = statsContainer.createDiv('omi-stats-section');
-		categorySection.createEl('h4', { text: 'Category Breakdown' });
+		categorySection.createEl('h4', { text: `Category Breakdown (${rangeLabel})` });
 
 		const categoryDurations = new Map<string, number>();
-		for (const conv of weekConvs) {
+		for (const conv of filteredConvs) {
 			const cat = conv.category || 'other';
 			categoryDurations.set(cat, (categoryDurations.get(cat) || 0) + (conv.duration || 0));
 		}
@@ -1388,7 +1480,7 @@ export class OmiHubView extends ItemView {
 
 		// Count conversations per day of week
 		const dayActivity = new Map<number, number>();
-		for (const conv of weekConvs) {
+		for (const conv of filteredConvs) {
 			const convDate = new Date(conv.date + 'T00:00:00');
 			const dayOfWeek = convDate.getDay();
 			dayActivity.set(dayOfWeek, (dayActivity.get(dayOfWeek) || 0) + 1);
@@ -1449,12 +1541,28 @@ export class OmiHubView extends ItemView {
 			dateDuration.set(conv.date, (dateDuration.get(conv.date) || 0) + (conv.duration || 0));
 		}
 
-		// Find date range (last 12 weeks)
+		// Find date range based on actual conversation data
+		// Use T00:00:00 to avoid timezone issues
+		const dates = conversationArray.map(c => new Date(c.date + 'T00:00:00'));
+		const minDataDate = new Date(Math.min(...dates.map(d => d.getTime())));
+		const maxDataDate = new Date(Math.max(...dates.map(d => d.getTime())));
+
+		// Debug: Log date range
+		console.log('Heatmap date range:', {
+			minDate: minDataDate.toISOString().split('T')[0],
+			maxDate: maxDataDate.toISOString().split('T')[0],
+			totalConversations: conversationArray.length
+		});
+
+		// Extend to show full weeks
 		const now = new Date();
-		const endDate = new Date(now);
-		endDate.setDate(endDate.getDate() - endDate.getDay() + 6); // End of current week
-		const startDate = new Date(endDate);
-		startDate.setDate(startDate.getDate() - 12 * 7 + 1); // 12 weeks back
+		now.setHours(0, 0, 0, 0);
+		const endDate = new Date(Math.max(now.getTime(), maxDataDate.getTime()));
+		endDate.setDate(endDate.getDate() - endDate.getDay() + 6); // End of current week (Saturday)
+
+		// Start from the earliest data, aligned to Sunday
+		const startDate = new Date(minDataDate);
+		startDate.setDate(startDate.getDate() - startDate.getDay()); // Start of that week (Sunday)
 
 		// Heatmap header with month labels
 		const monthsRow = heatmapContainer.createDiv('omi-heatmap-months');

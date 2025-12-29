@@ -2099,6 +2099,36 @@
     padding: 0;
 }
 
+/* Stats Time Range Selector */
+.omi-stats-time-range {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.omi-stats-range-btn {
+    padding: 6px 14px;
+    border: 1px solid var(--background-modifier-border);
+    background: var(--background-primary);
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: var(--omi-radius-md);
+    font-size: 13px;
+    transition: all var(--omi-duration-short) var(--omi-easing-standard);
+}
+
+.omi-stats-range-btn:hover {
+    background: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+
+.omi-stats-range-btn.active {
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+    border-color: var(--interactive-accent);
+}
+
 .omi-stats-top-row {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
