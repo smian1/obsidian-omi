@@ -2337,20 +2337,38 @@
     background: var(--background-modifier-border);
 }
 
+/* GitHub-style green contribution colors */
 .omi-heatmap-level-1 {
-    background: rgba(var(--interactive-accent-rgb, 99, 102, 241), 0.25);
+    background: #9be9a8;
 }
 
 .omi-heatmap-level-2 {
-    background: rgba(var(--interactive-accent-rgb, 99, 102, 241), 0.5);
+    background: #40c463;
 }
 
 .omi-heatmap-level-3 {
-    background: rgba(var(--interactive-accent-rgb, 99, 102, 241), 0.75);
+    background: #30a14e;
 }
 
 .omi-heatmap-level-4 {
-    background: var(--interactive-accent);
+    background: #216e39;
+}
+
+/* Dark theme adjustments */
+.theme-dark .omi-heatmap-level-1 {
+    background: #0e4429;
+}
+
+.theme-dark .omi-heatmap-level-2 {
+    background: #006d32;
+}
+
+.theme-dark .omi-heatmap-level-3 {
+    background: #26a641;
+}
+
+.theme-dark .omi-heatmap-level-4 {
+    background: #39d353;
 }
 
 .omi-heatmap-legend {
@@ -2365,9 +2383,9 @@
 }
 
 .omi-heatmap-legend-cell {
-    width: 14px;
-    height: 14px;
-    border-radius: 3px;
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
 }
 
 .omi-heatmap-summary {
