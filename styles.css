@@ -23,10 +23,42 @@
     --omi-radius-lg: 12px;
     --omi-radius-full: 9999px;
 
-    /* Status colors - use Obsidian's theme variables with fallbacks */
-    --omi-status-pending: var(--text-warning, #e6a700);
-    --omi-status-completed: var(--text-success, #28a745);
-    --omi-status-overdue: var(--text-error, #dc3545);
+    /* Purple Accent System (Primary Brand Color) */
+    --omi-purple-primary: #8B5CF6;
+    --omi-purple-secondary: #A855F7;
+    --omi-purple-accent: #7C3AED;
+    --omi-purple-deep: #6D28D9;
+    --omi-purple-light: #C4B5FD;
+    --omi-purple-pink: #D946EF;
+
+    /* Semantic Colors */
+    --omi-color-info: #3B82F6;
+    --omi-color-success: #10B981;
+    --omi-color-warning: #F59E0B;
+    --omi-color-error: #EF4444;
+
+    /* Accent Colors */
+    --omi-color-coral: #FF6B6B;
+    --omi-color-mint: #4ECDC4;
+    --omi-color-teal: #00897B;
+
+    /* Status colors */
+    --omi-status-pending: var(--omi-color-warning);
+    --omi-status-completed: var(--omi-color-success);
+    --omi-status-overdue: var(--omi-color-error);
+}
+
+/* ========================================
+   OMI ACCENT OVERRIDES
+   Apply purple accent to all Omi Hub elements
+   ======================================== */
+.omi-hub-container,
+.omi-tasks-container,
+.omi-conversations-container {
+    --interactive-accent: var(--omi-purple-primary);
+    --interactive-accent-hover: var(--omi-purple-accent);
+    --interactive-accent-rgb: 139, 92, 246;
+    --text-accent: var(--omi-purple-primary);
 }
 
 /* ========================================
@@ -1156,7 +1188,11 @@
 .omi-hub-header h2 {
     margin: 0 0 16px 0;
     font-size: 1.5em;
-    font-weight: 600;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--omi-purple-primary), var(--omi-purple-secondary));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
 }
 
 /* ========================================
@@ -2260,9 +2296,12 @@
 }
 
 .omi-heatmap-year {
-    font-size: 24px;
+    font-size: 28px;
     font-weight: 700;
-    color: var(--text-normal);
+    background: linear-gradient(135deg, var(--omi-purple-primary), var(--omi-purple-pink));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
 }
 
 .omi-heatmap-container {
@@ -2337,38 +2376,38 @@
     background: var(--background-modifier-border);
 }
 
-/* GitHub-style green contribution colors */
+/* Purple contribution colors (Light theme) */
 .omi-heatmap-level-1 {
-    background: #9be9a8;
+    background: #E9D5FF; /* Very light purple */
 }
 
 .omi-heatmap-level-2 {
-    background: #40c463;
+    background: #C4B5FD; /* Light purple */
 }
 
 .omi-heatmap-level-3 {
-    background: #30a14e;
+    background: #A855F7; /* Medium purple */
 }
 
 .omi-heatmap-level-4 {
-    background: #216e39;
+    background: #7C3AED; /* Deep purple */
 }
 
-/* Dark theme adjustments */
+/* Dark theme - inverted intensity (darker bg, brighter activity) */
 .theme-dark .omi-heatmap-level-1 {
-    background: #0e4429;
+    background: #4C1D95; /* Deep violet */
 }
 
 .theme-dark .omi-heatmap-level-2 {
-    background: #006d32;
+    background: #6D28D9; /* Purple */
 }
 
 .theme-dark .omi-heatmap-level-3 {
-    background: #26a641;
+    background: #8B5CF6; /* Bright purple */
 }
 
 .theme-dark .omi-heatmap-level-4 {
-    background: #39d353;
+    background: #A855F7; /* Brightest purple */
 }
 
 .omi-heatmap-legend {
