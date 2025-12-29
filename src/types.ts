@@ -26,7 +26,7 @@ export interface OmiConversationsSettings {
 	activeHubTab: 'tasks' | 'conversations';
 	syncedConversations: Record<string, SyncedConversationMeta>;
 	// Conversations view settings
-	conversationsViewMode: 'list' | 'timeline' | 'stats' | 'heatmap';
+	conversationsViewMode: 'list' | 'timeline' | 'stats' | 'heatmap' | 'map';
 	conversationsTimeRange: 'daily' | 'weekly';
 }
 
@@ -59,6 +59,15 @@ export interface StructuredData {
 	events?: CalendarEvent[];
 }
 
+// Geolocation data from Omi API
+export interface Geolocation {
+	latitude: number;
+	longitude: number;
+	address?: string;
+	google_place_id?: string;
+	location_type?: string;
+}
+
 export interface Conversation {
 	id: string;
 	created_at: string;
@@ -66,6 +75,7 @@ export interface Conversation {
 	finished_at: string;
 	structured?: StructuredData;
 	transcript_segments?: TranscriptSegment[];
+	geolocation?: Geolocation | null;
 }
 
 // Action Item API types (for Tasks Hub)
@@ -110,6 +120,8 @@ export interface SyncedConversationMeta {
 	overview?: string;      // First 150 chars of AI summary (for cards)
 	actionItemCount: number;
 	eventCount: number;
+	// Geolocation data for map view
+	geolocation?: Geolocation;
 }
 
 // Conversation detail data for split pane view

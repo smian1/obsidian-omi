@@ -393,6 +393,9 @@ export class OmiHubView extends ItemView {
 			case 'heatmap':
 				this.renderConversationsHeatmap(tabContent);
 				break;
+			case 'map':
+				this.renderConversationsMap(tabContent);
+				break;
 			default:
 				this.renderConversationsList(tabContent);
 		}
@@ -404,11 +407,12 @@ export class OmiHubView extends ItemView {
 		tabs.setAttribute('aria-label', 'Conversation view modes');
 
 		const currentMode = this.plugin.settings.conversationsViewMode || 'list';
-		const modes: Array<{ id: 'list' | 'timeline' | 'stats' | 'heatmap'; label: string; icon: string }> = [
+		const modes: Array<{ id: 'list' | 'timeline' | 'stats' | 'heatmap' | 'map'; label: string; icon: string }> = [
 			{ id: 'list', label: 'Cards', icon: '📋' },
 			{ id: 'timeline', label: 'Timeline', icon: '⏱️' },
 			{ id: 'stats', label: 'Stats', icon: '📊' },
-			{ id: 'heatmap', label: 'Heatmap', icon: '🔥' }
+			{ id: 'heatmap', label: 'Heatmap', icon: '🔥' },
+			{ id: 'map', label: 'Map', icon: '🗺️' }
 		];
 
 		for (const mode of modes) {
@@ -1668,6 +1672,175 @@ export class OmiHubView extends ItemView {
 		stat2.innerHTML = `<strong>${activeDays}</strong> active days`;
 		const stat3 = summary.createEl('span');
 		stat3.innerHTML = `<strong>${avgPerDay}</strong> avg/day`;
+	}
+
+	// Map view properties
+	private leafletLoaded = false;
+	private mapInstance: any = null;
+
+	private async loadLeaflet(): Promise<void> {
+		if (this.leafletLoaded && (window as any).L) return;
+
+		// CSS is bundled in styles.css to avoid Obsidian CSP blocking external stylesheets
+		// Only need to load the JS library (scripts from CDN are allowed)
+
+		if (!(window as any).L) {
+			await new Promise<void>((resolve, reject) => {
+				const script = document.createElement('script');
+				script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+				script.onload = () => resolve();
+				script.onerror = () => reject(new Error('Failed to load Leaflet'));
+				document.head.appendChild(script);
+			});
+		}
+
+		this.leafletLoaded = true;
+	}
+
+	private renderConversationsMap(container: HTMLElement): void {
+		const mapContainer = container.createDiv('omi-conversations-map');
+
+		// Get conversations with geo data
+		const conversationsWithGeo = Object.values(this.plugin.settings.syncedConversations)
+			.filter(c => c.geolocation?.latitude && c.geolocation?.longitude);
+
+		if (conversationsWithGeo.length === 0) {
+			const emptyState = mapContainer.createDiv('omi-map-empty');
+			emptyState.createEl('div', { text: '🗺️', cls: 'omi-map-empty-icon' });
+			emptyState.createEl('h3', { text: 'No location data available' });
+			emptyState.createEl('p', {
+				text: 'Location is captured when using the Omi device. Do a Full Resync to load geo data for existing conversations.'
+			});
+			return;
+		}
+
+		// Stats bar
+		const statsBar = mapContainer.createDiv('omi-map-stats');
+		const uniqueLocations = this.groupConversationsByLocation(conversationsWithGeo);
+		statsBar.createEl('span', {
+			text: `📍 ${conversationsWithGeo.length} conversations across ${Object.keys(uniqueLocations).length} locations`
+		});
+
+		// Map container element
+		const mapEl = mapContainer.createDiv('omi-map-container');
+		mapEl.id = 'omi-leaflet-map-' + Date.now(); // Unique ID
+		mapEl.style.height = '500px';
+
+		// Load Leaflet and initialize map
+		this.loadLeaflet().then(() => {
+			this.initializeMap(mapEl, conversationsWithGeo, uniqueLocations);
+		}).catch(err => {
+			console.error('Failed to load Leaflet:', err);
+			mapEl.createEl('p', {
+				text: 'Failed to load map library. Please check your internet connection.',
+				cls: 'omi-map-error'
+			});
+		});
+	}
+
+	private groupConversationsByLocation(conversations: SyncedConversationMeta[]): Record<string, SyncedConversationMeta[]> {
+		const groups: Record<string, SyncedConversationMeta[]> = {};
+
+		for (const conv of conversations) {
+			if (!conv.geolocation) continue;
+			// Round to ~100m precision for clustering
+			const lat = Math.round(conv.geolocation.latitude * 1000) / 1000;
+			const lng = Math.round(conv.geolocation.longitude * 1000) / 1000;
+			const key = `${lat},${lng}`;
+
+			if (!groups[key]) groups[key] = [];
+			groups[key].push(conv);
+		}
+
+		return groups;
+	}
+
+	private initializeMap(
+		mapEl: HTMLElement,
+		conversations: SyncedConversationMeta[],
+		locationGroups: Record<string, SyncedConversationMeta[]>
+	): void {
+		const L = (window as any).L;
+		if (!L) return;
+
+		// Clean up existing map if any
+		if (this.mapInstance) {
+			this.mapInstance.remove();
+			this.mapInstance = null;
+		}
+
+		// Calculate bounds from all conversations
+		const bounds = L.latLngBounds(
+			conversations.map(c => [c.geolocation!.latitude, c.geolocation!.longitude])
+		);
+
+		// Initialize map
+		this.mapInstance = L.map(mapEl).fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+
+		// Add tile layer - using CartoDB which has better CORS support for Electron apps
+		// Fallback chain: CartoDB Voyager -> CartoDB Positron -> OSM
+		const tileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+			attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+			subdomains: 'abcd',
+			maxZoom: 19
+		});
+		tileLayer.addTo(this.mapInstance);
+
+		// Multiple invalidateSize calls to ensure tiles load properly
+		// This helps with Electron/Obsidian container rendering timing issues
+		const invalidateSizes = () => {
+			if (this.mapInstance) {
+				this.mapInstance.invalidateSize();
+			}
+		};
+		setTimeout(invalidateSizes, 100);
+		setTimeout(invalidateSizes, 300);
+		setTimeout(invalidateSizes, 500);
+
+		// Add markers for each location group
+		for (const [key, convs] of Object.entries(locationGroups)) {
+			const [lat, lng] = key.split(',').map(Number);
+
+			// Create custom purple marker icon
+			const markerIcon = L.divIcon({
+				className: 'omi-map-marker',
+				html: `<div class="omi-map-marker-inner">${convs.length > 1 ? convs.length : ''}</div>`,
+				iconSize: [32, 32],
+				iconAnchor: [16, 32],
+				popupAnchor: [0, -32]
+			});
+
+			const marker = L.marker([lat, lng], { icon: markerIcon })
+				.addTo(this.mapInstance)
+				.bindPopup(this.createMapPopupContent(convs), {
+					maxWidth: 300,
+					className: 'omi-map-popup-wrapper'
+				});
+		}
+	}
+
+	private createMapPopupContent(conversations: SyncedConversationMeta[]): string {
+		const address = conversations[0].geolocation?.address || 'Unknown location';
+		const items = conversations.slice(0, 5).map(c =>
+			`<div class="omi-map-popup-item">
+				<span class="omi-map-popup-emoji">${c.emoji}</span>
+				<span class="omi-map-popup-title">${c.title}</span>
+				<span class="omi-map-popup-date">${c.date}</span>
+			</div>`
+		).join('');
+
+		const more = conversations.length > 5
+			? `<div class="omi-map-popup-more">+${conversations.length - 5} more conversations</div>`
+			: '';
+
+		return `
+			<div class="omi-map-popup">
+				<div class="omi-map-popup-address">${address}</div>
+				<div class="omi-map-popup-count">${conversations.length} conversation${conversations.length > 1 ? 's' : ''}</div>
+				${items}
+				${more}
+			</div>
+		`;
 	}
 
 	private renderLoadingSkeleton(container: HTMLElement): void {

@@ -307,7 +307,9 @@ export default class OmiConversationsPlugin extends Plugin {
 					// Stats data
 					overview: overviewSnippet,
 					actionItemCount: conv.structured?.action_items?.length || 0,
-					eventCount: conv.structured?.events?.length || 0
+					eventCount: conv.structured?.events?.length || 0,
+					// Geolocation data for map view
+					geolocation: conv.geolocation || undefined
 				};
 				this.settings.syncedConversations[conv.id] = meta;
 			}
