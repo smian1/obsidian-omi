@@ -25,6 +25,9 @@ export interface OmiConversationsSettings {
 	// Hub view settings
 	activeHubTab: 'tasks' | 'conversations';
 	syncedConversations: Record<string, SyncedConversationMeta>;
+	// Conversations view settings
+	conversationsViewMode: 'list' | 'timeline' | 'stats' | 'heatmap';
+	conversationsTimeRange: 'daily' | 'weekly';
 }
 
 // Omi API response types
@@ -99,4 +102,20 @@ export interface SyncedConversationMeta {
 	emoji: string;
 	time: string;        // HH:MM AM/PM
 	category?: string;
+	// Timeline & duration data
+	startedAt: string;      // ISO timestamp for precise timeline positioning
+	finishedAt: string;     // ISO timestamp for duration end
+	duration: number;       // Minutes (pre-calculated for easy display)
+	// Stats data
+	overview?: string;      // First 150 chars of AI summary (for cards)
+	actionItemCount: number;
+	eventCount: number;
+}
+
+// Conversation detail data for split pane view
+export interface ConversationDetailData {
+	overview: string;
+	actionItems: ActionItem[];
+	events: CalendarEvent[];
+	transcript: TranscriptSegment[];
 }

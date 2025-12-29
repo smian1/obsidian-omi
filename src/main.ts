@@ -282,13 +282,32 @@ export default class OmiConversationsPlugin extends Plugin {
 				const dateStr = `${year}-${month}-${day}`;
 				const time = localDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 
+				// Calculate duration in minutes
+				const startTime = new Date(conv.started_at);
+				const endTime = new Date(conv.finished_at);
+				const durationMs = endTime.getTime() - startTime.getTime();
+				const durationMinutes = Math.max(1, Math.round(durationMs / 60000)); // At least 1 min
+
+				// Get overview snippet (first 150 chars)
+				const overviewSnippet = conv.structured?.overview
+					? conv.structured.overview.substring(0, 150)
+					: undefined;
+
 				const meta: SyncedConversationMeta = {
 					id: conv.id,
 					date: dateStr,
 					title: conv.structured?.title || 'Untitled',
 					emoji: conv.structured?.emoji || getCategoryEmoji(conv.structured?.category || 'other'),
 					time: time,
-					category: conv.structured?.category
+					category: conv.structured?.category,
+					// Timeline & duration data
+					startedAt: conv.started_at,
+					finishedAt: conv.finished_at,
+					duration: durationMinutes,
+					// Stats data
+					overview: overviewSnippet,
+					actionItemCount: conv.structured?.action_items?.length || 0,
+					eventCount: conv.structured?.events?.length || 0
 				};
 				this.settings.syncedConversations[conv.id] = meta;
 			}
@@ -383,8 +402,9 @@ export default class OmiConversationsPlugin extends Plugin {
 			const title = conv.structured?.title || 'Untitled';
 			const time = new Date(conv.started_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 
-			// Add clean heading
+			// Add clean heading with conversation ID for reliable matching
 			content.push(`#### ${time} - ${emoji} ${title}`);
+			content.push(`<!-- conv_id: ${conv.id} -->`);
 
 			// Add transcript link on separate line if enabled
 			if (this.settings.includeTranscript) {
@@ -499,8 +519,9 @@ export default class OmiConversationsPlugin extends Plugin {
 			const title = conv.structured?.title || 'Untitled';
 			const time = new Date(conv.started_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 
-			// Add clean heading
+			// Add clean heading with conversation ID for reliable matching
 			content.push(`#### ${time} - ${emoji} ${title}`);
+			content.push(`<!-- conv_id: ${conv.id} -->`);
 
 			// Add overview link on separate line if enabled
 			if (this.settings.includeOverview) {

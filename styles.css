@@ -1397,3 +1397,1013 @@
         flex: 1;
     }
 }
+
+/* ========================================
+   CONVERSATIONS VIEW MODE TABS
+   ======================================== */
+.omi-conversations-view-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+
+.omi-conv-view-tab {
+    padding: 6px 12px;
+    border: 1px solid var(--background-modifier-border);
+    background: var(--background-primary);
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: var(--omi-radius-md);
+    font-size: 13px;
+    transition: all var(--omi-duration-short) var(--omi-easing-standard);
+}
+
+.omi-conv-view-tab:hover {
+    background: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+
+.omi-conv-view-tab.active {
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+    border-color: var(--interactive-accent);
+}
+
+/* ========================================
+   TIME RANGE TOGGLE
+   ======================================== */
+.omi-conversations-time-toggle {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 16px;
+}
+
+.omi-time-toggle-btn {
+    padding: 4px 12px;
+    border: 1px solid var(--background-modifier-border);
+    background: var(--background-primary);
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: var(--omi-radius-sm);
+    font-size: 12px;
+    transition: all var(--omi-duration-short) var(--omi-easing-standard);
+}
+
+.omi-time-toggle-btn:hover {
+    background: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+
+.omi-time-toggle-btn.active {
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+    border-color: var(--interactive-accent);
+}
+
+/* ========================================
+   ENHANCED CONVERSATION CARDS
+   ======================================== */
+.omi-conversation-card {
+    padding: 16px;
+    background: var(--background-secondary);
+    border-radius: var(--omi-radius-md);
+    cursor: pointer;
+    margin-bottom: 12px;
+    transition: all var(--omi-duration-short) var(--omi-easing-standard);
+    border: 1px solid transparent;
+}
+
+.omi-conversation-card:hover {
+    background: var(--background-modifier-hover);
+    border-color: var(--background-modifier-border);
+    transform: translateY(-1px);
+}
+
+.omi-conversation-card:focus-visible {
+    outline: 2px solid var(--interactive-accent);
+    outline-offset: 2px;
+}
+
+.omi-conversation-card-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.omi-conversation-card-header .omi-conversation-emoji {
+    font-size: 24px;
+}
+
+.omi-conversation-card-header .omi-conversation-title {
+    flex: 1;
+    font-weight: 500;
+    font-size: 15px;
+}
+
+.omi-conversation-card-header .omi-conversation-time {
+    font-size: 13px;
+}
+
+/* Duration Bar */
+.omi-conversation-duration-bar {
+    height: 8px;
+    background: var(--background-modifier-border);
+    border-radius: var(--omi-radius-full);
+    margin-bottom: 10px;
+    position: relative;
+    overflow: hidden;
+}
+
+.omi-conversation-duration-fill {
+    height: 100%;
+    background: var(--interactive-accent);
+    border-radius: var(--omi-radius-full);
+    transition: width var(--omi-duration-medium) var(--omi-easing-standard);
+}
+
+.omi-conversation-duration-text {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 10px;
+    color: var(--text-muted);
+    background: var(--background-secondary);
+    padding: 0 4px;
+    border-radius: 2px;
+}
+
+/* Meta Row */
+.omi-conversation-card-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.omi-conversation-meta-item {
+    font-size: 12px;
+    color: var(--text-muted);
+    background: var(--background-primary);
+    padding: 2px 8px;
+    border-radius: var(--omi-radius-full);
+}
+
+.omi-conversation-category {
+    font-size: 11px;
+    color: var(--text-muted);
+    background: var(--background-modifier-hover);
+    padding: 2px 8px;
+    border-radius: var(--omi-radius-full);
+    text-transform: capitalize;
+}
+
+/* Overview Snippet */
+.omi-conversation-overview {
+    font-size: 13px;
+    color: var(--text-muted);
+    font-style: italic;
+    line-height: 1.5;
+    border-left: 2px solid var(--background-modifier-border);
+    padding-left: 12px;
+    margin-top: 8px;
+}
+
+/* Week Groups */
+.omi-conversation-week-group {
+    margin-bottom: 32px;
+}
+
+.omi-conversation-week-header {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--text-normal);
+    margin-bottom: 8px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--interactive-accent);
+}
+
+.omi-conversation-week-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 16px;
+    padding: 12px;
+    background: var(--background-secondary);
+    border-radius: var(--omi-radius-md);
+}
+
+.omi-conversation-week-stats > span {
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+.omi-conversation-week-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+}
+
+/* ========================================
+   SPLIT PANE LAYOUT
+   ======================================== */
+.omi-conversations-split {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--omi-spacing-lg);
+    height: calc(100vh - 320px);
+    min-height: 400px;
+}
+
+.omi-conversations-list-pane {
+    overflow-y: auto;
+    padding-right: var(--omi-spacing-sm);
+}
+
+.omi-conversations-detail-pane {
+    background: var(--background-secondary);
+    border-radius: var(--omi-radius-lg);
+    padding: var(--omi-spacing-lg);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid var(--background-modifier-border);
+}
+
+/* Selected card indicator */
+.omi-conversation-card.selected {
+    border-left: 3px solid var(--interactive-accent);
+    background: var(--background-secondary-alt);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* ========================================
+   DETAIL PANEL
+   ======================================== */
+.omi-detail-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding-bottom: var(--omi-spacing-sm);
+    border-bottom: 1px solid var(--background-modifier-border);
+    margin-bottom: var(--omi-spacing-sm);
+}
+
+.omi-detail-title-area {
+    display: flex;
+    align-items: center;
+    gap: var(--omi-spacing-sm);
+    flex: 1;
+    min-width: 0;
+}
+
+.omi-detail-emoji {
+    font-size: 24px;
+    flex-shrink: 0;
+}
+
+.omi-detail-title {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-normal);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.omi-detail-close {
+    padding: 4px 8px;
+    border: none;
+    background: transparent;
+    font-size: 20px;
+    cursor: pointer;
+    color: var(--text-muted);
+    border-radius: var(--omi-radius-sm);
+    transition: all var(--omi-duration-short) ease;
+    flex-shrink: 0;
+}
+
+.omi-detail-close:hover {
+    background: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+
+.omi-detail-meta {
+    display: flex;
+    align-items: center;
+    gap: var(--omi-spacing-sm);
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: var(--omi-spacing-md);
+}
+
+.omi-detail-category {
+    background: var(--background-modifier-hover);
+    padding: 2px 8px;
+    border-radius: var(--omi-radius-full);
+    text-transform: capitalize;
+}
+
+/* Detail Tabs */
+.omi-detail-tabs {
+    display: flex;
+    gap: var(--omi-spacing-xs);
+    margin-bottom: var(--omi-spacing-md);
+    border-bottom: 1px solid var(--background-modifier-border);
+    padding-bottom: var(--omi-spacing-sm);
+}
+
+.omi-detail-tab {
+    padding: var(--omi-spacing-xs) var(--omi-spacing-md);
+    border: none;
+    background: transparent;
+    border-radius: var(--omi-radius-sm);
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text-muted);
+    transition: all var(--omi-duration-short) ease;
+}
+
+.omi-detail-tab:hover {
+    background: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+
+.omi-detail-tab.active {
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+}
+
+/* Detail Content */
+.omi-detail-content {
+    flex: 1;
+    overflow-y: auto;
+    padding-right: var(--omi-spacing-sm);
+}
+
+.omi-detail-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100px;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+.omi-detail-empty {
+    color: var(--text-muted);
+    font-style: italic;
+    text-align: center;
+    padding: var(--omi-spacing-xl);
+}
+
+.omi-detail-resync-hint {
+    font-size: 12px;
+    padding: var(--omi-spacing-sm);
+    background: var(--background-primary);
+    border-radius: var(--omi-radius-sm);
+    margin-top: var(--omi-spacing-md);
+}
+
+.omi-detail-meta-summary p {
+    margin: var(--omi-spacing-xs) 0;
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+.omi-detail-section {
+    margin-bottom: var(--omi-spacing-lg);
+}
+
+.omi-detail-section h4 {
+    margin: 0 0 var(--omi-spacing-sm) 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-normal);
+}
+
+.omi-detail-overview-text {
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--text-normal);
+    margin: 0;
+}
+
+/* Detail Tasks List */
+.omi-detail-tasks {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.omi-detail-tasks li {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--omi-spacing-sm);
+    padding: var(--omi-spacing-xs) 0;
+    font-size: 13px;
+}
+
+.omi-detail-tasks li.completed {
+    opacity: 0.6;
+}
+
+.omi-detail-tasks li.completed .omi-detail-task-desc {
+    text-decoration: line-through;
+}
+
+.omi-detail-task-check {
+    flex-shrink: 0;
+    font-size: 14px;
+}
+
+.omi-detail-task-desc {
+    color: var(--text-normal);
+    line-height: 1.4;
+}
+
+/* Detail Events List */
+.omi-detail-events {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.omi-detail-events li {
+    display: flex;
+    align-items: center;
+    gap: var(--omi-spacing-sm);
+    padding: var(--omi-spacing-xs) 0;
+    font-size: 13px;
+}
+
+.omi-detail-event-icon {
+    flex-shrink: 0;
+}
+
+.omi-detail-event-title {
+    font-weight: 500;
+    color: var(--text-normal);
+}
+
+.omi-detail-event-time {
+    color: var(--text-muted);
+}
+
+/* Detail Transcript */
+.omi-detail-transcript {
+    display: flex;
+    flex-direction: column;
+    gap: var(--omi-spacing-sm);
+}
+
+.omi-transcript-segment {
+    padding: var(--omi-spacing-sm);
+    background: var(--background-primary);
+    border-radius: var(--omi-radius-md);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.omi-transcript-speaker {
+    display: block;
+    font-weight: 600;
+    color: var(--text-accent);
+    margin-bottom: var(--omi-spacing-xs);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.omi-transcript-text {
+    color: var(--text-normal);
+}
+
+/* Detail Footer */
+.omi-detail-footer {
+    padding-top: var(--omi-spacing-md);
+    border-top: 1px solid var(--background-modifier-border);
+    margin-top: var(--omi-spacing-md);
+}
+
+.omi-detail-open-btn {
+    width: 100%;
+    padding: var(--omi-spacing-sm) var(--omi-spacing-md);
+    border: 1px solid var(--background-modifier-border);
+    background: var(--background-primary);
+    border-radius: var(--omi-radius-md);
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--text-normal);
+    transition: all var(--omi-duration-short) ease;
+}
+
+.omi-detail-open-btn:hover {
+    background: var(--background-modifier-hover);
+    border-color: var(--interactive-accent);
+}
+
+/* Mobile responsive - slide over on small screens */
+@media (max-width: 768px) {
+    .omi-conversations-split {
+        grid-template-columns: 1fr;
+        height: auto;
+    }
+
+    .omi-conversations-split.has-selection .omi-conversations-list-pane {
+        display: none;
+    }
+
+    .omi-conversations-detail-pane {
+        position: fixed;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 100;
+        border-radius: 0;
+        animation: slideInFromRight var(--omi-duration-medium) var(--omi-easing-standard);
+    }
+
+    @keyframes slideInFromRight {
+        from {
+            transform: translateX(100%);
+            opacity: 0;
+        }
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
+    }
+}
+
+/* ========================================
+   TIMELINE VIEW
+   ======================================== */
+.omi-conversations-timeline {
+    padding: 0;
+}
+
+.omi-timeline-nav {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.omi-timeline-nav-btn {
+    padding: 8px 12px;
+    border-radius: var(--omi-radius-md);
+    border: 1px solid var(--background-modifier-border);
+    background: var(--background-primary);
+    cursor: pointer;
+    font-size: 14px;
+    transition: all var(--omi-duration-short) var(--omi-easing-standard);
+}
+
+.omi-timeline-nav-btn:hover:not(:disabled) {
+    background: var(--background-modifier-hover);
+}
+
+.omi-timeline-nav-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.omi-timeline-date-label {
+    font-weight: 600;
+    font-size: 16px;
+    min-width: 280px;
+    text-align: center;
+}
+
+.omi-timeline-grid {
+    margin-bottom: 20px;
+}
+
+.omi-timeline-hours {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    padding: 0 4px;
+}
+
+.omi-timeline-hour {
+    font-size: 10px;
+    color: var(--text-muted);
+    width: 35px;
+    text-align: center;
+}
+
+.omi-timeline-track {
+    position: relative;
+    height: 50px;
+    background: var(--background-secondary);
+    border-radius: var(--omi-radius-md);
+    overflow: hidden;
+}
+
+.omi-timeline-block {
+    position: absolute;
+    top: 4px;
+    bottom: 4px;
+    border-radius: var(--omi-radius-sm);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--omi-duration-short) var(--omi-easing-standard);
+    min-width: 24px;
+}
+
+.omi-timeline-block:hover {
+    transform: scale(1.05);
+    z-index: 10;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.omi-timeline-block-emoji {
+    font-size: 16px;
+    filter: grayscale(0);
+}
+
+.omi-timeline-legend {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    color: var(--text-muted);
+    padding: 0 4px;
+}
+
+/* Weekly Timeline */
+.omi-timeline-week-header {
+    font-weight: 600;
+    font-size: 16px;
+    margin-bottom: 16px;
+    text-align: center;
+}
+
+.omi-timeline-week-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.omi-timeline-week-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.omi-timeline-day-label {
+    width: 40px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
+    text-align: right;
+}
+
+.omi-timeline-week-row .omi-timeline-track {
+    flex: 1;
+    height: 36px;
+}
+
+.omi-timeline-hours-footer {
+    display: flex;
+    gap: 12px;
+    margin-top: 8px;
+    padding-left: 52px;
+}
+
+.omi-timeline-spacer {
+    width: 40px;
+}
+
+.omi-timeline-hour-marker {
+    flex: 1;
+    font-size: 10px;
+    color: var(--text-muted);
+    text-align: left;
+}
+
+/* ========================================
+   STATS DASHBOARD
+   ======================================== */
+.omi-conversations-stats {
+    padding: 0;
+}
+
+.omi-stats-top-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    gap: 12px;
+    margin-bottom: 32px;
+}
+
+.omi-stats-card {
+    background: var(--background-secondary);
+    border-radius: var(--omi-radius-md);
+    padding: 16px;
+    text-align: center;
+}
+
+.omi-stats-value {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--interactive-accent);
+    margin-bottom: 4px;
+}
+
+.omi-stats-value.omi-stats-category {
+    font-size: 16px;
+    text-transform: capitalize;
+}
+
+.omi-stats-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.omi-stats-section {
+    margin-bottom: 32px;
+}
+
+.omi-stats-section h4 {
+    margin: 0 0 16px 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-normal);
+}
+
+/* Category Breakdown */
+.omi-stats-category-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.omi-stats-category-label {
+    width: 120px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text-normal);
+}
+
+.omi-stats-bar-container {
+    flex: 1;
+    height: 20px;
+    background: var(--background-secondary);
+    border-radius: var(--omi-radius-sm);
+    overflow: hidden;
+}
+
+.omi-stats-bar {
+    height: 100%;
+    background: var(--interactive-accent);
+    border-radius: var(--omi-radius-sm);
+    transition: width var(--omi-duration-long) var(--omi-easing-standard);
+}
+
+.omi-stats-percentage {
+    width: 100px;
+    text-align: right;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+/* Daily Activity Chart */
+.omi-stats-daily-chart {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    height: 120px;
+    padding: 16px;
+    background: var(--background-secondary);
+    border-radius: var(--omi-radius-md);
+}
+
+.omi-stats-day-bar {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    height: 100%;
+    gap: 8px;
+}
+
+.omi-stats-day-fill {
+    width: 70%;
+    background: var(--interactive-accent);
+    border-radius: var(--omi-radius-sm) var(--omi-radius-sm) 0 0;
+    transition: height var(--omi-duration-long) var(--omi-easing-standard);
+    min-height: 2px;
+}
+
+.omi-stats-day-label {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+/* ========================================
+   HEATMAP VIEW
+   ======================================== */
+.omi-conversations-heatmap {
+    padding: 0;
+}
+
+.omi-heatmap-months {
+    display: flex;
+    gap: 0;
+    margin-bottom: 8px;
+    margin-left: 40px;
+}
+
+.omi-heatmap-spacer {
+    width: 40px;
+}
+
+.omi-heatmap-month {
+    flex: 1;
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.omi-heatmap-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.omi-heatmap-row {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+}
+
+.omi-heatmap-day-label {
+    width: 35px;
+    font-size: 10px;
+    color: var(--text-muted);
+    text-align: right;
+    padding-right: 4px;
+}
+
+.omi-heatmap-cell {
+    width: 14px;
+    height: 14px;
+    border-radius: 2px;
+    background: var(--background-secondary);
+    transition: all var(--omi-duration-short) var(--omi-easing-standard);
+}
+
+.omi-heatmap-cell.clickable {
+    cursor: pointer;
+}
+
+.omi-heatmap-cell.clickable:hover {
+    outline: 2px solid var(--text-muted);
+    outline-offset: 1px;
+}
+
+.omi-heatmap-level-0 {
+    background: var(--background-secondary);
+}
+
+.omi-heatmap-level-1 {
+    background: rgba(var(--interactive-accent-rgb, 99, 102, 241), 0.3);
+}
+
+.omi-heatmap-level-2 {
+    background: rgba(var(--interactive-accent-rgb, 99, 102, 241), 0.5);
+}
+
+.omi-heatmap-level-3 {
+    background: rgba(var(--interactive-accent-rgb, 99, 102, 241), 0.7);
+}
+
+.omi-heatmap-level-4 {
+    background: var(--interactive-accent);
+}
+
+.omi-heatmap-legend {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+    margin-top: 16px;
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.omi-heatmap-legend-cell {
+    width: 12px;
+    height: 12px;
+}
+
+.omi-heatmap-summary {
+    display: flex;
+    justify-content: center;
+    gap: 24px;
+    margin-top: 20px;
+    padding: 16px;
+    background: var(--background-secondary);
+    border-radius: var(--omi-radius-md);
+}
+
+.omi-heatmap-summary > span {
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+/* ========================================
+   MOBILE RESPONSIVE - VISUALIZATIONS
+   ======================================== */
+@media (max-width: 768px) {
+    .omi-conversations-view-tabs {
+        gap: 6px;
+    }
+
+    .omi-conv-view-tab {
+        padding: 6px 10px;
+        font-size: 12px;
+    }
+
+    .omi-stats-top-row {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .omi-stats-value {
+        font-size: 22px;
+    }
+
+    .omi-stats-category-row {
+        flex-wrap: wrap;
+    }
+
+    .omi-stats-category-label {
+        width: 100%;
+    }
+
+    .omi-stats-bar-container {
+        flex: none;
+        width: 100%;
+    }
+
+    .omi-stats-percentage {
+        width: 100%;
+        text-align: left;
+        margin-top: 4px;
+    }
+
+    .omi-heatmap-cell {
+        width: 10px;
+        height: 10px;
+    }
+
+    .omi-timeline-date-label {
+        min-width: 200px;
+        font-size: 14px;
+    }
+
+    .omi-conversation-week-cards {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 480px) {
+    .omi-stats-top-row {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .omi-stats-daily-chart {
+        height: 80px;
+    }
+
+    .omi-heatmap-months {
+        display: none;
+    }
+
+    .omi-heatmap-day-label {
+        display: none;
+    }
+
+    .omi-timeline-week-grid {
+        overflow-x: auto;
+    }
+
+    .omi-timeline-week-row .omi-timeline-track {
+        min-width: 300px;
+    }
+}

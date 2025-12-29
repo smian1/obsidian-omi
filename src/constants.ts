@@ -27,5 +27,8 @@ export const DEFAULT_SETTINGS: OmiConversationsSettings = {
 	syncedConversationIds: [],
 	// Hub view settings
 	activeHubTab: 'tasks',
-	syncedConversations: {}
+	syncedConversations: {},
+	// Conversations view settings
+	conversationsViewMode: 'list',
+	conversationsTimeRange: 'daily'
 };
