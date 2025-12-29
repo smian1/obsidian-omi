@@ -23,3 +23,5 @@ data.json
 
 # Claude Code instructions (local development only)
 CLAUDE.md
+
+GEMINI.md
