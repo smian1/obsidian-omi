@@ -1541,50 +1541,67 @@ export class OmiHubView extends ItemView {
 			dateDuration.set(conv.date, (dateDuration.get(conv.date) || 0) + (conv.duration || 0));
 		}
 
-		// Find date range based on actual conversation data
-		// Use T00:00:00 to avoid timezone issues
-		const dates = conversationArray.map(c => new Date(c.date + 'T00:00:00'));
-		const minDataDate = new Date(Math.min(...dates.map(d => d.getTime())));
-		const maxDataDate = new Date(Math.max(...dates.map(d => d.getTime())));
-
-		// Debug: Log date range
-		console.log('Heatmap date range:', {
-			minDate: minDataDate.toISOString().split('T')[0],
-			maxDate: maxDataDate.toISOString().split('T')[0],
-			totalConversations: conversationArray.length
-		});
-
-		// Extend to show full weeks
+		// Show full year: Jan 1 to Dec 31 of current year
 		const now = new Date();
-		now.setHours(0, 0, 0, 0);
-		const endDate = new Date(Math.max(now.getTime(), maxDataDate.getTime()));
-		endDate.setDate(endDate.getDate() - endDate.getDay() + 6); // End of current week (Saturday)
+		const currentYear = now.getFullYear();
 
-		// Start from the earliest data, aligned to Sunday
-		const startDate = new Date(minDataDate);
-		startDate.setDate(startDate.getDate() - startDate.getDay()); // Start of that week (Sunday)
+		// Start from Jan 1, aligned to Sunday of that week
+		const startDate = new Date(currentYear, 0, 1); // Jan 1
+		startDate.setDate(startDate.getDate() - startDate.getDay()); // Align to Sunday
 
-		// Heatmap header with month labels
+		// End at Dec 31, aligned to Saturday of that week
+		const endDate = new Date(currentYear, 11, 31); // Dec 31
+		endDate.setDate(endDate.getDate() + (6 - endDate.getDay())); // Align to Saturday
+
+		// Year header
+		const yearHeader = heatmapContainer.createDiv('omi-heatmap-year-header');
+		yearHeader.createEl('span', { text: `${currentYear}`, cls: 'omi-heatmap-year' });
+
+		// Heatmap header with month labels - calculate widths based on weeks per month
 		const monthsRow = heatmapContainer.createDiv('omi-heatmap-months');
 		monthsRow.createEl('span', { text: '', cls: 'omi-heatmap-spacer' }); // Spacer for day labels
 
-		// Add month labels
+		// Calculate weeks per month for proper label positioning
 		let currentMonth = -1;
+		let weeksInMonth = 0;
 		const tempDate = new Date(startDate);
+		const monthLabels: { month: string; weeks: number; year: number }[] = [];
+
 		while (tempDate <= endDate) {
 			if (tempDate.getMonth() !== currentMonth) {
+				if (currentMonth !== -1) {
+					monthLabels.push({
+						month: new Date(tempDate.getFullYear(), currentMonth, 1)
+							.toLocaleDateString('en-US', { month: 'short' }),
+						weeks: weeksInMonth,
+						year: tempDate.getFullYear()
+					});
+				}
 				currentMonth = tempDate.getMonth();
-				monthsRow.createEl('span', {
-					text: tempDate.toLocaleDateString('en-US', { month: 'short' }),
-					cls: 'omi-heatmap-month'
-				});
+				weeksInMonth = 0;
 			}
+			weeksInMonth++;
 			tempDate.setDate(tempDate.getDate() + 7);
+		}
+		// Push final month
+		if (weeksInMonth > 0) {
+			monthLabels.push({
+				month: new Date(tempDate.getFullYear(), currentMonth, 1)
+					.toLocaleDateString('en-US', { month: 'short' }),
+				weeks: weeksInMonth,
+				year: tempDate.getFullYear()
+			});
+		}
+
+		// Render month labels with proper widths (22px = 18px cell + 4px gap)
+		for (const { month, weeks } of monthLabels) {
+			const label = monthsRow.createEl('span', { text: month, cls: 'omi-heatmap-month' });
+			label.style.width = `${weeks * 22}px`;
 		}
 
 		// Heatmap grid
 		const grid = heatmapContainer.createDiv('omi-heatmap-grid');
-		const dayLabels = ['', 'Mon', '', 'Wed', '', 'Fri', ''];
+		const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 		// Create 7 rows (Sun-Sat)
 		for (let dayOfWeek = 0; dayOfWeek < 7; dayOfWeek++) {
@@ -1645,9 +1662,12 @@ export class OmiHubView extends ItemView {
 		const activeDays = dateCount.size;
 		const avgPerDay = activeDays > 0 ? (totalConvs / activeDays).toFixed(1) : '0';
 
-		summary.createEl('span', { text: `${totalConvs} total conversations` });
-		summary.createEl('span', { text: `${activeDays} active days` });
-		summary.createEl('span', { text: `${avgPerDay} avg/day` });
+		const stat1 = summary.createEl('span');
+		stat1.innerHTML = `<strong>${totalConvs}</strong> conversations in ${currentYear}`;
+		const stat2 = summary.createEl('span');
+		stat2.innerHTML = `<strong>${activeDays}</strong> active days`;
+		const stat3 = summary.createEl('span');
+		stat3.innerHTML = `<strong>${avgPerDay}</strong> avg/day`;
 	}
 
 	private renderLoadingSkeleton(container: HTMLElement): void {

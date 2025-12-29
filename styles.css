@@ -2250,52 +2250,77 @@
    HEATMAP VIEW
    ======================================== */
 .omi-conversations-heatmap {
-    padding: 0;
+    padding: 20px 0;
+    width: 100%;
+}
+
+.omi-heatmap-year-header {
+    text-align: center;
+    margin-bottom: 16px;
+}
+
+.omi-heatmap-year {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--text-normal);
+}
+
+.omi-heatmap-container {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
 }
 
 .omi-heatmap-months {
     display: flex;
     gap: 0;
     margin-bottom: 8px;
-    margin-left: 40px;
+    padding-left: 50px;
 }
 
 .omi-heatmap-spacer {
-    width: 40px;
+    width: 50px;
+    flex-shrink: 0;
 }
 
 .omi-heatmap-month {
-    flex: 1;
-    font-size: 11px;
+    font-size: 12px;
+    font-weight: 500;
     color: var(--text-muted);
+    flex-shrink: 0;
+    text-align: left;
 }
 
 .omi-heatmap-grid {
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: 4px;
+    width: 100%;
 }
 
 .omi-heatmap-row {
     display: flex;
     align-items: center;
-    gap: 3px;
+    gap: 4px;
 }
 
 .omi-heatmap-day-label {
-    width: 35px;
-    font-size: 10px;
+    width: 45px;
+    font-size: 11px;
+    font-weight: 500;
     color: var(--text-muted);
     text-align: right;
-    padding-right: 4px;
+    padding-right: 8px;
+    flex-shrink: 0;
 }
 
 .omi-heatmap-cell {
-    width: 14px;
-    height: 14px;
-    border-radius: 2px;
+    width: 18px;
+    height: 18px;
+    border-radius: 3px;
     background: var(--background-secondary);
     transition: all var(--omi-duration-short) var(--omi-easing-standard);
+    flex-shrink: 0;
 }
 
 .omi-heatmap-cell.clickable {
@@ -2303,16 +2328,17 @@
 }
 
 .omi-heatmap-cell.clickable:hover {
-    outline: 2px solid var(--text-muted);
+    outline: 2px solid var(--text-accent);
     outline-offset: 1px;
+    transform: scale(1.1);
 }
 
 .omi-heatmap-level-0 {
-    background: var(--background-secondary);
+    background: var(--background-modifier-border);
 }
 
 .omi-heatmap-level-1 {
-    background: rgba(var(--interactive-accent-rgb, 99, 102, 241), 0.3);
+    background: rgba(var(--interactive-accent-rgb, 99, 102, 241), 0.25);
 }
 
 .omi-heatmap-level-2 {
@@ -2320,7 +2346,7 @@
 }
 
 .omi-heatmap-level-3 {
-    background: rgba(var(--interactive-accent-rgb, 99, 102, 241), 0.7);
+    background: rgba(var(--interactive-accent-rgb, 99, 102, 241), 0.75);
 }
 
 .omi-heatmap-level-4 {
@@ -2331,30 +2357,37 @@
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 4px;
-    margin-top: 16px;
-    font-size: 11px;
+    gap: 6px;
+    margin-top: 20px;
+    font-size: 12px;
     color: var(--text-muted);
+    padding-right: 4px;
 }
 
 .omi-heatmap-legend-cell {
-    width: 12px;
-    height: 12px;
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
 }
 
 .omi-heatmap-summary {
     display: flex;
     justify-content: center;
-    gap: 24px;
-    margin-top: 20px;
-    padding: 16px;
+    gap: 32px;
+    margin-top: 24px;
+    padding: 20px;
     background: var(--background-secondary);
-    border-radius: var(--omi-radius-md);
+    border-radius: var(--omi-radius-lg);
 }
 
 .omi-heatmap-summary > span {
-    font-size: 13px;
-    color: var(--text-muted);
+    font-size: 14px;
+    color: var(--text-normal);
+}
+
+.omi-heatmap-summary > span strong {
+    color: var(--interactive-accent);
+    font-weight: 600;
 }
 
 /* ========================================
@@ -2398,8 +2431,13 @@
     }
 
     .omi-heatmap-cell {
-        width: 10px;
-        height: 10px;
+        width: 14px;
+        height: 14px;
+    }
+
+    .omi-heatmap-day-label {
+        width: 35px;
+        font-size: 10px;
     }
 
     .omi-timeline-date-label {
