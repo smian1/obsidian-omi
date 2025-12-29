@@ -1,6 +1,8 @@
 import { OmiConversationsSettings } from './types';
 
-export const VIEW_TYPE_OMI_TASKS = 'omi-tasks-view';
+export const VIEW_TYPE_OMI_HUB = 'omi-hub-view';
+// Keep old constant as alias for backward compatibility
+export const VIEW_TYPE_OMI_TASKS = VIEW_TYPE_OMI_HUB;
 
 export const DEFAULT_SETTINGS: OmiConversationsSettings = {
 	apiKey: '',
@@ -22,5 +24,8 @@ export const DEFAULT_SETTINGS: OmiConversationsSettings = {
 	tasksCalendarType: 'monthly',
 	// Incremental conversation sync tracking defaults
 	lastConversationSyncTimestamp: null,
-	syncedConversationIds: []
+	syncedConversationIds: [],
+	// Hub view settings
+	activeHubTab: 'tasks',
+	syncedConversations: {}
 };

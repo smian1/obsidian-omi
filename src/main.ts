@@ -1,11 +1,10 @@
 import { Plugin, normalizePath, Notice } from 'obsidian';
-import { OmiConversationsSettings, Conversation } from './types';
-import { DEFAULT_SETTINGS, VIEW_TYPE_OMI_TASKS } from './constants';
+import { OmiConversationsSettings, Conversation, SyncedConversationMeta } from './types';
+import { DEFAULT_SETTINGS, VIEW_TYPE_OMI_HUB } from './constants';
 import { getCategoryEmoji } from './utils';
 import { OmiAPI } from './api';
 import { TasksHubSync } from './services';
-import { ConfirmSyncModal } from './modals';
-import { OmiTasksView } from './views';
+import { OmiHubView } from './views';
 import { OmiConversationsSettingTab } from './settings';
 
 export default class OmiConversationsPlugin extends Plugin {
@@ -20,32 +19,18 @@ export default class OmiConversationsPlugin extends Plugin {
 		this.api = new OmiAPI(this.settings.apiKey);
 		this.tasksHubSync = new TasksHubSync(this);
 
-		// Register the Omi Tasks view
+		// Register the Omi Hub view
 		this.registerView(
-			VIEW_TYPE_OMI_TASKS,
-			(leaf) => new OmiTasksView(leaf, this)
+			VIEW_TYPE_OMI_HUB,
+			(leaf) => new OmiHubView(leaf, this)
 		);
 
 		// Add settings tab
 		this.addSettingTab(new OmiConversationsSettingTab(this.app, this));
 
-		// Add ribbon icon for syncing conversations
-		this.addRibbonIcon('brain', 'Sync Omi conversations', () => {
-			new ConfirmSyncModal(
-				this.app,
-				'Sync Omi Conversations',
-				'This will fetch conversations from Omi and save them as markdown files.',
-				async (fullResync: boolean) => {
-					await this.syncConversations(fullResync);
-				}
-			).open();
-		});
-
-		// Add ribbon icon for opening Omi Tasks view
-		this.addRibbonIcon('check-circle', 'Open Omi Tasks', async () => {
-			new Notice('Syncing Omi Tasks...');
-			await this.activateTasksView();
-			// The view will load tasks and show completion notice
+		// Add ribbon icon for opening Omi Hub
+		this.addRibbonIcon('brain', 'Open Omi Hub', async () => {
+			await this.activateHubView();
 		});
 
 		// Add command for syncing conversations
@@ -72,12 +57,21 @@ export default class OmiConversationsPlugin extends Plugin {
 			}
 		});
 
-		// Add command for opening Omi Tasks view
+		// Add command for opening Omi Hub (with backward compatible alias)
+		this.addCommand({
+			id: 'open-omi-hub',
+			name: 'Open Omi Hub',
+			callback: () => {
+				this.activateHubView();
+			}
+		});
+
+		// Keep old command for backward compatibility
 		this.addCommand({
 			id: 'open-omi-tasks-view',
-			name: 'Open Omi Tasks',
+			name: 'Open Omi Tasks (Legacy)',
 			callback: () => {
-				this.activateTasksView();
+				this.activateHubView();
 			}
 		});
 
@@ -90,25 +84,27 @@ export default class OmiConversationsPlugin extends Plugin {
 		this.setupConversationAutoSync();
 	}
 
-	async activateTasksView(): Promise<void> {
+	async activateHubView(): Promise<void> {
 		const { workspace } = this.app;
 
-		let leaf = workspace.getLeavesOfType(VIEW_TYPE_OMI_TASKS)[0];
+		let leaf = workspace.getLeavesOfType(VIEW_TYPE_OMI_HUB)[0];
 		const wasAlreadyOpen = !!leaf;
 
 		if (!leaf) {
 			// Open in main content area as a new tab (not sidebar)
 			leaf = workspace.getLeaf('tab');
-			await leaf.setViewState({ type: VIEW_TYPE_OMI_TASKS, active: true });
+			await leaf.setViewState({ type: VIEW_TYPE_OMI_HUB, active: true });
 		}
 
 		if (leaf) {
 			workspace.revealLeaf(leaf);
-			// If view was already open, trigger a refresh
+			// If view was already open and on tasks tab, trigger a refresh
 			if (wasAlreadyOpen) {
-				const view = leaf.view as OmiTasksView;
-				await view.loadTasks(true);
-				view.render();
+				const view = leaf.view as OmiHubView;
+				if (view.activeTab === 'tasks') {
+					await view.loadTasks(true);
+					view.render();
+				}
 			}
 		}
 	}
@@ -273,6 +269,30 @@ export default class OmiConversationsPlugin extends Plugin {
 				...newIds
 			];
 			this.settings.lastConversationSyncTimestamp = new Date().toISOString();
+
+			// Store conversation metadata for Hub display
+			if (fullResync) {
+				this.settings.syncedConversations = {};
+			}
+			for (const conv of newConversations) {
+				const localDate = new Date(conv.created_at);
+				const year = localDate.getFullYear();
+				const month = String(localDate.getMonth() + 1).padStart(2, '0');
+				const day = String(localDate.getDate()).padStart(2, '0');
+				const dateStr = `${year}-${month}-${day}`;
+				const time = localDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+
+				const meta: SyncedConversationMeta = {
+					id: conv.id,
+					date: dateStr,
+					title: conv.structured?.title || 'Untitled',
+					emoji: conv.structured?.emoji || getCategoryEmoji(conv.structured?.category || 'other'),
+					time: time,
+					category: conv.structured?.category
+				};
+				this.settings.syncedConversations[conv.id] = meta;
+			}
+
 			await this.saveSettings();
 
 			const syncType = fullResync ? '' : 'new ';

@@ -1,11 +1,16 @@
 import { ItemView, WorkspaceLeaf, Notice, debounce } from 'obsidian';
-import { VIEW_TYPE_OMI_TASKS } from './constants';
-import { TaskWithUI } from './types';
+import { VIEW_TYPE_OMI_HUB } from './constants';
+import { TaskWithUI, SyncedConversationMeta } from './types';
 import { AddTaskModal, DatePickerModal, EditTaskModal } from './modals';
 import type OmiConversationsPlugin from './main';
 
-export class OmiTasksView extends ItemView {
+export class OmiHubView extends ItemView {
 	plugin: OmiConversationsPlugin;
+
+	// Hub state
+	activeTab: 'tasks' | 'conversations' = 'tasks';
+
+	// Tasks state
 	tasks: TaskWithUI[] = [];
 	searchQuery = '';
 	pendingCollapsed = false;
@@ -19,6 +24,9 @@ export class OmiTasksView extends ItemView {
 	calendarViewType: 'monthly' | 'weekly' = 'monthly';
 	calendarCurrentDate: Date = new Date();
 	private draggedTask: TaskWithUI | null = null;
+
+	// Conversations state
+	isSyncingConversations = false;
 
 	// Debounced backup sync
 	private requestBackupSync: () => void;
@@ -36,24 +44,28 @@ export class OmiTasksView extends ItemView {
 	}
 
 	getViewType(): string {
-		return VIEW_TYPE_OMI_TASKS;
+		return VIEW_TYPE_OMI_HUB;
 	}
 
 	getDisplayText(): string {
-		return 'Omi Tasks';
+		return 'Omi Hub';
 	}
 
 	getIcon(): string {
-		return 'check-circle';
+		return 'brain';
 	}
 
 	async onOpen(): Promise<void> {
-		// Load saved view preferences
+		// Load saved hub and view preferences
+		this.activeTab = this.plugin.settings.activeHubTab || 'tasks';
 		this.viewMode = this.plugin.settings.tasksViewMode || 'list';
 		this.kanbanLayout = this.plugin.settings.tasksKanbanLayout || 'status';
 		this.calendarViewType = this.plugin.settings.tasksCalendarType || 'monthly';
 
-		await this.loadTasks();
+		// Load tasks if on tasks tab
+		if (this.activeTab === 'tasks') {
+			await this.loadTasks();
+		}
 		this.render();
 		this.startAutoRefresh();
 
@@ -185,17 +197,79 @@ export class OmiTasksView extends ItemView {
 	render(): void {
 		const container = this.containerEl.children[1] as HTMLElement;
 		container.empty();
-		container.addClass('omi-tasks-container');
+		container.addClass('omi-hub-container');
 
-		// Header
-		const header = container.createDiv('omi-tasks-header');
-		header.createEl('h2', { text: 'Omi Tasks' });
+		// Hub Header
+		this.renderHubHeader(container);
+
+		// Hub Tab Navigation
+		this.renderHubTabs(container);
+
+		// Tab Content
+		if (this.activeTab === 'tasks') {
+			this.renderTasksTab(container);
+		} else {
+			this.renderConversationsTab(container);
+		}
+	}
+
+	private renderHubHeader(container: HTMLElement): void {
+		const header = container.createDiv('omi-hub-header');
+		header.createEl('h2', { text: 'Omi Hub' });
+	}
+
+	private renderHubTabs(container: HTMLElement): void {
+		const tabs = container.createDiv('omi-hub-tabs');
+		tabs.setAttribute('role', 'tablist');
+
+		const tasksTab = tabs.createEl('button', {
+			text: 'Tasks',
+			cls: `omi-hub-tab ${this.activeTab === 'tasks' ? 'active' : ''}`
+		});
+		tasksTab.setAttribute('role', 'tab');
+		tasksTab.setAttribute('aria-selected', String(this.activeTab === 'tasks'));
+		if (this.tasks.length > 0) {
+			const pendingCount = this.tasks.filter(t => !t.completed).length;
+			if (pendingCount > 0) {
+				tasksTab.createEl('span', { text: String(pendingCount), cls: 'omi-hub-tab-badge' });
+			}
+		}
+		tasksTab.addEventListener('click', async () => {
+			this.activeTab = 'tasks';
+			this.plugin.settings.activeHubTab = 'tasks';
+			await this.plugin.saveSettings();
+			if (this.tasks.length === 0) {
+				await this.loadTasks();
+			}
+			this.render();
+		});
+
+		const conversationsTab = tabs.createEl('button', {
+			text: 'Conversations',
+			cls: `omi-hub-tab ${this.activeTab === 'conversations' ? 'active' : ''}`
+		});
+		conversationsTab.setAttribute('role', 'tab');
+		conversationsTab.setAttribute('aria-selected', String(this.activeTab === 'conversations'));
+		const syncedCount = Object.keys(this.plugin.settings.syncedConversations || {}).length;
+		if (syncedCount > 0) {
+			conversationsTab.createEl('span', { text: String(syncedCount), cls: 'omi-hub-tab-badge' });
+		}
+		conversationsTab.addEventListener('click', async () => {
+			this.activeTab = 'conversations';
+			this.plugin.settings.activeHubTab = 'conversations';
+			await this.plugin.saveSettings();
+			this.render();
+		});
+	}
+
+	private renderTasksTab(container: HTMLElement): void {
+		const tabContent = container.createDiv('omi-tasks-container');
 
 		// View Mode Tabs
-		this.renderViewModeTabs(container);
+		this.renderViewModeTabs(tabContent);
 
 		// Toolbar: Search + Sync button
-		const toolbar = container.createDiv('omi-tasks-toolbar');
+		const toolbar = tabContent.createDiv('omi-tasks-toolbar');
 		toolbar.setAttribute('role', 'toolbar');
 
 		const searchInput = toolbar.createEl('input', {
@@ -219,15 +293,15 @@ export class OmiTasksView extends ItemView {
 
 		// Show loading skeleton if loading
 		if (this.isLoading) {
-			this.renderLoadingSkeleton(container);
+			this.renderLoadingSkeleton(tabContent);
 			return;
 		}
 
 		// Show empty state if no tasks
 		if (this.tasks.length === 0) {
-			this.renderEmptyState(container, 'all');
+			this.renderEmptyState(tabContent, 'all');
 			// Still show add button
-			const addBtn = container.createEl('button', { text: '+ Add Task', cls: 'omi-tasks-add-btn' });
+			const addBtn = tabContent.createEl('button', { text: '+ Add Task', cls: 'omi-tasks-add-btn' });
 			addBtn.setAttribute('aria-label', 'Add new task');
 			addBtn.addEventListener('click', () => this.showAddTaskDialog());
 			return;
@@ -236,20 +310,172 @@ export class OmiTasksView extends ItemView {
 		// Render the appropriate view based on viewMode
 		switch (this.viewMode) {
 			case 'list':
-				this.renderListView(container);
+				this.renderListView(tabContent);
 				break;
 			case 'kanban':
-				this.renderKanbanView(container);
+				this.renderKanbanView(tabContent);
 				break;
 			case 'calendar':
-				this.renderCalendarView(container);
+				this.renderCalendarView(tabContent);
 				break;
 		}
 
 		// Add new task button
-		const addBtn = container.createEl('button', { text: '+ Add Task', cls: 'omi-tasks-add-btn' });
+		const addBtn = tabContent.createEl('button', { text: '+ Add Task', cls: 'omi-tasks-add-btn' });
 		addBtn.setAttribute('aria-label', 'Add new task');
 		addBtn.addEventListener('click', () => this.showAddTaskDialog());
+	}
+
+	private renderConversationsTab(container: HTMLElement): void {
+		const tabContent = container.createDiv('omi-conversations-container');
+
+		// Sync Controls Section
+		const syncControls = tabContent.createDiv('omi-conversations-sync-controls');
+
+		// Sync status info
+		const statusInfo = syncControls.createDiv('omi-sync-status');
+		const lastSync = this.plugin.settings.lastConversationSyncTimestamp;
+		if (lastSync) {
+			const lastSyncDate = new Date(lastSync);
+			statusInfo.createEl('div', {
+				text: `Last synced: ${lastSyncDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} at ${lastSyncDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`
+			});
+		} else {
+			statusInfo.createEl('div', { text: 'Never synced' });
+		}
+		const syncedCount = Object.keys(this.plugin.settings.syncedConversations || {}).length;
+		statusInfo.createEl('div', { text: `${syncedCount} conversations tracked`, cls: 'omi-sync-count' });
+
+		// Sync buttons
+		const syncButtons = syncControls.createDiv('omi-sync-buttons');
+
+		const syncNewBtn = syncButtons.createEl('button', {
+			text: this.isSyncingConversations ? 'Syncing...' : 'Sync New',
+			cls: 'omi-sync-new-btn'
+		});
+		syncNewBtn.disabled = this.isSyncingConversations;
+		syncNewBtn.addEventListener('click', () => this.handleConversationSync(false));
+
+		const fullResyncBtn = syncButtons.createEl('button', {
+			text: 'Full Resync',
+			cls: 'omi-full-resync-btn'
+		});
+		fullResyncBtn.disabled = this.isSyncingConversations;
+		fullResyncBtn.addEventListener('click', () => this.handleConversationSync(true));
+
+		// Conversations List
+		this.renderConversationsList(tabContent);
+	}
+
+	private async handleConversationSync(fullResync: boolean): Promise<void> {
+		this.isSyncingConversations = true;
+		this.render();
+
+		try {
+			await this.plugin.syncConversations(fullResync);
+		} finally {
+			this.isSyncingConversations = false;
+			this.render();
+		}
+	}
+
+	private renderConversationsList(container: HTMLElement): void {
+		const listContainer = container.createDiv('omi-conversations-list');
+
+		const conversations = this.plugin.settings.syncedConversations || {};
+		const conversationArray = Object.values(conversations) as SyncedConversationMeta[];
+
+		if (conversationArray.length === 0) {
+			const empty = listContainer.createDiv('omi-conversations-empty');
+			empty.createEl('div', { text: '💬', cls: 'omi-empty-icon' });
+			empty.createEl('h3', { text: 'No conversations synced' });
+			empty.createEl('p', { text: 'Click "Sync New" to fetch your Omi conversations' });
+			return;
+		}
+
+		// Group by date
+		const groupedByDate = new Map<string, SyncedConversationMeta[]>();
+		for (const conv of conversationArray) {
+			const dateKey = conv.date;
+			if (!groupedByDate.has(dateKey)) {
+				groupedByDate.set(dateKey, []);
+			}
+			groupedByDate.get(dateKey)!.push(conv);
+		}
+
+		// Sort dates descending (newest first)
+		const sortedDates = Array.from(groupedByDate.keys()).sort((a, b) => b.localeCompare(a));
+
+		for (const dateStr of sortedDates) {
+			const dateGroup = listContainer.createDiv('omi-conversation-date-group');
+
+			// Format date nicely
+			const dateObj = new Date(dateStr + 'T00:00:00');
+			const formattedDate = dateObj.toLocaleDateString('en-US', {
+				weekday: 'long',
+				month: 'long',
+				day: 'numeric',
+				year: 'numeric'
+			});
+			dateGroup.createEl('div', { text: formattedDate, cls: 'omi-conversation-date-header' });
+
+			const convs = groupedByDate.get(dateStr)!;
+			// Sort by time descending within each day (latest first)
+			convs.sort((a, b) => {
+				// Convert 12-hour time to comparable value
+				const parseTime = (timeStr: string): number => {
+					const match = timeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+					if (!match) return 0;
+					let hours = parseInt(match[1], 10);
+					const minutes = parseInt(match[2], 10);
+					const isPM = match[3].toUpperCase() === 'PM';
+					if (isPM && hours !== 12) hours += 12;
+					if (!isPM && hours === 12) hours = 0;
+					return hours * 60 + minutes;
+				};
+				return parseTime(b.time) - parseTime(a.time);
+			});
+
+			for (const conv of convs) {
+				const item = dateGroup.createDiv('omi-conversation-item');
+				item.setAttribute('role', 'button');
+				item.setAttribute('tabindex', '0');
+
+				item.createEl('span', { text: conv.emoji || '💬', cls: 'omi-conversation-emoji' });
+				item.createEl('span', { text: conv.title || 'Untitled', cls: 'omi-conversation-title' });
+				item.createEl('span', { text: conv.time, cls: 'omi-conversation-time' });
+
+				// Click to open the conversation file
+				const handleClick = () => this.openConversationFile(conv);
+				item.addEventListener('click', handleClick);
+				item.addEventListener('keydown', (e) => {
+					if (e.key === 'Enter' || e.key === ' ') {
+						e.preventDefault();
+						handleClick();
+					}
+				});
+			}
+		}
+	}
+
+	private async openConversationFile(conv: SyncedConversationMeta): Promise<void> {
+		// Try to open the index file for that date
+		const folderPath = this.plugin.settings.folderPath;
+		const filePath = `${folderPath}/${conv.date}/${conv.date}.md`;
+
+		const file = this.app.vault.getFileByPath(filePath);
+		if (file) {
+			await this.app.workspace.openLinkText(filePath, '', false);
+		} else {
+			// Fallback to overview if index doesn't exist
+			const overviewPath = `${folderPath}/${conv.date}/overview.md`;
+			const overviewFile = this.app.vault.getFileByPath(overviewPath);
+			if (overviewFile) {
+				await this.app.workspace.openLinkText(overviewPath, '', false);
+			} else {
+				new Notice('Conversation file not found. Try resyncing.');
+			}
+		}
 	}
 
 	private renderLoadingSkeleton(container: HTMLElement): void {

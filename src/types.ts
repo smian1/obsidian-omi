@@ -22,6 +22,9 @@ export interface OmiConversationsSettings {
 	// Incremental conversation sync tracking
 	lastConversationSyncTimestamp: string | null;
 	syncedConversationIds: string[];
+	// Hub view settings
+	activeHubTab: 'tasks' | 'conversations';
+	syncedConversations: Record<string, SyncedConversationMeta>;
 }
 
 // Omi API response types
@@ -86,4 +89,14 @@ export interface ParsedTask {
 // Extended ParsedTask with UI state
 export interface TaskWithUI extends ParsedTask {
 	isEditing: boolean;
+}
+
+// Synced conversation metadata for Hub view
+export interface SyncedConversationMeta {
+	id: string;
+	date: string;        // YYYY-MM-DD
+	title: string;
+	emoji: string;
+	time: string;        // HH:MM AM/PM
+	category?: string;
 }
