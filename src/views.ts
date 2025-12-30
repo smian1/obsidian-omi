@@ -531,20 +531,23 @@ export class OmiHubView extends ItemView {
 
 		const tabContent = container.createDiv('omi-memories-container');
 
+		// Header: View Mode Tabs + Toolbar
+		const header = tabContent.createDiv('omi-memories-header');
+
 		// View Mode Tabs
-		this.renderMemoriesViewModeTabs(tabContent);
+		this.renderMemoriesViewModeTabs(header);
 
 		// Toolbar: Add button + Sync button
-		const toolbar = tabContent.createDiv('omi-memories-toolbar');
+		const toolbar = header.createDiv('omi-memories-toolbar');
 
 		// Only show Add Memory button in list view
 		if (this.memoriesViewMode === 'list') {
-			const addBtn = toolbar.createEl('button', { text: '+ Add Memory', cls: 'omi-memories-add-btn' });
+			const addBtn = toolbar.createEl('button', { text: '+ Add', cls: 'omi-memories-add-btn' });
 			addBtn.setAttribute('aria-label', 'Add new memory');
 			addBtn.addEventListener('click', () => this.showAddMemoryDialog());
 		}
 
-		const syncBtn = toolbar.createEl('button', { text: '🔄 Refresh', cls: 'omi-memories-sync-btn' });
+		const syncBtn = toolbar.createEl('button', { text: '🔄', cls: 'omi-memories-sync-btn' });
 		syncBtn.setAttribute('aria-label', 'Refresh memories from Omi');
 		syncBtn.addEventListener('click', async () => {
 			await this.loadMemories(true);
@@ -560,14 +563,22 @@ export class OmiHubView extends ItemView {
 			return;
 		}
 
-		// Render based on view mode
-		switch (this.memoriesViewMode) {
-			case 'graph':
-				this.renderTagGraph(tabContent);
-				break;
-			default:
-				this.renderMemoriesListView(tabContent);
+		// For graph view, render full width
+		if (this.memoriesViewMode === 'graph') {
+			this.renderTagGraph(tabContent);
+			return;
 		}
+
+		// Split layout: List on left, Insights sidebar on right
+		const splitLayout = tabContent.createDiv('omi-memories-split-layout');
+
+		// Main content (list)
+		const mainContent = splitLayout.createDiv('omi-memories-main');
+		this.renderMemoriesListView(mainContent);
+
+		// Insights sidebar
+		const sidebar = splitLayout.createDiv('omi-memories-sidebar');
+		this.renderMemoriesInsightsSidebar(sidebar);
 	}
 
 	private renderMemoriesViewModeTabs(container: HTMLElement): void {
@@ -592,6 +603,261 @@ export class OmiHubView extends ItemView {
 				this.memoriesViewMode = mode.id;
 				this.plugin.settings.memoriesViewMode = mode.id;
 				await this.plugin.saveSettings();
+				this.render();
+			});
+		}
+	}
+
+	// ============================================
+	// MEMORIES INSIGHTS SIDEBAR
+	// ============================================
+
+	private renderMemoriesInsightsSidebar(container: HTMLElement): void {
+		// Header
+		container.createEl('h3', { text: '📊 Insights', cls: 'omi-sidebar-title' });
+
+		// Total count with weekly delta
+		const totalSection = container.createDiv('omi-sidebar-stat-card');
+		const totalCount = totalSection.createDiv('omi-sidebar-stat-number');
+		totalCount.setText(this.memories.length.toString());
+
+		const totalLabel = totalSection.createDiv('omi-sidebar-stat-row');
+		totalLabel.createEl('span', { text: 'Total Memories', cls: 'omi-sidebar-stat-label' });
+
+		const weeklyDelta = this.getMemoriesWeeklyDelta();
+		if (weeklyDelta > 0) {
+			const deltaBadge = totalLabel.createEl('span', { cls: 'omi-sidebar-delta-badge positive' });
+			deltaBadge.setText(`+${weeklyDelta} this week`);
+		}
+
+		// Streak badge
+		const streak = this.getMemoryStreak();
+		if (streak > 0) {
+			const streakBadge = totalSection.createEl('span', { cls: 'omi-sidebar-streak-badge' });
+			streakBadge.setText(`🔥 ${streak} day streak`);
+		}
+
+		// Activity sparkline (30 days)
+		const activitySection = container.createDiv('omi-sidebar-section');
+		activitySection.createEl('h4', { text: '📈 Activity (30 days)', cls: 'omi-sidebar-section-title' });
+		this.renderMemoriesSparkline(activitySection);
+
+		// Category breakdown
+		const categorySection = container.createDiv('omi-sidebar-section');
+		categorySection.createEl('h4', { text: '📁 Categories', cls: 'omi-sidebar-section-title' });
+		this.renderCategoryBreakdown(categorySection);
+
+		// Top tags
+		const tagsSection = container.createDiv('omi-sidebar-section');
+		tagsSection.createEl('h4', { text: '🏷️ Top Tags', cls: 'omi-sidebar-section-title' });
+		this.renderTopTags(tagsSection);
+	}
+
+	private getMemoriesWeeklyDelta(): number {
+		const oneWeekAgo = new Date();
+		oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+		return this.memories.filter(m => new Date(m.created_at) >= oneWeekAgo).length;
+	}
+
+	private getMemoryStreak(): number {
+		if (this.memories.length === 0) return 0;
+
+		// Get unique dates with memories (sorted newest first)
+		const datesWithMemories = new Set<string>();
+		for (const memory of this.memories) {
+			const date = new Date(memory.created_at).toISOString().split('T')[0];
+			datesWithMemories.add(date);
+		}
+
+		const sortedDates = Array.from(datesWithMemories).sort().reverse();
+
+		// Check if today or yesterday has a memory (streak must be current)
+		const today = new Date().toISOString().split('T')[0];
+		const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+
+		if (!sortedDates.includes(today) && !sortedDates.includes(yesterday)) {
+			return 0;
+		}
+
+		// Count consecutive days
+		let streak = 0;
+		let checkDate = sortedDates.includes(today) ? new Date() : new Date(Date.now() - 86400000);
+
+		for (let i = 0; i < 365; i++) {
+			const dateStr = checkDate.toISOString().split('T')[0];
+			if (datesWithMemories.has(dateStr)) {
+				streak++;
+				checkDate.setDate(checkDate.getDate() - 1);
+			} else {
+				break;
+			}
+		}
+
+		return streak;
+	}
+
+	private getMemoriesPerDay(days: number): number[] {
+		const counts: number[] = new Array(days).fill(0);
+		const now = new Date();
+		now.setHours(23, 59, 59, 999);
+
+		for (const memory of this.memories) {
+			const memoryDate = new Date(memory.created_at);
+			const daysAgo = Math.floor((now.getTime() - memoryDate.getTime()) / 86400000);
+			if (daysAgo >= 0 && daysAgo < days) {
+				counts[days - 1 - daysAgo]++;
+			}
+		}
+
+		return counts;
+	}
+
+	private renderMemoriesSparkline(container: HTMLElement): void {
+		const data = this.getMemoriesPerDay(30);
+		const maxVal = Math.max(...data, 1);
+
+		const sparklineContainer = container.createDiv('omi-sparkline-container');
+
+		// Create SVG
+		const svgNS = 'http://www.w3.org/2000/svg';
+		const svg = document.createElementNS(svgNS, 'svg');
+		svg.setAttribute('class', 'omi-sparkline');
+		svg.setAttribute('viewBox', '0 0 200 40');
+		svg.setAttribute('preserveAspectRatio', 'none');
+
+		// Create gradient
+		const defs = document.createElementNS(svgNS, 'defs');
+		const gradient = document.createElementNS(svgNS, 'linearGradient');
+		gradient.setAttribute('id', 'sparkline-gradient');
+		gradient.setAttribute('x1', '0');
+		gradient.setAttribute('y1', '0');
+		gradient.setAttribute('x2', '0');
+		gradient.setAttribute('y2', '1');
+
+		const stop1 = document.createElementNS(svgNS, 'stop');
+		stop1.setAttribute('offset', '0%');
+		stop1.setAttribute('stop-color', 'var(--interactive-accent)');
+		stop1.setAttribute('stop-opacity', '0.3');
+
+		const stop2 = document.createElementNS(svgNS, 'stop');
+		stop2.setAttribute('offset', '100%');
+		stop2.setAttribute('stop-color', 'var(--interactive-accent)');
+		stop2.setAttribute('stop-opacity', '0');
+
+		gradient.appendChild(stop1);
+		gradient.appendChild(stop2);
+		defs.appendChild(gradient);
+		svg.appendChild(defs);
+
+		// Build path points
+		const width = 200;
+		const height = 40;
+		const padding = 2;
+		const points: string[] = [];
+		const linePoints: string[] = [];
+
+		for (let i = 0; i < data.length; i++) {
+			const x = padding + (i / (data.length - 1)) * (width - 2 * padding);
+			const y = height - padding - (data[i] / maxVal) * (height - 2 * padding);
+			points.push(`${x},${y}`);
+			linePoints.push(i === 0 ? `M${x},${y}` : `L${x},${y}`);
+		}
+
+		// Area fill
+		const areaPath = document.createElementNS(svgNS, 'path');
+		const startX = padding;
+		const endX = padding + ((data.length - 1) / (data.length - 1)) * (width - 2 * padding);
+		areaPath.setAttribute('d', `${linePoints.join(' ')} L${endX},${height} L${startX},${height} Z`);
+		areaPath.setAttribute('fill', 'url(#sparkline-gradient)');
+		svg.appendChild(areaPath);
+
+		// Line
+		const linePath = document.createElementNS(svgNS, 'path');
+		linePath.setAttribute('d', linePoints.join(' '));
+		linePath.setAttribute('fill', 'none');
+		linePath.setAttribute('stroke', 'var(--interactive-accent)');
+		linePath.setAttribute('stroke-width', '2');
+		linePath.setAttribute('stroke-linecap', 'round');
+		linePath.setAttribute('stroke-linejoin', 'round');
+		svg.appendChild(linePath);
+
+		sparklineContainer.appendChild(svg);
+
+		// Add label
+		const total = data.reduce((a, b) => a + b, 0);
+		const label = sparklineContainer.createDiv('omi-sparkline-label');
+		label.setText(`${total} memories in 30 days`);
+	}
+
+	private renderCategoryBreakdown(container: HTMLElement): void {
+		// Get category counts
+		const categoryCounts: Record<string, number> = {};
+		for (const memory of this.memories) {
+			const cat = memory.category || 'other';
+			categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
+		}
+
+		const total = this.memories.length || 1;
+		const sortedCategories = Object.entries(categoryCounts)
+			.sort((a, b) => b[1] - a[1])
+			.slice(0, 8); // Show top 8 categories
+
+		for (const [cat, count] of sortedCategories) {
+			const percentage = Math.round((count / total) * 100);
+			const emoji = MEMORY_CATEGORY_EMOJI[cat] || '📌';
+
+			const row = container.createDiv('omi-category-bar-row');
+			row.addEventListener('click', async () => {
+				this.memoriesCategoryFilter = this.memoriesCategoryFilter === cat ? null : cat;
+				this.plugin.settings.memoriesCategoryFilter = this.memoriesCategoryFilter;
+				await this.plugin.saveSettings();
+				this.render();
+			});
+
+			// Active state
+			if (this.memoriesCategoryFilter === cat) {
+				row.addClass('active');
+			}
+
+			const labelRow = row.createDiv('omi-category-bar-label');
+			labelRow.createEl('span', { text: `${emoji} ${cat}`, cls: 'omi-category-bar-name' });
+			labelRow.createEl('span', { text: count.toString(), cls: 'omi-category-bar-count' });
+
+			const barBg = row.createDiv('omi-category-bar-bg');
+			const barFill = barBg.createDiv('omi-category-bar-fill');
+			barFill.style.width = `${percentage}%`;
+		}
+	}
+
+	private renderTopTags(container: HTMLElement): void {
+		// Count tag frequency
+		const tagCounts: Record<string, number> = {};
+		for (const memory of this.memories) {
+			if (memory.tags) {
+				for (const tag of memory.tags) {
+					tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+				}
+			}
+		}
+
+		const sortedTags = Object.entries(tagCounts)
+			.sort((a, b) => b[1] - a[1])
+			.slice(0, 10); // Top 10 tags
+
+		if (sortedTags.length === 0) {
+			container.createEl('p', { text: 'No tags yet', cls: 'omi-sidebar-empty' });
+			return;
+		}
+
+		const tagsContainer = container.createDiv('omi-sidebar-tags');
+		for (const [tag, count] of sortedTags) {
+			const tagPill = tagsContainer.createEl('button', { cls: 'omi-sidebar-tag-pill' });
+			tagPill.createEl('span', { text: tag, cls: 'omi-sidebar-tag-name' });
+			tagPill.createEl('span', { text: count.toString(), cls: 'omi-sidebar-tag-count' });
+
+			tagPill.addEventListener('click', () => {
+				// Set search query to filter by this tag
+				this.memoriesSearchQuery = tag;
 				this.render();
 			});
 		}
