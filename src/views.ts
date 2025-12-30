@@ -25,12 +25,16 @@ export class OmiHubView extends ItemView {
 	isLoading = false;
 
 	// View mode state
-	viewMode: 'list' | 'kanban' | 'calendar' = 'list';
+	viewMode: 'dashboard' | 'list' | 'kanban' | 'calendar' = 'dashboard';
 	kanbanLayout: 'status' | 'date' = 'status';
 	calendarViewType: 'monthly' | 'weekly' = 'monthly';
 	calendarCurrentDate: Date = new Date();
 	calendarShowCompleted = false;  // Hide completed tasks in calendar by default
 	private draggedTask: TaskWithUI | null = null;
+
+	// Batch operations state
+	isSelectMode = false;
+	selectedTaskIds: Set<string> = new Set();
 
 	// Conversations state
 	isSyncingConversations = false;
@@ -470,6 +474,30 @@ export class OmiHubView extends ItemView {
 			this.render();
 		});
 
+		// Select mode toggle (only show in list view with tasks)
+		if (this.viewMode === 'list' && this.tasks.length > 0) {
+			const selectBtn = toolbar.createEl('button', {
+				text: this.isSelectMode ? '✕ Cancel' : '☑ Select',
+				cls: `omi-tasks-select-btn ${this.isSelectMode ? 'active' : ''}`
+			});
+			selectBtn.setAttribute('aria-label', this.isSelectMode ? 'Exit select mode' : 'Enter select mode');
+			selectBtn.addEventListener('click', () => {
+				this.isSelectMode = !this.isSelectMode;
+				if (!this.isSelectMode) {
+					this.selectedTaskIds.clear();
+				}
+				this.render();
+			});
+		}
+
+		// Progress indicator showing today's completion status
+		this.renderProgressIndicator(toolbar);
+
+		// Batch action bar (when in select mode with selections)
+		if (this.isSelectMode) {
+			this.renderBatchActionBar(tabContent);
+		}
+
 		// Show loading skeleton if loading
 		if (this.isLoading) {
 			this.renderLoadingSkeleton(tabContent);
@@ -484,6 +512,9 @@ export class OmiHubView extends ItemView {
 
 		// Render the appropriate view based on viewMode
 		switch (this.viewMode) {
+			case 'dashboard':
+				this.renderDashboardView(tabContent);
+				break;
 			case 'list':
 				this.renderListView(tabContent);
 				break;
@@ -4198,6 +4229,19 @@ export class OmiHubView extends ItemView {
 		} else if (context === 'search') {
 			empty.createEl('div', { text: '🔍', cls: 'omi-empty-icon' });
 			empty.createEl('p', { text: 'No tasks match your search' });
+		} else if (context === 'all-done') {
+			// Celebratory empty state when all tasks are completed
+			empty.classList.add('celebratory');
+			empty.createEl('div', { text: '🎊', cls: 'omi-empty-icon large' });
+			empty.createEl('h3', { text: 'All caught up!' });
+			empty.createEl('p', { text: 'You\'ve completed all your tasks. Take a moment to celebrate! 🥳' });
+
+			// Show streak if active
+			const { streak, isActive } = this.getStreakInfo();
+			if (streak > 1 && isActive) {
+				const streakNote = empty.createDiv('omi-empty-streak');
+				streakNote.textContent = `🔥 ${streak} day streak - keep it going!`;
+			}
 		}
 	}
 
@@ -4273,12 +4317,281 @@ export class OmiHubView extends ItemView {
 		return result;
 	}
 
+	private renderProgressIndicator(toolbar: HTMLElement): void {
+		// Calculate today's progress
+		const today = new Date().toDateString();
+		const todayTasks = this.tasks.filter(t => {
+			if (!t.dueAt) return false;
+			const dueDate = new Date(t.dueAt).toDateString();
+			return dueDate === today;
+		});
+
+		// Also count overdue tasks as "due today" for progress tracking
+		const overdueTasks = this.tasks.filter(t => {
+			if (!t.dueAt || t.completed) return false;
+			const dueDate = new Date(t.dueAt);
+			return dueDate < new Date() && dueDate.toDateString() !== today;
+		});
+
+		const totalToday = todayTasks.length + overdueTasks.length;
+		const completedToday = todayTasks.filter(t => t.completed).length;
+
+		// Don't show if no tasks are due today
+		if (totalToday === 0) return;
+
+		const progressContainer = toolbar.createDiv('omi-progress-indicator');
+
+		// Progress text
+		const progressText = progressContainer.createEl('span', {
+			cls: 'omi-progress-text'
+		});
+
+		if (completedToday === totalToday) {
+			progressText.textContent = `✨ All ${totalToday} done!`;
+			progressContainer.classList.add('complete');
+		} else {
+			progressText.textContent = `${completedToday} of ${totalToday} today`;
+			if (overdueTasks.length > 0) {
+				progressContainer.createEl('span', {
+					text: ` (${overdueTasks.length} overdue)`,
+					cls: 'omi-progress-overdue'
+				});
+			}
+		}
+
+		// Mini progress bar
+		const progressBar = progressContainer.createDiv('omi-progress-bar');
+		const progressFill = progressBar.createDiv('omi-progress-fill');
+		const percentage = totalToday > 0 ? (completedToday / totalToday) * 100 : 0;
+		progressFill.style.width = `${percentage}%`;
+
+		// Add color class based on progress
+		if (percentage === 100) {
+			progressFill.classList.add('complete');
+		} else if (percentage >= 50) {
+			progressFill.classList.add('good');
+		}
+	}
+
+	private renderBatchActionBar(container: HTMLElement): void {
+		const bar = container.createDiv('omi-batch-action-bar');
+
+		// Selection count
+		const countSection = bar.createDiv('omi-batch-count');
+		const count = this.selectedTaskIds.size;
+		const pendingCount = this.tasks.filter(t => !t.completed).length;
+
+		// Select all / Deselect all button
+		const selectAllBtn = countSection.createEl('button', {
+			text: count === pendingCount ? 'Deselect All' : 'Select All Pending',
+			cls: 'omi-batch-select-all'
+		});
+		selectAllBtn.addEventListener('click', () => {
+			if (count === pendingCount) {
+				this.selectedTaskIds.clear();
+			} else {
+				// Select all pending tasks
+				this.tasks.filter(t => !t.completed && t.id).forEach(t => {
+					if (t.id) this.selectedTaskIds.add(t.id);
+				});
+			}
+			this.render();
+		});
+
+		countSection.createEl('span', {
+			text: `${count} selected`,
+			cls: 'omi-batch-count-text'
+		});
+
+		// Action buttons (only show when items selected)
+		if (count > 0) {
+			const actions = bar.createDiv('omi-batch-actions');
+
+			// Complete all selected
+			const completeBtn = actions.createEl('button', {
+				text: '✓ Complete',
+				cls: 'omi-batch-btn omi-batch-complete'
+			});
+			completeBtn.addEventListener('click', () => this.batchComplete());
+
+			// Reschedule dropdown
+			const rescheduleBtn = actions.createEl('button', {
+				text: '📅 Reschedule',
+				cls: 'omi-batch-btn omi-batch-reschedule'
+			});
+			rescheduleBtn.addEventListener('click', (e) => this.showBatchRescheduleMenu(e.target as HTMLElement));
+
+			// Delete all selected
+			const deleteBtn = actions.createEl('button', {
+				text: '🗑 Delete',
+				cls: 'omi-batch-btn omi-batch-delete'
+			});
+			deleteBtn.addEventListener('click', () => this.batchDelete());
+		}
+	}
+
+	private async batchComplete(): Promise<void> {
+		const tasksToComplete = this.tasks.filter(t => t.id && this.selectedTaskIds.has(t.id) && !t.completed);
+
+		if (tasksToComplete.length === 0) {
+			new Notice('No pending tasks selected');
+			return;
+		}
+
+		new Notice(`Completing ${tasksToComplete.length} tasks...`);
+
+		let completed = 0;
+		for (const task of tasksToComplete) {
+			if (!task.id) continue;
+			try {
+				await this.plugin.api.updateActionItem(task.id, { completed: true });
+				task.completed = true;
+				completed++;
+			} catch (err) {
+				console.error('Failed to complete task:', task.id, err);
+			}
+		}
+
+		// Clear selection and update streak
+		this.selectedTaskIds.clear();
+		this.isSelectMode = false;
+		this.updateCompletionStreak();
+
+		new Notice(`Completed ${completed} tasks!`);
+
+		// Trigger celebration if all tasks done
+		const pendingCount = this.tasks.filter(t => !t.completed).length;
+		if (pendingCount === 0) {
+			this.showConfetti();
+		}
+
+		this.render();
+	}
+
+	private showBatchRescheduleMenu(trigger: HTMLElement): void {
+		// Remove any existing picker
+		document.querySelectorAll('.omi-batch-reschedule-menu').forEach(el => el.remove());
+
+		const menu = document.body.createDiv('omi-batch-reschedule-menu');
+
+		// Position near the trigger
+		const rect = trigger.getBoundingClientRect();
+		menu.style.position = 'fixed';
+		menu.style.top = `${rect.bottom + 4}px`;
+		menu.style.left = `${rect.left}px`;
+		menu.style.zIndex = '1000';
+
+		// Quick options
+		const options = [
+			{ label: 'Today', days: 0 },
+			{ label: 'Tomorrow', days: 1 },
+			{ label: 'Next Week', days: 7 },
+			{ label: 'No Deadline', days: -1 }
+		];
+
+		for (const opt of options) {
+			const btn = menu.createEl('button', {
+				text: opt.label,
+				cls: 'omi-batch-menu-btn'
+			});
+			btn.addEventListener('click', async () => {
+				menu.remove();
+				await this.batchReschedule(opt.days);
+			});
+		}
+
+		// Close on click outside
+		const closeHandler = (e: MouseEvent) => {
+			if (!menu.contains(e.target as Node)) {
+				menu.remove();
+				document.removeEventListener('click', closeHandler);
+			}
+		};
+		setTimeout(() => document.addEventListener('click', closeHandler), 10);
+	}
+
+	private async batchReschedule(daysFromNow: number): Promise<void> {
+		const tasksToReschedule = this.tasks.filter(t => t.id && this.selectedTaskIds.has(t.id));
+
+		if (tasksToReschedule.length === 0) {
+			new Notice('No tasks selected');
+			return;
+		}
+
+		let newDueAt: string | null = null;
+		if (daysFromNow >= 0) {
+			const date = new Date();
+			date.setDate(date.getDate() + daysFromNow);
+			date.setHours(12, 0, 0, 0);
+			newDueAt = date.toISOString();
+		}
+
+		new Notice(`Rescheduling ${tasksToReschedule.length} tasks...`);
+
+		let updated = 0;
+		for (const task of tasksToReschedule) {
+			if (!task.id) continue;
+			try {
+				await this.plugin.api.updateActionItem(task.id, { due_at: newDueAt });
+				task.dueAt = newDueAt;
+				updated++;
+			} catch (err) {
+				console.error('Failed to reschedule task:', task.id, err);
+			}
+		}
+
+		// Clear selection
+		this.selectedTaskIds.clear();
+		this.isSelectMode = false;
+
+		new Notice(`Rescheduled ${updated} tasks`);
+		this.render();
+	}
+
+	private async batchDelete(): Promise<void> {
+		const tasksToDelete = this.tasks.filter(t => t.id && this.selectedTaskIds.has(t.id));
+
+		if (tasksToDelete.length === 0) {
+			new Notice('No tasks selected');
+			return;
+		}
+
+		// Confirm deletion
+		if (!confirm(`Delete ${tasksToDelete.length} tasks? This cannot be undone.`)) {
+			return;
+		}
+
+		new Notice(`Deleting ${tasksToDelete.length} tasks...`);
+
+		let deleted = 0;
+		for (const task of tasksToDelete) {
+			if (!task.id) continue;
+			try {
+				await this.plugin.api.deleteActionItem(task.id);
+				deleted++;
+			} catch (err) {
+				console.error('Failed to delete task:', task.id, err);
+			}
+		}
+
+		// Remove deleted tasks from local state
+		this.tasks = this.tasks.filter(t => !t.id || !this.selectedTaskIds.has(t.id));
+
+		// Clear selection
+		this.selectedTaskIds.clear();
+		this.isSelectMode = false;
+
+		new Notice(`Deleted ${deleted} tasks`);
+		this.render();
+	}
+
 	private renderViewModeTabs(container: HTMLElement): void {
 		const tabs = container.createDiv('omi-tasks-view-tabs');
 		tabs.setAttribute('role', 'tablist');
 		tabs.setAttribute('aria-label', 'Task view modes');
 
-		const modes: Array<{ id: 'list' | 'kanban' | 'calendar'; label: string }> = [
+		const modes: Array<{ id: 'dashboard' | 'list' | 'kanban' | 'calendar'; label: string }> = [
+			{ id: 'dashboard', label: '🎯 Today' },
 			{ id: 'list', label: '☰ List' },
 			{ id: 'kanban', label: '⧉ Kanban' },
 			{ id: 'calendar', label: '📅 Calendar' }
@@ -4296,6 +4609,360 @@ export class OmiHubView extends ItemView {
 				this.viewMode = mode.id;
 				// Save preference
 				this.plugin.settings.tasksViewMode = mode.id;
+				await this.plugin.saveSettings();
+				this.render();
+			});
+		}
+	}
+
+	// ========================================
+	// SMART DASHBOARD VIEW
+	// Today-focused view with progress ring, priority tasks, and week calendar
+	// ========================================
+	private renderDashboardView(container: HTMLElement): void {
+		const dashboard = container.createDiv('omi-dashboard');
+
+		// Get today's data
+		const today = new Date();
+		const todayStr = today.toDateString();
+
+		// Categorize tasks
+		const overdueTasks = this.tasks.filter(t => {
+			if (!t.dueAt || t.completed) return false;
+			const dueDate = new Date(t.dueAt);
+			return dueDate < today && dueDate.toDateString() !== todayStr;
+		});
+
+		const todayTasks = this.tasks.filter(t => {
+			if (!t.dueAt) return false;
+			return new Date(t.dueAt).toDateString() === todayStr;
+		});
+
+		const pendingToday = todayTasks.filter(t => !t.completed);
+		const completedToday = todayTasks.filter(t => t.completed);
+		const totalFocus = overdueTasks.length + todayTasks.length;
+		const completedFocus = completedToday.length;
+
+		// === HERO SECTION: Progress Ring + Encouragement ===
+		const heroSection = dashboard.createDiv('omi-dashboard-hero');
+
+		// Progress Ring (SVG)
+		this.renderProgressRing(heroSection, completedFocus, totalFocus);
+
+		// Encouragement message + streak
+		const encouragement = heroSection.createDiv('omi-dashboard-encouragement');
+		const { message, subtitle } = this.getEncouragementMessage(completedFocus, totalFocus, overdueTasks.length);
+		encouragement.createEl('h2', { text: message, cls: 'omi-dashboard-message' });
+		if (subtitle) {
+			encouragement.createEl('p', { text: subtitle, cls: 'omi-dashboard-subtitle' });
+		}
+
+		// Streak indicator
+		const { streak, isActive } = this.getStreakInfo();
+		if (streak > 0 && isActive) {
+			const streakBadge = encouragement.createDiv('omi-streak-badge');
+			streakBadge.textContent = `🔥 ${streak} day streak`;
+		}
+
+		// === PRIORITY TASKS SECTION ===
+		if (overdueTasks.length > 0 || pendingToday.length > 0) {
+			const prioritySection = dashboard.createDiv('omi-dashboard-section');
+			prioritySection.createEl('h3', { text: '🔥 Priority Tasks', cls: 'omi-dashboard-section-title' });
+
+			const tasksList = prioritySection.createDiv('omi-dashboard-tasks');
+
+			// Overdue tasks first (sorted by how overdue)
+			const sortedOverdue = [...overdueTasks].sort((a, b) => {
+				return new Date(a.dueAt!).getTime() - new Date(b.dueAt!).getTime();
+			});
+
+			for (const task of sortedOverdue) {
+				this.renderDashboardTask(tasksList, task, 'overdue');
+			}
+
+			// Today's pending tasks (sorted by time if available)
+			const sortedToday = [...pendingToday].sort((a, b) => {
+				const aHasTime = a.dueAt?.includes('T') && !a.dueAt.endsWith('T00:00:00');
+				const bHasTime = b.dueAt?.includes('T') && !b.dueAt.endsWith('T00:00:00');
+				if (aHasTime && bHasTime) {
+					return new Date(a.dueAt!).getTime() - new Date(b.dueAt!).getTime();
+				}
+				if (aHasTime) return -1;
+				if (bHasTime) return 1;
+				return 0;
+			});
+
+			for (const task of sortedToday) {
+				this.renderDashboardTask(tasksList, task, 'today');
+			}
+		}
+
+		// === COMPLETED TODAY SECTION (collapsible) ===
+		if (completedToday.length > 0) {
+			const completedSection = dashboard.createDiv('omi-dashboard-section omi-dashboard-completed');
+			const header = completedSection.createDiv('omi-dashboard-section-header');
+			header.createEl('h3', { text: `✅ Completed Today (${completedToday.length})`, cls: 'omi-dashboard-section-title' });
+
+			const tasksList = completedSection.createDiv('omi-dashboard-tasks');
+			for (const task of completedToday) {
+				this.renderDashboardTask(tasksList, task, 'completed');
+			}
+		}
+
+		// === WEEK AT A GLANCE ===
+		this.renderWeekAtAGlance(dashboard);
+	}
+
+	private renderProgressRing(container: HTMLElement, completed: number, total: number): void {
+		const ringContainer = container.createDiv('omi-progress-ring-container');
+
+		const size = 120;
+		const strokeWidth = 10;
+		const radius = (size - strokeWidth) / 2;
+		const circumference = radius * 2 * Math.PI;
+		const percentage = total > 0 ? (completed / total) * 100 : 0;
+		const offset = circumference - (percentage / 100) * circumference;
+
+		// Create SVG
+		const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+		svg.setAttribute('width', String(size));
+		svg.setAttribute('height', String(size));
+		svg.classList.add('omi-progress-ring');
+
+		// Background circle
+		const bgCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+		bgCircle.setAttribute('cx', String(size / 2));
+		bgCircle.setAttribute('cy', String(size / 2));
+		bgCircle.setAttribute('r', String(radius));
+		bgCircle.setAttribute('fill', 'none');
+		bgCircle.setAttribute('stroke', 'var(--background-modifier-border)');
+		bgCircle.setAttribute('stroke-width', String(strokeWidth));
+		svg.appendChild(bgCircle);
+
+		// Progress circle
+		const progressCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+		progressCircle.setAttribute('cx', String(size / 2));
+		progressCircle.setAttribute('cy', String(size / 2));
+		progressCircle.setAttribute('r', String(radius));
+		progressCircle.setAttribute('fill', 'none');
+		progressCircle.setAttribute('stroke', percentage === 100 ? 'var(--omi-color-success)' : 'var(--omi-purple-primary)');
+		progressCircle.setAttribute('stroke-width', String(strokeWidth));
+		progressCircle.setAttribute('stroke-linecap', 'round');
+		progressCircle.setAttribute('stroke-dasharray', String(circumference));
+		progressCircle.setAttribute('stroke-dashoffset', String(circumference)); // Start at 0
+		progressCircle.classList.add('omi-progress-ring-circle');
+		progressCircle.style.setProperty('--target-offset', String(offset));
+		svg.appendChild(progressCircle);
+
+		ringContainer.appendChild(svg);
+
+		// Center text
+		const centerText = ringContainer.createDiv('omi-progress-ring-text');
+		if (total === 0) {
+			centerText.textContent = '—';
+		} else if (percentage === 100) {
+			centerText.textContent = '🎉';
+			centerText.classList.add('celebration');
+		} else {
+			centerText.textContent = `${Math.round(percentage)}%`;
+		}
+	}
+
+	private getEncouragementMessage(completed: number, total: number, overdue: number): { message: string; subtitle: string | null } {
+		if (total === 0) {
+			return { message: 'No tasks for today', subtitle: 'Enjoy your free time! ✨' };
+		}
+
+		const percentage = (completed / total) * 100;
+
+		if (percentage === 100) {
+			return { message: 'All done!', subtitle: 'You crushed it today! 🎉' };
+		}
+
+		if (overdue > 0 && completed === 0) {
+			return {
+				message: `${overdue} overdue task${overdue > 1 ? 's' : ''}`,
+				subtitle: 'Let\'s tackle these first'
+			};
+		}
+
+		if (percentage === 0) {
+			return { message: 'Ready to start?', subtitle: `${total} task${total > 1 ? 's' : ''} waiting for you` };
+		}
+
+		if (percentage < 25) {
+			return { message: 'Good start!', subtitle: `${total - completed} more to go` };
+		}
+
+		if (percentage < 50) {
+			return { message: 'Making progress!', subtitle: `${total - completed} tasks remaining` };
+		}
+
+		if (percentage < 75) {
+			return { message: 'More than halfway!', subtitle: `Just ${total - completed} left` };
+		}
+
+		return { message: 'Almost there!', subtitle: `Only ${total - completed} to go` };
+	}
+
+	private renderDashboardTask(container: HTMLElement, task: TaskWithUI, type: 'overdue' | 'today' | 'completed'): void {
+		const row = container.createDiv(`omi-dashboard-task omi-dashboard-task--${type}`);
+		if (task.completed) {
+			row.classList.add('completed');
+		}
+
+		// Checkbox with particles
+		const checkboxWrapper = row.createDiv('omi-task-checkbox-wrapper');
+		const checkbox = checkboxWrapper.createEl('input', { type: 'checkbox' });
+		checkbox.checked = task.completed;
+
+		const particles = checkboxWrapper.createDiv('omi-checkbox-particles');
+		for (let i = 0; i < 8; i++) {
+			particles.createDiv('omi-checkbox-particle');
+		}
+
+		checkbox.addEventListener('change', async () => {
+			row.classList.add('completing');
+			if (!task.completed) {
+				particles.classList.add('burst');
+				this.showTaskCelebration(row, task);
+			}
+			await this.toggleTaskCompletion(task);
+		});
+
+		// Task content
+		const content = row.createDiv('omi-dashboard-task-content');
+		content.createEl('span', { text: task.description, cls: 'omi-dashboard-task-desc' });
+
+		// Time/date indicator and snooze actions
+		const actionsContainer = row.createDiv('omi-dashboard-task-actions');
+
+		if (type === 'overdue') {
+			const daysOverdue = Math.floor((Date.now() - new Date(task.dueAt!).getTime()) / (1000 * 60 * 60 * 24));
+			const timeLabel = actionsContainer.createDiv('omi-dashboard-task-time overdue');
+			timeLabel.textContent = daysOverdue === 1 ? '1 day late' : `${daysOverdue} days late`;
+
+			// Snooze buttons for overdue tasks
+			const snoozeContainer = actionsContainer.createDiv('omi-snooze-buttons');
+
+			const snoozeToday = snoozeContainer.createEl('button', {
+				text: 'Today',
+				cls: 'omi-snooze-btn'
+			});
+			snoozeToday.addEventListener('click', async (e) => {
+				e.stopPropagation();
+				await this.snoozeTask(task, 0);
+			});
+
+			const snoozeTomorrow = snoozeContainer.createEl('button', {
+				text: '+1 day',
+				cls: 'omi-snooze-btn'
+			});
+			snoozeTomorrow.addEventListener('click', async (e) => {
+				e.stopPropagation();
+				await this.snoozeTask(task, 1);
+			});
+
+			const snoozeWeek = snoozeContainer.createEl('button', {
+				text: '+7 days',
+				cls: 'omi-snooze-btn'
+			});
+			snoozeWeek.addEventListener('click', async (e) => {
+				e.stopPropagation();
+				await this.snoozeTask(task, 7);
+			});
+		} else if (task.dueAt) {
+			const timeLabel = actionsContainer.createDiv('omi-dashboard-task-time');
+			const hasTime = task.dueAt.includes('T') && !task.dueAt.endsWith('T00:00:00');
+			if (hasTime) {
+				timeLabel.textContent = this.formatTimeOnly(task.dueAt);
+			} else {
+				timeLabel.textContent = type === 'completed' ? 'Done' : 'Today';
+			}
+		}
+
+		// Click to edit
+		content.addEventListener('click', () => this.showEditTaskModal(task));
+	}
+
+	private async snoozeTask(task: TaskWithUI, daysFromNow: number): Promise<void> {
+		if (!task.id) return;
+
+		const newDate = new Date();
+		newDate.setDate(newDate.getDate() + daysFromNow);
+		newDate.setHours(9, 0, 0, 0); // Set to 9 AM
+
+		const utcDate = newDate.toISOString();
+
+		try {
+			await this.plugin.api.updateActionItem(task.id, { due_at: utcDate });
+			task.dueAt = newDate.toISOString().split('T')[0] + 'T09:00';
+			new Notice(`Task snoozed to ${daysFromNow === 0 ? 'today' : daysFromNow === 1 ? 'tomorrow' : newDate.toLocaleDateString()}`);
+			this.render();
+			this.requestBackupSync();
+		} catch (error) {
+			console.error('Error snoozing task:', error);
+			new Notice('Failed to snooze task');
+		}
+	}
+
+	private renderWeekAtAGlance(container: HTMLElement): void {
+		const section = container.createDiv('omi-dashboard-section');
+		section.createEl('h3', { text: '📅 This Week', cls: 'omi-dashboard-section-title' });
+
+		const weekStrip = section.createDiv('omi-week-strip');
+
+		const today = new Date();
+		const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+		// Show 7 days starting from today
+		for (let i = 0; i < 7; i++) {
+			const date = new Date(today);
+			date.setDate(today.getDate() + i);
+			const dateStr = date.toDateString();
+
+			// Count tasks for this day
+			const dayTasks = this.tasks.filter(t => {
+				if (!t.dueAt) return false;
+				return new Date(t.dueAt).toDateString() === dateStr;
+			});
+			const pendingCount = dayTasks.filter(t => !t.completed).length;
+			const completedCount = dayTasks.filter(t => t.completed).length;
+
+			const dayCell = weekStrip.createDiv('omi-week-day');
+			if (i === 0) dayCell.classList.add('today');
+
+			// Day name
+			dayCell.createEl('span', {
+				text: i === 0 ? 'Today' : dayNames[date.getDay()],
+				cls: 'omi-week-day-name'
+			});
+
+			// Day number
+			dayCell.createEl('span', {
+				text: String(date.getDate()),
+				cls: 'omi-week-day-number'
+			});
+
+			// Task count indicator
+			if (pendingCount > 0 || completedCount > 0) {
+				const indicator = dayCell.createDiv('omi-week-day-indicator');
+				if (pendingCount === 0 && completedCount > 0) {
+					indicator.classList.add('all-done');
+					indicator.textContent = '✓';
+				} else {
+					indicator.textContent = String(pendingCount);
+					if (pendingCount > 3) indicator.classList.add('busy');
+				}
+			}
+
+			// Click to jump to that day in calendar
+			dayCell.addEventListener('click', async () => {
+				this.calendarCurrentDate = date;
+				this.viewMode = 'calendar';
+				this.calendarViewType = 'weekly';
+				this.plugin.settings.tasksViewMode = 'calendar';
+				this.plugin.settings.tasksCalendarType = 'weekly';
 				await this.plugin.saveSettings();
 				this.render();
 			});
@@ -4986,6 +5653,7 @@ export class OmiHubView extends ItemView {
 	private renderTaskRow(container: HTMLElement, task: TaskWithUI, sectionId: string = 'pending'): void {
 		const rowClasses = ['omi-task-row'];
 		if (task.completed) rowClasses.push('completed');
+		if (task.id && this.selectedTaskIds.has(task.id)) rowClasses.push('selected');
 		const row = container.createDiv(rowClasses.join(' '));
 		row.setAttribute('role', 'listitem');
 		row.setAttribute('tabindex', '0');
@@ -4993,13 +5661,50 @@ export class OmiHubView extends ItemView {
 		// Check if task is overdue (for date display)
 		const isOverdueTask = task.dueAt && this.isOverdue(task.dueAt) && !task.completed;
 
-		// Checkbox
-		const checkbox = row.createEl('input', { type: 'checkbox' });
+		// Selection checkbox (in select mode)
+		if (this.isSelectMode && task.id) {
+			const selectCheckbox = row.createEl('input', {
+				type: 'checkbox',
+				cls: 'omi-task-select-checkbox'
+			});
+			selectCheckbox.checked = this.selectedTaskIds.has(task.id);
+			selectCheckbox.setAttribute('aria-label', `Select "${task.description}"`);
+			selectCheckbox.addEventListener('click', (e) => e.stopPropagation());
+			selectCheckbox.addEventListener('change', () => {
+				if (task.id) {
+					if (selectCheckbox.checked) {
+						this.selectedTaskIds.add(task.id);
+					} else {
+						this.selectedTaskIds.delete(task.id);
+					}
+					this.render();
+				}
+			});
+		}
+
+		// Checkbox with particle burst wrapper
+		const checkboxWrapper = row.createDiv('omi-task-checkbox-wrapper');
+		const checkbox = checkboxWrapper.createEl('input', { type: 'checkbox' });
 		checkbox.checked = task.completed;
 		checkbox.setAttribute('aria-label', `Mark "${task.description}" as ${task.completed ? 'pending' : 'completed'}`);
+
+		// Create particle burst container (8 particles in a circle)
+		const particles = checkboxWrapper.createDiv('omi-checkbox-particles');
+		for (let i = 0; i < 8; i++) {
+			particles.createDiv('omi-checkbox-particle');
+		}
+
 		checkbox.addEventListener('change', async () => {
 			// Add completing animation
 			row.classList.add('completing');
+
+			// Trigger particle burst on completion (not on unchecking)
+			if (!task.completed) {
+				particles.classList.add('burst');
+				// Show celebration message for completing
+				this.showTaskCelebration(row, task);
+			}
+
 			await this.toggleTaskCompletion(task);
 		});
 
@@ -5034,11 +5739,11 @@ export class OmiHubView extends ItemView {
 			}
 		});
 
-		// Date subtitle (contextual based on section)
+		// Date subtitle (contextual based on section) - click for inline date picker
 		const dateSubtitle = contentWrapper.createEl('span', { cls: 'omi-task-date-subtitle' });
 		dateSubtitle.addEventListener('click', (e) => {
 			e.stopPropagation();
-			this.showDatePicker(task);
+			this.showDatePicker(task, dateSubtitle);
 		});
 
 		if (task.dueAt) {
@@ -5101,12 +5806,228 @@ export class OmiHubView extends ItemView {
 		try {
 			await this.plugin.api.updateActionItem(task.id, { completed: newCompleted });
 			task.completed = newCompleted;
+
+			// Update streak if completing a task
+			if (newCompleted) {
+				await this.updateCompletionStreak();
+			}
+
 			this.render();  // Just re-render, no file operations
 			this.requestBackupSync();
 		} catch (error) {
 			console.error('Error updating task:', error);
 			new Notice('Failed to update task');
 		}
+	}
+
+	private async updateCompletionStreak(): Promise<void> {
+		const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+		const lastCompletion = this.plugin.settings.lastTaskCompletionDate;
+
+		if (lastCompletion === today) {
+			// Already completed something today, streak unchanged
+			return;
+		}
+
+		// Check if last completion was yesterday
+		const yesterday = new Date();
+		yesterday.setDate(yesterday.getDate() - 1);
+		const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+		if (lastCompletion === yesterdayStr) {
+			// Continue streak
+			this.plugin.settings.taskCompletionStreak += 1;
+		} else if (!lastCompletion) {
+			// First ever completion
+			this.plugin.settings.taskCompletionStreak = 1;
+		} else {
+			// Streak broken, start new one
+			this.plugin.settings.taskCompletionStreak = 1;
+		}
+
+		this.plugin.settings.lastTaskCompletionDate = today;
+		await this.plugin.saveSettings();
+	}
+
+	private getStreakInfo(): { streak: number; isActive: boolean } {
+		const streak = this.plugin.settings.taskCompletionStreak;
+		const lastCompletion = this.plugin.settings.lastTaskCompletionDate;
+		const today = new Date().toISOString().split('T')[0];
+		const yesterday = new Date();
+		yesterday.setDate(yesterday.getDate() - 1);
+		const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+		// Streak is active if last completion was today or yesterday
+		const isActive = lastCompletion === today || lastCompletion === yesterdayStr;
+
+		return { streak: isActive ? streak : 0, isActive };
+	}
+
+	// Celebration messages for task completion
+	private readonly celebrationMessages = [
+		'Nice!', 'Done!', 'Got it!', 'Crushed it!', 'Boom!',
+		'Yes!', 'Nailed it!', 'Sweet!', 'Awesome!', 'Great!'
+	];
+
+	private showTaskCelebration(row: HTMLElement, task: TaskWithUI): void {
+		// Play completion sound (if enabled)
+		this.playCompletionSound();
+
+		// Count how many tasks are completed today to pick appropriate message
+		const todayTasks = this.tasks.filter(t => {
+			if (!t.dueAt) return false;
+			const dueDate = new Date(t.dueAt).toDateString();
+			return dueDate === new Date().toDateString();
+		});
+		const completedToday = todayTasks.filter(t => t.completed).length + 1; // +1 for current
+		const isAllDone = completedToday === todayTasks.length && todayTasks.length > 0;
+
+		// Pick message based on progress
+		let message: string;
+		if (isAllDone) {
+			message = 'All done! 🎉';
+			// Trigger confetti for completing all tasks!
+			this.showConfetti();
+		} else if (completedToday >= 5) {
+			message = 'On fire! 🔥';
+		} else if (completedToday >= 3) {
+			message = 'Rolling! ⚡';
+		} else {
+			// Random encouraging message
+			message = this.celebrationMessages[Math.floor(Math.random() * this.celebrationMessages.length)];
+		}
+
+		// Create and show celebration popup
+		const celebration = row.createEl('span', {
+			text: message,
+			cls: 'omi-task-celebration'
+		});
+
+		// Auto-remove after animation completes
+		setTimeout(() => {
+			celebration.remove();
+		}, 1100);
+	}
+
+	private playCompletionSound(): void {
+		if (!this.plugin.settings.enableTaskSounds) return;
+
+		try {
+			// Create audio context and play a pleasant "ding" sound
+			const audioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+
+			// Create oscillator for the main tone
+			const oscillator = audioContext.createOscillator();
+			const gainNode = audioContext.createGain();
+
+			oscillator.connect(gainNode);
+			gainNode.connect(audioContext.destination);
+
+			// Pleasant bell-like sound
+			oscillator.type = 'sine';
+			oscillator.frequency.setValueAtTime(880, audioContext.currentTime); // A5
+			oscillator.frequency.exponentialRampToValueAtTime(1320, audioContext.currentTime + 0.1); // E6
+
+			// Quick fade in and out
+			gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+			gainNode.gain.linearRampToValueAtTime(0.15, audioContext.currentTime + 0.02);
+			gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+
+			oscillator.start(audioContext.currentTime);
+			oscillator.stop(audioContext.currentTime + 0.3);
+
+			// Cleanup
+			setTimeout(() => {
+				audioContext.close();
+			}, 500);
+		} catch {
+			// Audio not supported or blocked, fail silently
+		}
+	}
+
+	private showConfetti(): void {
+		// Create canvas overlay for confetti
+		const canvas = document.createElement('canvas');
+		canvas.classList.add('omi-confetti-canvas');
+		canvas.width = window.innerWidth;
+		canvas.height = window.innerHeight;
+		document.body.appendChild(canvas);
+
+		const ctx = canvas.getContext('2d');
+		if (!ctx) {
+			canvas.remove();
+			return;
+		}
+
+		// Confetti particle system
+		const colors = ['#8B5CF6', '#A855F7', '#10B981', '#F59E0B', '#EF4444', '#3B82F6', '#EC4899'];
+		const particles: Array<{
+			x: number;
+			y: number;
+			vx: number;
+			vy: number;
+			color: string;
+			size: number;
+			rotation: number;
+			rotationSpeed: number;
+			shape: 'square' | 'circle';
+		}> = [];
+
+		// Create particles
+		for (let i = 0; i < 150; i++) {
+			particles.push({
+				x: canvas.width / 2 + (Math.random() - 0.5) * 200,
+				y: canvas.height / 2,
+				vx: (Math.random() - 0.5) * 15,
+				vy: Math.random() * -15 - 5,
+				color: colors[Math.floor(Math.random() * colors.length)],
+				size: Math.random() * 8 + 4,
+				rotation: Math.random() * Math.PI * 2,
+				rotationSpeed: (Math.random() - 0.5) * 0.2,
+				shape: Math.random() > 0.5 ? 'square' : 'circle'
+			});
+		}
+
+		const gravity = 0.3;
+		const friction = 0.99;
+		let frame = 0;
+		const maxFrames = 180; // 3 seconds at 60fps
+
+		const animate = () => {
+			ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+			for (const p of particles) {
+				p.vy += gravity;
+				p.vx *= friction;
+				p.x += p.vx;
+				p.y += p.vy;
+				p.rotation += p.rotationSpeed;
+
+				ctx.save();
+				ctx.translate(p.x, p.y);
+				ctx.rotate(p.rotation);
+				ctx.fillStyle = p.color;
+
+				if (p.shape === 'square') {
+					ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
+				} else {
+					ctx.beginPath();
+					ctx.arc(0, 0, p.size / 2, 0, Math.PI * 2);
+					ctx.fill();
+				}
+
+				ctx.restore();
+			}
+
+			frame++;
+			if (frame < maxFrames) {
+				requestAnimationFrame(animate);
+			} else {
+				canvas.remove();
+			}
+		};
+
+		animate();
 	}
 
 	private async updateTaskDescription(task: TaskWithUI, newDescription: string): Promise<void> {
@@ -5166,22 +6087,155 @@ export class OmiHubView extends ItemView {
 		}
 	}
 
-	private showDatePicker(task: TaskWithUI): void {
-		const modal = new DatePickerModal(this.app, task.dueAt, async (newDate: string | null) => {
-			if (!task.id) return;
-			try {
-				// Convert local datetime to UTC before sending to API
-				const utcDate = this.localToUTC(newDate);
-				await this.plugin.api.updateActionItem(task.id, { due_at: utcDate });
-				task.dueAt = newDate;  // Store local time for display
-				this.render();
-				this.requestBackupSync();
-			} catch (error) {
-				console.error('Error updating due date:', error);
-				new Notice('Failed to update due date');
+	private showDatePicker(task: TaskWithUI, anchorEl?: HTMLElement): void {
+		// If anchor element provided, show inline picker; otherwise fall back to modal
+		if (anchorEl) {
+			this.showInlineDatePicker(task, anchorEl);
+		} else {
+			const modal = new DatePickerModal(this.app, task.dueAt, async (newDate: string | null) => {
+				if (!task.id) return;
+				try {
+					const utcDate = this.localToUTC(newDate);
+					await this.plugin.api.updateActionItem(task.id, { due_at: utcDate });
+					task.dueAt = newDate;
+					this.render();
+					this.requestBackupSync();
+				} catch (error) {
+					console.error('Error updating due date:', error);
+					new Notice('Failed to update due date');
+				}
+			});
+			modal.open();
+		}
+	}
+
+	private showInlineDatePicker(task: TaskWithUI, anchorEl: HTMLElement): void {
+		// Remove any existing inline picker
+		const existingPicker = document.querySelector('.omi-inline-date-picker');
+		if (existingPicker) existingPicker.remove();
+
+		// Create picker dropdown
+		const picker = document.createElement('div');
+		picker.classList.add('omi-inline-date-picker');
+
+		// Position relative to anchor
+		const rect = anchorEl.getBoundingClientRect();
+		picker.style.top = `${rect.bottom + 4}px`;
+		picker.style.left = `${rect.left}px`;
+
+		// Quick shortcuts section
+		const shortcuts = picker.createDiv('omi-date-shortcuts');
+		shortcuts.createEl('div', { text: 'Quick Set', cls: 'omi-date-shortcuts-title' });
+
+		const shortcutButtons = [
+			{ label: 'Today', days: 0 },
+			{ label: 'Tomorrow', days: 1 },
+			{ label: 'Next Week', days: 7 },
+			{ label: 'No Date', days: null }
+		];
+
+		for (const shortcut of shortcutButtons) {
+			const btn = shortcuts.createEl('button', {
+				text: shortcut.label,
+				cls: 'omi-date-shortcut-btn'
+			});
+
+			if (shortcut.days === null) {
+				btn.classList.add('clear');
 			}
+
+			btn.addEventListener('click', async () => {
+				let newDate: string | null = null;
+
+				if (shortcut.days !== null) {
+					const date = new Date();
+					date.setDate(date.getDate() + shortcut.days);
+					date.setHours(9, 0, 0, 0);
+					newDate = date.toISOString().split('T')[0] + 'T09:00';
+				}
+
+				await this.updateTaskDate(task, newDate);
+				picker.remove();
+			});
+		}
+
+		// Divider
+		picker.createDiv('omi-date-picker-divider');
+
+		// Custom date/time inputs
+		const customSection = picker.createDiv('omi-date-custom');
+
+		const dateInput = customSection.createEl('input', {
+			type: 'date',
+			cls: 'omi-date-input'
 		});
-		modal.open();
+		if (task.dueAt) {
+			dateInput.value = task.dueAt.split('T')[0];
+		}
+
+		const timeInput = customSection.createEl('input', {
+			type: 'time',
+			cls: 'omi-time-input'
+		});
+		if (task.dueAt && task.dueAt.includes('T')) {
+			const timePart = task.dueAt.split('T')[1];
+			if (timePart && timePart !== '00:00:00' && timePart !== '00:00') {
+				timeInput.value = timePart.substring(0, 5);
+			}
+		}
+
+		// Apply button
+		const applyBtn = customSection.createEl('button', {
+			text: 'Apply',
+			cls: 'omi-date-apply-btn'
+		});
+		applyBtn.addEventListener('click', async () => {
+			if (!dateInput.value) {
+				await this.updateTaskDate(task, null);
+			} else {
+				const newDate = timeInput.value
+					? `${dateInput.value}T${timeInput.value}`
+					: `${dateInput.value}T00:00`;
+				await this.updateTaskDate(task, newDate);
+			}
+			picker.remove();
+		});
+
+		// Add to DOM
+		document.body.appendChild(picker);
+
+		// Click outside to close
+		const closeHandler = (e: MouseEvent) => {
+			if (!picker.contains(e.target as Node) && e.target !== anchorEl) {
+				picker.remove();
+				document.removeEventListener('click', closeHandler);
+			}
+		};
+		// Delay adding listener to avoid immediate close
+		setTimeout(() => document.addEventListener('click', closeHandler), 10);
+
+		// ESC to close
+		const escHandler = (e: KeyboardEvent) => {
+			if (e.key === 'Escape') {
+				picker.remove();
+				document.removeEventListener('keydown', escHandler);
+			}
+		};
+		document.addEventListener('keydown', escHandler);
+	}
+
+	private async updateTaskDate(task: TaskWithUI, newDate: string | null): Promise<void> {
+		if (!task.id) return;
+		try {
+			const utcDate = this.localToUTC(newDate);
+			await this.plugin.api.updateActionItem(task.id, { due_at: utcDate });
+			task.dueAt = newDate;
+			this.render();
+			this.requestBackupSync();
+		} catch (error) {
+			console.error('Error updating due date:', error);
+			new Notice('Failed to update due date');
+		}
 	}
 
 	private showEditTaskModal(task: TaskWithUI): void {

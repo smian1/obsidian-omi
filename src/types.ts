@@ -16,7 +16,7 @@ export interface OmiConversationsSettings {
 	tasksHubSyncInterval: number;
 	tasksViewAutoRefresh: number;  // Auto-refresh interval for tasks view (minutes, 0 = disabled)
 	// Tasks View preferences (persisted)
-	tasksViewMode: 'list' | 'kanban' | 'calendar';
+	tasksViewMode: 'dashboard' | 'list' | 'kanban' | 'calendar';
 	tasksKanbanLayout: 'status' | 'date';
 	tasksCalendarType: 'monthly' | 'weekly';
 	// Incremental conversation sync tracking
@@ -29,6 +29,10 @@ export interface OmiConversationsSettings {
 	memoriesCategoryFilter: string | null;
 	memoriesViewAutoRefresh: number;  // Auto-refresh interval (minutes, 0 = disabled)
 	memoriesViewMode: 'list' | 'graph';  // View mode: list or tag graph
+	// Gamification settings
+	taskCompletionStreak: number;  // Current streak of days with task completions
+	lastTaskCompletionDate: string | null;  // YYYY-MM-DD of last completion
+	enableTaskSounds: boolean;  // Optional sound effects
 }
 
 // Omi API response types

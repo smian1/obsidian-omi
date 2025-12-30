@@ -34,7 +34,7 @@ export const DEFAULT_SETTINGS: OmiConversationsSettings = {
 	tasksHubSyncInterval: 5,
 	tasksViewAutoRefresh: 10,  // Auto-refresh every 10 minutes by default
 	// Tasks View preferences defaults
-	tasksViewMode: 'list',
+	tasksViewMode: 'dashboard',
 	tasksKanbanLayout: 'status',
 	tasksCalendarType: 'monthly',
 	// Incremental conversation sync tracking defaults
@@ -46,5 +46,9 @@ export const DEFAULT_SETTINGS: OmiConversationsSettings = {
 	// Memories view settings
 	memoriesCategoryFilter: null,
 	memoriesViewAutoRefresh: 10,  // Auto-refresh every 10 minutes by default
-	memoriesViewMode: 'list'  // Default to list view
+	memoriesViewMode: 'list',  // Default to list view
+	// Gamification settings
+	taskCompletionStreak: 0,
+	lastTaskCompletionDate: null,
+	enableTaskSounds: false  // Disabled by default
 };

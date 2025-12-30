@@ -129,6 +129,69 @@
     background: var(--interactive-accent-hover);
 }
 
+/* ========================================
+   PROGRESS INDICATOR
+   Shows today's task completion progress
+   ======================================== */
+.omi-progress-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    background: var(--background-secondary);
+    border-radius: var(--omi-radius-full);
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-left: auto;
+    white-space: nowrap;
+}
+
+.omi-progress-indicator.complete {
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--omi-color-success);
+}
+
+.omi-progress-text {
+    font-weight: 500;
+}
+
+.omi-progress-overdue {
+    color: var(--omi-status-overdue);
+    font-size: 12px;
+}
+
+.omi-progress-bar {
+    width: 60px;
+    height: 6px;
+    background: var(--background-modifier-border);
+    border-radius: var(--omi-radius-full);
+    overflow: hidden;
+}
+
+.omi-progress-fill {
+    height: 100%;
+    background: var(--omi-purple-primary);
+    border-radius: var(--omi-radius-full);
+    transition: width 0.4s var(--omi-easing-emphasized);
+}
+
+.omi-progress-fill.good {
+    background: var(--omi-color-info);
+}
+
+.omi-progress-fill.complete {
+    background: var(--omi-color-success);
+}
+
+/* Animate progress bar on load */
+@keyframes progress-grow {
+    from { width: 0; }
+}
+
+.omi-progress-fill {
+    animation: progress-grow 0.6s var(--omi-easing-emphasized);
+}
+
 .omi-tasks-section {
     margin-bottom: 24px;
 }
@@ -1100,6 +1163,255 @@
     font-size: 13px;
 }
 
+/* Celebratory empty state (all tasks done!) */
+.omi-tasks-empty-state.celebratory {
+    background: linear-gradient(135deg,
+        rgba(16, 185, 129, 0.05) 0%,
+        rgba(139, 92, 246, 0.08) 50%,
+        rgba(16, 185, 129, 0.05) 100%);
+    border-radius: var(--omi-radius-lg);
+    padding: 48px 24px;
+    animation: celebratory-glow 3s ease-in-out infinite;
+}
+
+@keyframes celebratory-glow {
+    0%, 100% {
+        box-shadow: 0 0 20px rgba(16, 185, 129, 0.1);
+    }
+    50% {
+        box-shadow: 0 0 40px rgba(16, 185, 129, 0.2), 0 0 60px rgba(139, 92, 246, 0.1);
+    }
+}
+
+.omi-tasks-empty-state.celebratory h3 {
+    color: var(--omi-color-success);
+    font-size: 18px;
+}
+
+.omi-empty-icon.large {
+    font-size: 56px;
+    animation: bounce-celebrate 1s ease-in-out;
+}
+
+@keyframes bounce-celebrate {
+    0%, 100% { transform: scale(1); }
+    25% { transform: scale(1.15) rotate(-5deg); }
+    50% { transform: scale(1.1) rotate(5deg); }
+    75% { transform: scale(1.05) rotate(-3deg); }
+}
+
+.omi-empty-streak {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: linear-gradient(135deg, #FF6B35, #FF8C42);
+    color: white;
+    padding: 8px 16px;
+    border-radius: var(--omi-radius-full);
+    font-size: 14px;
+    font-weight: 600;
+    margin-top: 16px;
+    box-shadow: 0 2px 8px rgba(255, 107, 53, 0.3);
+    animation: streak-pulse 2s ease-in-out infinite;
+}
+
+@keyframes streak-pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.03); }
+}
+
+.omi-empty-action {
+    margin-top: 20px;
+}
+
+.omi-empty-action button {
+    padding: 10px 20px;
+    background: var(--omi-purple-primary);
+    color: white;
+    border: none;
+    border-radius: var(--omi-radius-md);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--omi-duration-short) ease;
+}
+
+.omi-empty-action button:hover {
+    background: var(--omi-purple-accent);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+}
+
+/* ========================================
+   BATCH OPERATIONS (Multi-select)
+   ======================================== */
+.omi-tasks-select-btn {
+    padding: 6px 12px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--omi-radius-sm);
+    background: var(--background-secondary);
+    color: var(--text-muted);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all var(--omi-duration-short) ease;
+}
+
+.omi-tasks-select-btn:hover {
+    background: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+
+.omi-tasks-select-btn.active {
+    background: var(--omi-purple-primary);
+    color: white;
+    border-color: var(--omi-purple-primary);
+}
+
+/* Batch action bar */
+.omi-batch-action-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(139, 92, 246, 0.05));
+    border: 1px solid rgba(139, 92, 246, 0.2);
+    border-radius: var(--omi-radius-md);
+    margin-bottom: 12px;
+    animation: batch-bar-enter 0.2s var(--omi-easing-standard);
+}
+
+@keyframes batch-bar-enter {
+    from {
+        opacity: 0;
+        transform: translateY(-8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.omi-batch-count {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.omi-batch-select-all {
+    padding: 4px 10px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--omi-radius-sm);
+    background: var(--background-primary);
+    color: var(--text-muted);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all var(--omi-duration-short) ease;
+}
+
+.omi-batch-select-all:hover {
+    background: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+
+.omi-batch-count-text {
+    font-size: 13px;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.omi-batch-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.omi-batch-btn {
+    padding: 6px 12px;
+    border: none;
+    border-radius: var(--omi-radius-sm);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--omi-duration-short) ease;
+}
+
+.omi-batch-complete {
+    background: var(--omi-color-success);
+    color: white;
+}
+
+.omi-batch-complete:hover {
+    background: #059669;
+    transform: translateY(-1px);
+}
+
+.omi-batch-reschedule {
+    background: var(--omi-purple-primary);
+    color: white;
+}
+
+.omi-batch-reschedule:hover {
+    background: var(--omi-purple-accent);
+    transform: translateY(-1px);
+}
+
+.omi-batch-delete {
+    background: var(--background-secondary);
+    color: var(--text-muted);
+}
+
+.omi-batch-delete:hover {
+    background: var(--omi-color-error);
+    color: white;
+    transform: translateY(-1px);
+}
+
+/* Batch reschedule menu */
+.omi-batch-reschedule-menu {
+    background: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--omi-radius-md);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+    padding: 6px;
+    min-width: 140px;
+    animation: picker-appear 0.15s var(--omi-easing-standard);
+}
+
+.omi-batch-menu-btn {
+    display: block;
+    width: 100%;
+    padding: 8px 12px;
+    border: none;
+    border-radius: var(--omi-radius-sm);
+    background: transparent;
+    color: var(--text-normal);
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+    transition: all var(--omi-duration-short) ease;
+}
+
+.omi-batch-menu-btn:hover {
+    background: var(--omi-purple-primary);
+    color: white;
+}
+
+/* Selection checkbox in task row */
+.omi-task-select-checkbox {
+    width: 18px;
+    height: 18px;
+    margin-right: 8px;
+    accent-color: var(--omi-purple-primary);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+/* Selected task row highlight */
+.omi-task-row.selected {
+    background: rgba(139, 92, 246, 0.08);
+    border-left: 3px solid var(--omi-purple-primary);
+    padding-left: 9px;
+}
+
 /* ========================================
    OVERDUE HIGHLIGHTING
    ======================================== */
@@ -1120,20 +1432,649 @@
 
 /* ========================================
    TASK COMPLETION ANIMATION
+   Enhanced with wave strikethrough, particles, and celebration
    ======================================== */
 .omi-task-row.completing {
-    animation: task-complete 0.4s ease-out;
+    animation: task-complete 0.5s var(--omi-easing-emphasized);
 }
 
 @keyframes task-complete {
-    0% { background: transparent; }
-    50% { background: var(--background-modifier-success); transform: scale(1.01); }
-    100% { background: transparent; }
+    0% {
+        background: transparent;
+        transform: scale(1);
+    }
+    30% {
+        background: rgba(16, 185, 129, 0.15);
+        transform: scale(1.02);
+    }
+    60% {
+        background: rgba(16, 185, 129, 0.25);
+        transform: scale(1.01);
+    }
+    100% {
+        background: transparent;
+        transform: scale(1);
+    }
 }
 
+/* Wave strikethrough animation */
 .omi-task-row.completed .omi-task-description {
-    text-decoration: line-through;
+    position: relative;
     opacity: 0.6;
+    text-decoration: none;
+}
+
+.omi-task-row.completed .omi-task-description::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    height: 2px;
+    background: var(--text-muted);
+    animation: strikethrough-wave 0.4s var(--omi-easing-emphasized) forwards;
+}
+
+@keyframes strikethrough-wave {
+    0% { width: 0; }
+    100% { width: 100%; }
+}
+
+/* Particle burst container */
+.omi-task-checkbox-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Checkmark burst particles */
+.omi-checkbox-particles {
+    position: absolute;
+    pointer-events: none;
+    width: 40px;
+    height: 40px;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.omi-checkbox-particle {
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--omi-color-success);
+    left: 50%;
+    top: 50%;
+    opacity: 0;
+}
+
+.omi-checkbox-particles.burst .omi-checkbox-particle {
+    animation: particle-burst 0.6s var(--omi-easing-emphasized) forwards;
+}
+
+.omi-checkbox-particle:nth-child(1) { --angle: 0deg; --distance: 18px; }
+.omi-checkbox-particle:nth-child(2) { --angle: 45deg; --distance: 16px; }
+.omi-checkbox-particle:nth-child(3) { --angle: 90deg; --distance: 18px; }
+.omi-checkbox-particle:nth-child(4) { --angle: 135deg; --distance: 16px; }
+.omi-checkbox-particle:nth-child(5) { --angle: 180deg; --distance: 18px; }
+.omi-checkbox-particle:nth-child(6) { --angle: 225deg; --distance: 16px; }
+.omi-checkbox-particle:nth-child(7) { --angle: 270deg; --distance: 18px; }
+.omi-checkbox-particle:nth-child(8) { --angle: 315deg; --distance: 16px; }
+
+@keyframes particle-burst {
+    0% {
+        opacity: 1;
+        transform: translate(-50%, -50%) rotate(var(--angle)) translateY(0) scale(1);
+    }
+    50% {
+        opacity: 1;
+        transform: translate(-50%, -50%) rotate(var(--angle)) translateY(calc(var(--distance) * -0.7)) scale(1.2);
+    }
+    100% {
+        opacity: 0;
+        transform: translate(-50%, -50%) rotate(var(--angle)) translateY(calc(var(--distance) * -1)) scale(0);
+    }
+}
+
+/* Enhanced checkbox pop with checkmark morph */
+.omi-task-row input[type="checkbox"]:checked {
+    animation: checkbox-pop-enhanced 0.35s var(--omi-easing-emphasized);
+}
+
+@keyframes checkbox-pop-enhanced {
+    0% { transform: scale(1); }
+    25% { transform: scale(0.85); }
+    50% { transform: scale(1.25); }
+    75% { transform: scale(1.1); }
+    100% { transform: scale(1); }
+}
+
+/* Checkmark SVG animation (when using custom checkbox) */
+.omi-checkbox-check {
+    stroke-dasharray: 20;
+    stroke-dashoffset: 20;
+    transition: stroke-dashoffset 0.3s var(--omi-easing-emphasized);
+}
+
+.omi-task-row input[type="checkbox"]:checked + .omi-checkbox-check {
+    stroke-dashoffset: 0;
+}
+
+/* Success glow on completion */
+.omi-task-row.completing input[type="checkbox"] {
+    box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.3);
+    transition: box-shadow 0.3s ease;
+}
+
+/* Celebration message popup */
+.omi-task-celebration {
+    position: absolute;
+    top: -30px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: linear-gradient(135deg, var(--omi-color-success), var(--omi-color-mint));
+    color: white;
+    padding: 4px 12px;
+    border-radius: var(--omi-radius-full);
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+    animation: celebration-popup 1s var(--omi-easing-emphasized) forwards;
+    pointer-events: none;
+    z-index: 100;
+}
+
+@keyframes celebration-popup {
+    0% {
+        opacity: 0;
+        transform: translateX(-50%) translateY(10px) scale(0.8);
+    }
+    20% {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0) scale(1.1);
+    }
+    40% {
+        transform: translateX(-50%) translateY(0) scale(1);
+    }
+    80% {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
+    100% {
+        opacity: 0;
+        transform: translateX(-50%) translateY(-10px);
+    }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+    .omi-task-row.completing,
+    .omi-task-row input[type="checkbox"]:checked,
+    .omi-checkbox-particles.burst .omi-checkbox-particle,
+    .omi-task-celebration,
+    .omi-task-row.completed .omi-task-description::after {
+        animation: none;
+    }
+
+    .omi-task-row.completed .omi-task-description::after {
+        width: 100%;
+    }
+}
+
+/* ========================================
+   SMART DASHBOARD VIEW
+   Today-focused unified view with progress ring
+   ======================================== */
+.omi-dashboard {
+    display: flex;
+    flex-direction: column;
+    gap: var(--omi-spacing-xl);
+    padding: var(--omi-spacing-md);
+    overflow-y: auto;
+    flex: 1;
+}
+
+/* Hero Section - Progress Ring + Message */
+.omi-dashboard-hero {
+    display: flex;
+    align-items: center;
+    gap: var(--omi-spacing-xl);
+    padding: var(--omi-spacing-xl);
+    background: linear-gradient(135deg,
+        rgba(139, 92, 246, 0.08),
+        rgba(168, 85, 247, 0.05)
+    );
+    border-radius: var(--omi-radius-lg);
+    border: 1px solid rgba(139, 92, 246, 0.15);
+}
+
+/* Progress Ring */
+.omi-progress-ring-container {
+    position: relative;
+    width: 120px;
+    height: 120px;
+    flex-shrink: 0;
+}
+
+.omi-progress-ring {
+    transform: rotate(-90deg);
+}
+
+.omi-progress-ring-circle {
+    transition: stroke-dashoffset 1s var(--omi-easing-emphasized);
+    animation: ring-fill 1s var(--omi-easing-emphasized) forwards;
+}
+
+@keyframes ring-fill {
+    from { stroke-dashoffset: var(--circumference, 345); }
+    to { stroke-dashoffset: var(--target-offset, 0); }
+}
+
+.omi-progress-ring-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--text-normal);
+}
+
+.omi-progress-ring-text.celebration {
+    font-size: 32px;
+    animation: celebration-bounce 0.6s var(--omi-easing-emphasized);
+}
+
+@keyframes celebration-bounce {
+    0%, 100% { transform: translate(-50%, -50%) scale(1); }
+    50% { transform: translate(-50%, -50%) scale(1.2); }
+}
+
+/* Encouragement Message */
+.omi-dashboard-encouragement {
+    flex: 1;
+}
+
+.omi-dashboard-message {
+    margin: 0 0 4px 0;
+    font-size: 1.5em;
+    font-weight: 600;
+    color: var(--text-normal);
+}
+
+.omi-dashboard-subtitle {
+    margin: 0;
+    font-size: 1em;
+    color: var(--text-muted);
+}
+
+/* Streak Badge */
+.omi-streak-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: var(--omi-spacing-sm);
+    padding: 4px 10px;
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(239, 68, 68, 0.1));
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    border-radius: var(--omi-radius-full);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--omi-color-warning);
+    animation: streak-glow 2s ease-in-out infinite;
+}
+
+@keyframes streak-glow {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+    50% { box-shadow: 0 0 8px 2px rgba(245, 158, 11, 0.2); }
+}
+
+/* Confetti Canvas */
+.omi-confetti-canvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    pointer-events: none;
+    z-index: 10000;
+}
+
+/* Dashboard Sections */
+.omi-dashboard-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--omi-spacing-sm);
+}
+
+.omi-dashboard-section-title {
+    margin: 0;
+    font-size: 1em;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.omi-dashboard-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+/* Dashboard Tasks */
+.omi-dashboard-tasks {
+    display: flex;
+    flex-direction: column;
+    gap: var(--omi-spacing-xs);
+}
+
+.omi-dashboard-task {
+    display: flex;
+    align-items: center;
+    gap: var(--omi-spacing-md);
+    padding: var(--omi-spacing-md) var(--omi-spacing-lg);
+    background: var(--background-secondary);
+    border-radius: var(--omi-radius-md);
+    border: 1px solid var(--background-modifier-border);
+    transition: all var(--omi-duration-short) ease;
+    position: relative;
+}
+
+.omi-dashboard-task:hover {
+    background: var(--background-primary);
+    border-color: rgba(139, 92, 246, 0.3);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.omi-dashboard-task--overdue {
+    border-left: 3px solid var(--omi-status-overdue);
+}
+
+.omi-dashboard-task--today {
+    border-left: 3px solid var(--omi-purple-primary);
+}
+
+.omi-dashboard-task--completed {
+    opacity: 0.6;
+}
+
+.omi-dashboard-task.completed .omi-dashboard-task-desc {
+    text-decoration: line-through;
+}
+
+.omi-dashboard-task-content {
+    flex: 1;
+    cursor: pointer;
+    min-width: 0;
+}
+
+.omi-dashboard-task-desc {
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.omi-dashboard-task-time {
+    font-size: 12px;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.omi-dashboard-task-time.overdue {
+    color: var(--omi-status-overdue);
+    font-weight: 500;
+}
+
+/* Task Actions Container */
+.omi-dashboard-task-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--omi-spacing-sm);
+    flex-shrink: 0;
+}
+
+/* Snooze Buttons */
+.omi-snooze-buttons {
+    display: flex;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity var(--omi-duration-short) ease;
+}
+
+.omi-dashboard-task:hover .omi-snooze-buttons {
+    opacity: 1;
+}
+
+.omi-snooze-btn {
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 500;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--omi-radius-sm);
+    background: var(--background-primary);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all var(--omi-duration-short) ease;
+    white-space: nowrap;
+}
+
+.omi-snooze-btn:hover {
+    background: var(--omi-purple-primary);
+    border-color: var(--omi-purple-primary);
+    color: white;
+}
+
+.omi-snooze-btn:active {
+    transform: scale(0.95);
+}
+
+/* ========================================
+   INLINE DATE PICKER
+   Dropdown popover for quick date selection
+   ======================================== */
+.omi-inline-date-picker {
+    position: fixed;
+    z-index: 1000;
+    background: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--omi-radius-lg);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+    padding: var(--omi-spacing-md);
+    min-width: 200px;
+    animation: picker-appear 0.15s var(--omi-easing-standard);
+}
+
+@keyframes picker-appear {
+    from {
+        opacity: 0;
+        transform: translateY(-8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.omi-date-shortcuts {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.omi-date-shortcuts-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 4px;
+}
+
+.omi-date-shortcut-btn {
+    padding: 8px 12px;
+    border: none;
+    border-radius: var(--omi-radius-sm);
+    background: var(--background-secondary);
+    color: var(--text-normal);
+    font-size: 13px;
+    cursor: pointer;
+    text-align: left;
+    transition: all var(--omi-duration-short) ease;
+}
+
+.omi-date-shortcut-btn:hover {
+    background: var(--omi-purple-primary);
+    color: white;
+}
+
+.omi-date-shortcut-btn.clear {
+    color: var(--text-muted);
+}
+
+.omi-date-shortcut-btn.clear:hover {
+    background: var(--background-modifier-error);
+    color: white;
+}
+
+.omi-date-picker-divider {
+    height: 1px;
+    background: var(--background-modifier-border);
+    margin: var(--omi-spacing-sm) 0;
+}
+
+.omi-date-custom {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.omi-date-input,
+.omi-time-input {
+    flex: 1;
+    min-width: 0;
+    padding: 6px 10px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--omi-radius-sm);
+    background: var(--background-primary);
+    color: var(--text-normal);
+    font-size: 13px;
+}
+
+.omi-date-input:focus,
+.omi-time-input:focus {
+    outline: none;
+    border-color: var(--omi-purple-primary);
+    box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
+}
+
+.omi-date-apply-btn {
+    padding: 6px 14px;
+    border: none;
+    border-radius: var(--omi-radius-sm);
+    background: var(--omi-purple-primary);
+    color: white;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background var(--omi-duration-short) ease;
+}
+
+.omi-date-apply-btn:hover {
+    background: var(--omi-purple-accent);
+}
+
+/* Completed section - more muted */
+.omi-dashboard-completed {
+    opacity: 0.7;
+}
+
+.omi-dashboard-completed:hover {
+    opacity: 1;
+}
+
+/* Week at a Glance Strip */
+.omi-week-strip {
+    display: flex;
+    gap: var(--omi-spacing-xs);
+}
+
+.omi-week-day {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: var(--omi-spacing-sm) var(--omi-spacing-xs);
+    background: var(--background-secondary);
+    border-radius: var(--omi-radius-md);
+    border: 1px solid var(--background-modifier-border);
+    cursor: pointer;
+    transition: all var(--omi-duration-short) ease;
+    min-width: 0;
+}
+
+.omi-week-day:hover {
+    background: var(--background-primary);
+    border-color: var(--omi-purple-light);
+    transform: translateY(-2px);
+}
+
+.omi-week-day.today {
+    background: rgba(139, 92, 246, 0.1);
+    border-color: var(--omi-purple-primary);
+}
+
+.omi-week-day-name {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-muted);
+    text-transform: uppercase;
+}
+
+.omi-week-day.today .omi-week-day-name {
+    color: var(--omi-purple-primary);
+}
+
+.omi-week-day-number {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-normal);
+}
+
+.omi-week-day-indicator {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--omi-purple-primary);
+    color: white;
+    font-size: 11px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.omi-week-day-indicator.all-done {
+    background: var(--omi-color-success);
+}
+
+.omi-week-day-indicator.busy {
+    background: var(--omi-color-warning);
+}
+
+/* Reduced motion for dashboard */
+@media (prefers-reduced-motion: reduce) {
+    .omi-progress-ring-circle,
+    .omi-progress-ring-text.celebration {
+        animation: none;
+    }
+
+    .omi-progress-ring-circle {
+        stroke-dashoffset: var(--target-offset);
+    }
 }
 
 /* ========================================

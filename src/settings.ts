@@ -84,6 +84,16 @@ export class OmiConversationsSettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				}));
 
+		new Setting(containerEl)
+			.setName('Completion sounds')
+			.setDesc('Play a subtle sound when completing tasks')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.enableTaskSounds)
+				.onChange(async (value) => {
+					this.plugin.settings.enableTaskSounds = value;
+					await this.plugin.saveSettings();
+				}));
+
 		// ============================================
 		// CONVERSATIONS
 		// ============================================
