@@ -800,11 +800,15 @@ export class OmiHubView extends ItemView {
 		};
 		resizeCanvas();
 
-		// Initialize node positions randomly in a centered area
-		const initialSpread = Math.min(canvas.width, canvas.height) * 0.4;
-		for (const node of nodes) {
-			node.x = canvas.width / 2 + (Math.random() - 0.5) * initialSpread;
-			node.y = canvas.height / 2 + (Math.random() - 0.5) * initialSpread;
+		// Initialize node positions in a tight circular cluster at center
+		const initialRadius = Math.min(canvas.width, canvas.height) * 0.2;
+		for (let i = 0; i < nodes.length; i++) {
+			const node = nodes[i];
+			// Distribute in a spiral pattern for better initial spacing
+			const angle = (i / nodes.length) * Math.PI * 6; // Multiple rotations
+			const r = (i / nodes.length) * initialRadius;
+			node.x = canvas.width / 2 + Math.cos(angle) * r + (Math.random() - 0.5) * 20;
+			node.y = canvas.height / 2 + Math.sin(angle) * r + (Math.random() - 0.5) * 20;
 			node.vx = 0;
 			node.vy = 0;
 		}
@@ -1023,10 +1027,12 @@ export class OmiHubView extends ItemView {
 		// Force simulation parameters
 		const centerX = canvas.width / 2;
 		const centerY = canvas.height / 2;
-		const repulsion = 1500;
-		const attraction = 0.03;
-		const damping = 0.85;
-		const centerPull = 0.01;
+		const maxRadius = Math.min(canvas.width, canvas.height) * 0.42; // Circular boundary
+		const repulsion = 2500; // Strong repulsion to prevent overlap
+		const attraction = 0.015; // Gentle attraction along edges
+		const damping = 0.75;
+		const centerPull = 0.006; // Gentle center pull
+		const boundaryForce = 0.2; // Strong boundary to maintain circle
 
 		// Create edge lookup for faster access
 		const edgeMap = new Map<string, typeof edges[0][]>();
@@ -1039,7 +1045,7 @@ export class OmiHubView extends ItemView {
 
 		// Animation loop
 		let frameCount = 0;
-		const maxFrames = 300;
+		const maxFrames = 400; // More frames for better settling
 
 		const animate = () => {
 			if (!ctx) return;
@@ -1047,13 +1053,16 @@ export class OmiHubView extends ItemView {
 
 			// Apply forces only for first N frames and when not dragging a node
 			if (frameCount < maxFrames && !draggedNode) {
+				// Adaptive cooling - forces get weaker over time
+				const cooling = Math.max(0.1, 1 - frameCount / maxFrames);
+
 				// Repulsion between all nodes
 				for (let i = 0; i < nodes.length; i++) {
 					for (let j = i + 1; j < nodes.length; j++) {
 						const dx = nodes[j].x - nodes[i].x;
 						const dy = nodes[j].y - nodes[i].y;
-						const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-						const force = repulsion / (dist * dist);
+						const dist = Math.max(30, Math.sqrt(dx * dx + dy * dy)); // Min distance prevents extreme forces
+						const force = (repulsion / (dist * dist)) * cooling;
 						const fx = (dx / dist) * force;
 						const fy = (dy / dist) * force;
 						nodes[i].vx -= fx;
@@ -1070,7 +1079,7 @@ export class OmiHubView extends ItemView {
 					if (source && target) {
 						const dx = target.x - source.x;
 						const dy = target.y - source.y;
-						const force = attraction * edge.weight;
+						const force = attraction * edge.weight * cooling;
 						source.vx += dx * force;
 						source.vy += dy * force;
 						target.vx -= dx * force;
@@ -1078,10 +1087,22 @@ export class OmiHubView extends ItemView {
 					}
 				}
 
-				// Center pull
+				// Center pull and boundary constraint
 				for (const node of nodes) {
+					const dx = node.x - centerX;
+					const dy = node.y - centerY;
+					const distFromCenter = Math.sqrt(dx * dx + dy * dy);
+
+					// Always pull toward center
 					node.vx += (centerX - node.x) * centerPull;
 					node.vy += (centerY - node.y) * centerPull;
+
+					// Strong boundary force if outside max radius
+					if (distFromCenter > maxRadius) {
+						const overflowRatio = (distFromCenter - maxRadius) / maxRadius;
+						node.vx -= (dx / distFromCenter) * boundaryForce * overflowRatio * distFromCenter;
+						node.vy -= (dy / distFromCenter) * boundaryForce * overflowRatio * distFromCenter;
+					}
 				}
 
 				// Update positions with damping

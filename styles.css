@@ -4119,7 +4119,8 @@ svg.leaflet-image-layer.leaflet-interactive path {
 .omi-graph-container {
     position: relative;
     width: 100%;
-    height: 500px;
+    height: 100%;
+    min-height: 400px;
     background: var(--background-primary);
     border-radius: var(--omi-radius-md);
     overflow: hidden;
@@ -4220,24 +4221,34 @@ svg.leaflet-image-layer.leaflet-interactive path {
 /* ==================== TAG GRAPH DETAILS PANEL ==================== */
 
 .omi-graph-wrapper {
+    position: relative;
     display: flex;
-    gap: 12px;
-    height: 500px;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    height: calc(100vh - 280px); /* Full height minus header/tabs/toolbar */
 }
 
 .omi-graph-wrapper .omi-graph-container {
     flex: 1;
-    min-width: 0;
+    min-height: 0;
+    height: 100%;
 }
 
 .omi-tag-details-panel {
-    width: 280px;
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 300px;
+    max-height: 100%;
     background: var(--background-secondary);
     border: 1px solid var(--background-modifier-border);
     border-radius: var(--omi-radius-md);
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    z-index: 60;
+    box-shadow: -4px 0 12px rgba(0, 0, 0, 0.15);
 }
 
 .omi-tag-details-header {
