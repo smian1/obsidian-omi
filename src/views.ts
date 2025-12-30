@@ -800,10 +800,11 @@ export class OmiHubView extends ItemView {
 		};
 		resizeCanvas();
 
-		// Initialize node positions randomly
+		// Initialize node positions randomly in a centered area
+		const initialSpread = Math.min(canvas.width, canvas.height) * 0.4;
 		for (const node of nodes) {
-			node.x = Math.random() * canvas.width;
-			node.y = Math.random() * canvas.height;
+			node.x = canvas.width / 2 + (Math.random() - 0.5) * initialSpread;
+			node.y = canvas.height / 2 + (Math.random() - 0.5) * initialSpread;
 			node.vx = 0;
 			node.vy = 0;
 		}
@@ -817,11 +818,49 @@ export class OmiHubView extends ItemView {
 		legend.createEl('div', { text: 'Tag Graph', cls: 'omi-graph-legend-title' });
 		legend.createEl('div', { text: `${nodes.length} tags`, cls: 'omi-graph-legend-stat' });
 		legend.createEl('div', { text: `${edges.length} connections`, cls: 'omi-graph-legend-stat' });
-		legend.createEl('div', { text: 'Click a tag to see memories', cls: 'omi-graph-legend-hint' });
+		legend.createEl('div', { text: 'Scroll to zoom • Drag to pan', cls: 'omi-graph-legend-hint' });
+		legend.createEl('div', { text: 'Drag tags to rearrange', cls: 'omi-graph-legend-hint' });
 
-		// Track state
+		// Track interaction state
 		let hoveredNode: typeof nodes[0] | null = null;
 		let selectedNode: typeof nodes[0] | null = null;
+
+		// Transform state for zoom and pan
+		let scale = 1;
+		let offsetX = 0;
+		let offsetY = 0;
+		const minScale = 0.3;
+		const maxScale = 3;
+
+		// Drag state
+		let isDragging = false;
+		let draggedNode: typeof nodes[0] | null = null;
+		let isPanning = false;
+		let lastMouseX = 0;
+		let lastMouseY = 0;
+
+		// Convert screen coordinates to graph coordinates
+		const screenToGraph = (screenX: number, screenY: number) => {
+			return {
+				x: (screenX - offsetX) / scale,
+				y: (screenY - offsetY) / scale
+			};
+		};
+
+		// Find node at position (in screen coordinates)
+		const findNodeAtPosition = (screenX: number, screenY: number) => {
+			const graphPos = screenToGraph(screenX, screenY);
+			for (const node of nodes) {
+				const dx = graphPos.x - node.x;
+				const dy = graphPos.y - node.y;
+				const radius = Math.max(8, Math.min(25, node.count * 2));
+				// Slightly larger hit area for easier selection
+				if (dx * dx + dy * dy < (radius + 5) * (radius + 5)) {
+					return node;
+				}
+			}
+			return null;
+		};
 
 		// Function to show tag details
 		const showTagDetails = (tag: string) => {
@@ -860,57 +899,125 @@ export class OmiHubView extends ItemView {
 			}
 		};
 
-		// Click handler for selecting tags
-		canvas.addEventListener('click', (e) => {
+		// Zoom handler
+		canvas.addEventListener('wheel', (e) => {
+			e.preventDefault();
 			const rect = canvas.getBoundingClientRect();
 			const mouseX = e.clientX - rect.left;
 			const mouseY = e.clientY - rect.top;
 
-			// Find clicked node
-			for (const node of nodes) {
-				const dx = mouseX - node.x;
-				const dy = mouseY - node.y;
-				const radius = Math.max(8, Math.min(25, node.count * 2));
-				if (dx * dx + dy * dy < radius * radius) {
-					selectedNode = node;
-					showTagDetails(node.label);
-					return;
-				}
+			// Zoom factor
+			const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+			const newScale = Math.max(minScale, Math.min(maxScale, scale * zoomFactor));
+
+			if (newScale !== scale) {
+				// Zoom toward mouse position
+				const graphPos = screenToGraph(mouseX, mouseY);
+				scale = newScale;
+				offsetX = mouseX - graphPos.x * scale;
+				offsetY = mouseY - graphPos.y * scale;
 			}
+		}, { passive: false });
+
+		// Mouse down - start drag or pan
+		canvas.addEventListener('mousedown', (e) => {
+			const rect = canvas.getBoundingClientRect();
+			const mouseX = e.clientX - rect.left;
+			const mouseY = e.clientY - rect.top;
+
+			const node = findNodeAtPosition(mouseX, mouseY);
+			if (node) {
+				// Start dragging node
+				isDragging = true;
+				draggedNode = node;
+				canvas.style.cursor = 'grabbing';
+			} else {
+				// Start panning
+				isPanning = true;
+				canvas.style.cursor = 'grabbing';
+			}
+			lastMouseX = mouseX;
+			lastMouseY = mouseY;
 		});
 
+		// Mouse move - drag node, pan, or hover
 		canvas.addEventListener('mousemove', (e) => {
 			const rect = canvas.getBoundingClientRect();
 			const mouseX = e.clientX - rect.left;
 			const mouseY = e.clientY - rect.top;
 
-			// Find hovered node
-			hoveredNode = null;
-			for (const node of nodes) {
-				const dx = mouseX - node.x;
-				const dy = mouseY - node.y;
-				const radius = Math.max(8, Math.min(25, node.count * 2));
-				if (dx * dx + dy * dy < radius * radius) {
-					hoveredNode = node;
-					break;
+			if (isDragging && draggedNode) {
+				// Move the dragged node
+				const graphPos = screenToGraph(mouseX, mouseY);
+				draggedNode.x = graphPos.x;
+				draggedNode.y = graphPos.y;
+				// Stop any velocity when manually dragging
+				draggedNode.vx = 0;
+				draggedNode.vy = 0;
+			} else if (isPanning) {
+				// Pan the view
+				const dx = mouseX - lastMouseX;
+				const dy = mouseY - lastMouseY;
+				offsetX += dx;
+				offsetY += dy;
+				lastMouseX = mouseX;
+				lastMouseY = mouseY;
+			} else {
+				// Hover detection
+				hoveredNode = findNodeAtPosition(mouseX, mouseY);
+
+				if (hoveredNode) {
+					tooltip.style.display = 'block';
+					tooltip.style.left = `${mouseX + 10}px`;
+					tooltip.style.top = `${mouseY - 30}px`;
+					tooltip.setText(`${hoveredNode.label} (${hoveredNode.count} memories) - click to view`);
+					canvas.style.cursor = 'pointer';
+				} else {
+					tooltip.style.display = 'none';
+					canvas.style.cursor = 'grab';
+				}
+			}
+		});
+
+		// Mouse up - end drag or pan, and handle click
+		canvas.addEventListener('mouseup', (e) => {
+			const rect = canvas.getBoundingClientRect();
+			const mouseX = e.clientX - rect.left;
+			const mouseY = e.clientY - rect.top;
+
+			// Check if this was a click (minimal movement)
+			const dx = mouseX - lastMouseX;
+			const dy = mouseY - lastMouseY;
+			const wasClick = !isDragging && !isPanning || (dx * dx + dy * dy < 25);
+
+			if (wasClick && !isPanning) {
+				// Handle click on node
+				const node = findNodeAtPosition(mouseX, mouseY);
+				if (node) {
+					selectedNode = node;
+					showTagDetails(node.label);
 				}
 			}
 
-			if (hoveredNode) {
-				tooltip.style.display = 'block';
-				tooltip.style.left = `${e.clientX - graphContainer.getBoundingClientRect().left + 10}px`;
-				tooltip.style.top = `${e.clientY - graphContainer.getBoundingClientRect().top - 30}px`;
-				tooltip.setText(`${hoveredNode.label} (${hoveredNode.count} memories) - click to view`);
-				canvas.style.cursor = 'pointer';
-			} else {
-				tooltip.style.display = 'none';
-				canvas.style.cursor = 'grab';
-			}
+			isDragging = false;
+			draggedNode = null;
+			isPanning = false;
+			canvas.style.cursor = hoveredNode ? 'pointer' : 'grab';
 		});
 
 		canvas.addEventListener('mouseleave', () => {
 			tooltip.style.display = 'none';
 			hoveredNode = null;
+			isDragging = false;
+			draggedNode = null;
+			isPanning = false;
+		});
+
+		// Double-click to reset zoom
+		canvas.addEventListener('dblclick', () => {
+			scale = 1;
+			offsetX = 0;
+			offsetY = 0;
 		});
 
 		// Force simulation parameters
@@ -938,8 +1045,8 @@ export class OmiHubView extends ItemView {
 			if (!ctx) return;
 			frameCount++;
 
-			// Apply forces only for first N frames
-			if (frameCount < maxFrames) {
+			// Apply forces only for first N frames and when not dragging a node
+			if (frameCount < maxFrames && !draggedNode) {
 				// Repulsion between all nodes
 				for (let i = 0; i < nodes.length; i++) {
 					for (let j = i + 1; j < nodes.length; j++) {
@@ -983,16 +1090,16 @@ export class OmiHubView extends ItemView {
 					node.vy *= damping;
 					node.x += node.vx;
 					node.y += node.vy;
-
-					// Keep nodes within bounds
-					const margin = 30;
-					node.x = Math.max(margin, Math.min(canvas.width - margin, node.x));
-					node.y = Math.max(margin, Math.min(canvas.height - margin, node.y));
 				}
 			}
 
 			// Clear canvas
 			ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+			// Save context and apply transform
+			ctx.save();
+			ctx.translate(offsetX, offsetY);
+			ctx.scale(scale, scale);
 
 			// Draw edges
 			for (const edge of edges) {
@@ -1004,7 +1111,7 @@ export class OmiHubView extends ItemView {
 					ctx.beginPath();
 					ctx.moveTo(source.x, source.y);
 					ctx.lineTo(target.x, target.y);
-					ctx.lineWidth = isHighlighted ? Math.min(4, edge.weight + 1) : Math.min(3, edge.weight * 0.5 + 0.5);
+					ctx.lineWidth = (isHighlighted ? Math.min(4, edge.weight + 1) : Math.min(3, edge.weight * 0.5 + 0.5)) / scale;
 					ctx.strokeStyle = isHighlighted ? 'var(--interactive-accent)' : 'rgba(128, 128, 128, 0.3)';
 					ctx.stroke();
 				}
@@ -1015,28 +1122,41 @@ export class OmiHubView extends ItemView {
 				const radius = Math.max(8, Math.min(25, node.count * 2));
 				const isHovered = hoveredNode === node;
 				const isSelected = selectedNode === node;
+				const isDragged = draggedNode === node;
 				const isConnected = (hoveredNode && edgeMap.get(hoveredNode.id)?.some(e => e.source === node.id || e.target === node.id)) ||
 					(selectedNode && edgeMap.get(selectedNode.id)?.some(e => e.source === node.id || e.target === node.id));
 
 				ctx.beginPath();
 				ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
-				ctx.fillStyle = isSelected ? 'var(--interactive-accent)' : (isHovered ? 'var(--interactive-accent)' : (isConnected ? 'var(--interactive-accent-hover)' : node.color));
+				ctx.fillStyle = isSelected ? 'var(--interactive-accent)' : (isHovered || isDragged ? 'var(--interactive-accent)' : (isConnected ? 'var(--interactive-accent-hover)' : node.color));
 				ctx.fill();
 
-				if (isHovered || isSelected) {
+				if (isHovered || isSelected || isDragged) {
 					ctx.strokeStyle = 'var(--text-normal)';
-					ctx.lineWidth = 2;
+					ctx.lineWidth = 2 / scale;
 					ctx.stroke();
 				}
 
-				// Draw label for larger nodes, hovered, selected, or connected
-				if (radius > 12 || isHovered || isSelected || isConnected) {
+				// Draw label for larger nodes, hovered, selected, dragged, or connected
+				if (radius > 12 || isHovered || isSelected || isDragged || isConnected) {
 					ctx.fillStyle = 'var(--text-normal)';
-					ctx.font = (isHovered || isSelected) ? 'bold 12px sans-serif' : '11px sans-serif';
+					const fontSize = ((isHovered || isSelected || isDragged) ? 12 : 11) / scale;
+					ctx.font = `${(isHovered || isSelected || isDragged) ? 'bold ' : ''}${fontSize}px sans-serif`;
 					ctx.textAlign = 'center';
 					ctx.textBaseline = 'middle';
-					ctx.fillText(node.label, node.x, node.y + radius + 12);
+					ctx.fillText(node.label, node.x, node.y + radius + 12 / scale);
 				}
+			}
+
+			// Restore context
+			ctx.restore();
+
+			// Draw zoom indicator (outside transform)
+			if (scale !== 1) {
+				ctx.fillStyle = 'var(--text-muted)';
+				ctx.font = '11px sans-serif';
+				ctx.textAlign = 'left';
+				ctx.fillText(`${Math.round(scale * 100)}%`, 10, canvas.height - 10);
 			}
 
 			this.graphAnimationId = requestAnimationFrame(animate);
