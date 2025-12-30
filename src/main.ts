@@ -374,7 +374,7 @@ export default class OmiConversationsPlugin extends Plugin {
 					this.updateSyncProgress('conversations', `Writing ${dateStr}...`, this.syncProgress.progress);
 
 					// Write files
-					await this.createIndexFile(folderPath, dateStr, allDateConversations);
+					await this.createIndexFile(dateFolderPath, dateStr, allDateConversations);
 					if (this.settings.includeOverview) {
 						await this.createOverviewFile(dateFolderPath, allDateConversations);
 					}
