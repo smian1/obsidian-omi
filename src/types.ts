@@ -30,6 +30,7 @@ export interface OmiConversationsSettings {
 	// Memories view settings
 	memoriesCategoryFilter: string | null;
 	memoriesViewAutoRefresh: number;  // Auto-refresh interval (minutes, 0 = disabled)
+	memoriesViewMode: 'list' | 'graph';  // View mode: list or tag graph
 }
 
 // Omi API response types

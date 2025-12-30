@@ -47,5 +47,6 @@ export const DEFAULT_SETTINGS: OmiConversationsSettings = {
 	conversationsViewMode: 'list',
 	// Memories view settings
 	memoriesCategoryFilter: null,
-	memoriesViewAutoRefresh: 10  // Auto-refresh every 10 minutes by default
+	memoriesViewAutoRefresh: 10,  // Auto-refresh every 10 minutes by default
+	memoriesViewMode: 'list'  // Default to list view
 };

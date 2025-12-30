@@ -4081,3 +4081,237 @@ svg.leaflet-image-layer.leaflet-interactive path {
     color: var(--interactive-accent);
     font-style: italic;
 }
+
+/* ==================== MEMORIES VIEW MODE TABS ==================== */
+
+.omi-memories-view-tabs {
+    display: flex;
+    gap: 4px;
+    padding: 8px 12px;
+    background: var(--background-secondary);
+    border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.omi-memories-view-tab {
+    padding: 6px 14px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: var(--omi-radius-sm);
+    cursor: pointer;
+    transition: all var(--omi-duration-short) ease;
+}
+
+.omi-memories-view-tab:hover {
+    background: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+
+.omi-memories-view-tab.active {
+    background: var(--interactive-accent);
+    color: white;
+}
+
+/* ==================== GRAPH VISUALIZATION ==================== */
+
+.omi-graph-container {
+    position: relative;
+    width: 100%;
+    height: 500px;
+    background: var(--background-primary);
+    border-radius: var(--omi-radius-md);
+    overflow: hidden;
+}
+
+.omi-graph-canvas {
+    width: 100%;
+    height: 100%;
+    cursor: grab;
+}
+
+.omi-graph-canvas:active {
+    cursor: grabbing;
+}
+
+.omi-graph-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--text-muted);
+    font-size: 14px;
+}
+
+.omi-graph-tooltip {
+    position: absolute;
+    background: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--omi-radius-sm);
+    padding: 6px 10px;
+    font-size: 12px;
+    color: var(--text-normal);
+    pointer-events: none;
+    z-index: 100;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    max-width: 300px;
+    white-space: nowrap;
+}
+
+.omi-network-tooltip {
+    white-space: normal;
+    max-width: 280px;
+}
+
+.omi-tooltip-category {
+    font-weight: 600;
+    margin-bottom: 4px;
+    color: var(--text-accent);
+}
+
+.omi-tooltip-content {
+    font-size: 11px;
+    line-height: 1.4;
+    color: var(--text-normal);
+    margin-bottom: 4px;
+}
+
+.omi-tooltip-tags {
+    font-size: 10px;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+.omi-graph-legend {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--omi-radius-sm);
+    padding: 10px 14px;
+    z-index: 50;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+.omi-graph-legend-title {
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text-normal);
+    margin-bottom: 6px;
+}
+
+.omi-graph-legend-stat {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+/* Dark theme adjustments for graph */
+.theme-dark .omi-graph-tooltip {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.theme-dark .omi-graph-legend {
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+/* ==================== TAG GRAPH DETAILS PANEL ==================== */
+
+.omi-graph-wrapper {
+    display: flex;
+    gap: 12px;
+    height: 500px;
+}
+
+.omi-graph-wrapper .omi-graph-container {
+    flex: 1;
+    min-width: 0;
+}
+
+.omi-tag-details-panel {
+    width: 280px;
+    background: var(--background-secondary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--omi-radius-md);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.omi-tag-details-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 14px;
+    background: var(--background-primary);
+    border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.omi-tag-details-title {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--interactive-accent);
+}
+
+.omi-tag-details-close {
+    background: none;
+    border: none;
+    font-size: 20px;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+}
+
+.omi-tag-details-close:hover {
+    color: var(--text-normal);
+}
+
+.omi-tag-details-count {
+    padding: 8px 14px;
+    font-size: 12px;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.omi-tag-details-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+}
+
+.omi-tag-memory-item {
+    display: flex;
+    gap: 8px;
+    padding: 10px;
+    border-radius: var(--omi-radius-sm);
+    cursor: pointer;
+    transition: background var(--omi-duration-short) ease;
+}
+
+.omi-tag-memory-item:hover {
+    background: var(--background-modifier-hover);
+}
+
+.omi-tag-memory-emoji {
+    flex-shrink: 0;
+}
+
+.omi-tag-memory-content {
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--text-normal);
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+}
+
+.omi-graph-legend-hint {
+    font-size: 10px;
+    color: var(--text-faint);
+    margin-top: 6px;
+    font-style: italic;
+}

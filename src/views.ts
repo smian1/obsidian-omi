@@ -45,8 +45,11 @@ export class OmiHubView extends ItemView {
 	memories: MemoryWithUI[] = [];
 	memoriesSearchQuery = '';
 	memoriesCategoryFilter: string | null = null;
+	memoriesViewMode: 'list' | 'graph' = 'list';
+	selectedTagForDetails: string | null = null;  // Currently selected tag to show memories
 	isLoadingMemories = false;
 	private memoriesAutoRefreshInterval: number | null = null;
+	private graphAnimationId: number | null = null;
 
 	// Debounced backup sync
 	private requestBackupSync: () => void;
@@ -103,6 +106,7 @@ export class OmiHubView extends ItemView {
 		this.kanbanLayout = this.plugin.settings.tasksKanbanLayout || 'status';
 		this.calendarViewType = this.plugin.settings.tasksCalendarType || 'monthly';
 		this.memoriesCategoryFilter = this.plugin.settings.memoriesCategoryFilter || null;
+		this.memoriesViewMode = this.plugin.settings.memoriesViewMode || 'list';
 
 		// Load data based on active tab
 		if (this.activeTab === 'tasks') {
@@ -120,6 +124,7 @@ export class OmiHubView extends ItemView {
 	async onClose(): Promise<void> {
 		this.stopAutoRefresh();
 		this.stopMemoriesAutoRefresh();
+		this.stopGraphAnimation();
 	}
 
 	private handleKeyDown(e: KeyboardEvent): void {
@@ -180,6 +185,13 @@ export class OmiHubView extends ItemView {
 		if (this.memoriesAutoRefreshInterval !== null) {
 			window.clearInterval(this.memoriesAutoRefreshInterval);
 			this.memoriesAutoRefreshInterval = null;
+		}
+	}
+
+	private stopGraphAnimation(): void {
+		if (this.graphAnimationId !== null) {
+			cancelAnimationFrame(this.graphAnimationId);
+			this.graphAnimationId = null;
 		}
 	}
 
@@ -433,14 +445,23 @@ export class OmiHubView extends ItemView {
 	}
 
 	private renderMemoriesTab(container: HTMLElement): void {
+		// Stop any running graph animation when switching views
+		this.stopGraphAnimation();
+
 		const tabContent = container.createDiv('omi-memories-container');
+
+		// View Mode Tabs
+		this.renderMemoriesViewModeTabs(tabContent);
 
 		// Toolbar: Add button + Sync button
 		const toolbar = tabContent.createDiv('omi-memories-toolbar');
 
-		const addBtn = toolbar.createEl('button', { text: '+ Add Memory', cls: 'omi-memories-add-btn' });
-		addBtn.setAttribute('aria-label', 'Add new memory');
-		addBtn.addEventListener('click', () => this.showAddMemoryDialog());
+		// Only show Add Memory button in list view
+		if (this.memoriesViewMode === 'list') {
+			const addBtn = toolbar.createEl('button', { text: '+ Add Memory', cls: 'omi-memories-add-btn' });
+			addBtn.setAttribute('aria-label', 'Add new memory');
+			addBtn.addEventListener('click', () => this.showAddMemoryDialog());
+		}
 
 		const syncBtn = toolbar.createEl('button', { text: '🔄 Refresh', cls: 'omi-memories-sync-btn' });
 		syncBtn.setAttribute('aria-label', 'Refresh memories from Omi');
@@ -449,8 +470,55 @@ export class OmiHubView extends ItemView {
 			this.render();
 		});
 
+		// Show loading skeleton
+		if (this.isLoadingMemories) {
+			const skeleton = tabContent.createDiv('omi-memories-loading');
+			skeleton.createEl('div', { cls: 'omi-loading-skeleton' });
+			skeleton.createEl('div', { cls: 'omi-loading-skeleton' });
+			skeleton.createEl('div', { cls: 'omi-loading-skeleton' });
+			return;
+		}
+
+		// Render based on view mode
+		switch (this.memoriesViewMode) {
+			case 'graph':
+				this.renderTagGraph(tabContent);
+				break;
+			default:
+				this.renderMemoriesListView(tabContent);
+		}
+	}
+
+	private renderMemoriesViewModeTabs(container: HTMLElement): void {
+		const tabs = container.createDiv('omi-memories-view-tabs');
+		tabs.setAttribute('role', 'tablist');
+		tabs.setAttribute('aria-label', 'Memory view modes');
+
+		const modes: Array<{ id: 'list' | 'graph'; label: string; icon: string }> = [
+			{ id: 'list', label: 'List', icon: '📋' },
+			{ id: 'graph', label: 'Tags', icon: '🕸️' }
+		];
+
+		for (const mode of modes) {
+			const tab = tabs.createEl('button', {
+				text: `${mode.icon} ${mode.label}`,
+				cls: `omi-memories-view-tab ${this.memoriesViewMode === mode.id ? 'active' : ''}`
+			});
+			tab.setAttribute('role', 'tab');
+			tab.setAttribute('aria-selected', String(this.memoriesViewMode === mode.id));
+			tab.setAttribute('aria-label', `${mode.label} view`);
+			tab.addEventListener('click', async () => {
+				this.memoriesViewMode = mode.id;
+				this.plugin.settings.memoriesViewMode = mode.id;
+				await this.plugin.saveSettings();
+				this.render();
+			});
+		}
+	}
+
+	private renderMemoriesListView(container: HTMLElement): void {
 		// Category filter pills
-		const categoryPills = tabContent.createDiv('omi-category-pills');
+		const categoryPills = container.createDiv('omi-category-pills');
 
 		// Get category counts
 		const categoryCounts: Record<string, number> = {};
@@ -496,7 +564,7 @@ export class OmiHubView extends ItemView {
 		}
 
 		// Search input
-		const searchContainer = tabContent.createDiv('omi-memories-search-container');
+		const searchContainer = container.createDiv('omi-memories-search-container');
 		const searchInput = searchContainer.createEl('input', {
 			type: 'text',
 			placeholder: '🔍 Search memories...',
@@ -512,15 +580,6 @@ export class OmiHubView extends ItemView {
 			this.debouncedSearchRender();
 		});
 
-		// Show loading skeleton
-		if (this.isLoadingMemories) {
-			const skeleton = tabContent.createDiv('omi-memories-loading');
-			skeleton.createEl('div', { cls: 'omi-loading-skeleton' });
-			skeleton.createEl('div', { cls: 'omi-loading-skeleton' });
-			skeleton.createEl('div', { cls: 'omi-loading-skeleton' });
-			return;
-		}
-
 		// Filter memories
 		let filteredMemories = this.memories;
 		if (this.memoriesCategoryFilter) {
@@ -535,7 +594,7 @@ export class OmiHubView extends ItemView {
 		}
 
 		// Memory list
-		const memoryList = tabContent.createDiv('omi-memories-list');
+		const memoryList = container.createDiv('omi-memories-list');
 
 		if (filteredMemories.length === 0) {
 			const empty = memoryList.createDiv('omi-memories-empty');
@@ -706,6 +765,360 @@ export class OmiHubView extends ItemView {
 			console.error('Error deleting memory:', error);
 			new Notice('Failed to delete memory');
 		}
+	}
+
+	// ==================== TAG GRAPH VISUALIZATION ====================
+
+	private renderTagGraph(container: HTMLElement): void {
+		// Create wrapper for graph + details panel
+		const wrapper = container.createDiv('omi-graph-wrapper');
+		const graphContainer = wrapper.createDiv('omi-graph-container');
+
+		// Build tag co-occurrence data
+		const { nodes, edges } = this.buildTagCooccurrenceGraph();
+
+		if (nodes.length === 0) {
+			const empty = graphContainer.createDiv('omi-graph-empty');
+			empty.setText('No tags found. Memories need tags to visualize relationships.');
+			return;
+		}
+
+		// Details panel (initially hidden)
+		const detailsPanel = wrapper.createDiv('omi-tag-details-panel');
+		detailsPanel.style.display = 'none';
+
+		// Create canvas
+		const canvas = graphContainer.createEl('canvas', { cls: 'omi-graph-canvas' });
+		const ctx = canvas.getContext('2d');
+		if (!ctx) return;
+
+		// Set canvas size
+		const resizeCanvas = () => {
+			const rect = graphContainer.getBoundingClientRect();
+			canvas.width = rect.width;
+			canvas.height = Math.max(400, rect.height);
+		};
+		resizeCanvas();
+
+		// Initialize node positions randomly
+		for (const node of nodes) {
+			node.x = Math.random() * canvas.width;
+			node.y = Math.random() * canvas.height;
+			node.vx = 0;
+			node.vy = 0;
+		}
+
+		// Tooltip element
+		const tooltip = graphContainer.createDiv('omi-graph-tooltip');
+		tooltip.style.display = 'none';
+
+		// Legend
+		const legend = graphContainer.createDiv('omi-graph-legend');
+		legend.createEl('div', { text: 'Tag Graph', cls: 'omi-graph-legend-title' });
+		legend.createEl('div', { text: `${nodes.length} tags`, cls: 'omi-graph-legend-stat' });
+		legend.createEl('div', { text: `${edges.length} connections`, cls: 'omi-graph-legend-stat' });
+		legend.createEl('div', { text: 'Click a tag to see memories', cls: 'omi-graph-legend-hint' });
+
+		// Track state
+		let hoveredNode: typeof nodes[0] | null = null;
+		let selectedNode: typeof nodes[0] | null = null;
+
+		// Function to show tag details
+		const showTagDetails = (tag: string) => {
+			detailsPanel.empty();
+			detailsPanel.style.display = 'block';
+
+			// Header with close button
+			const header = detailsPanel.createDiv('omi-tag-details-header');
+			header.createEl('span', { text: `#${tag}`, cls: 'omi-tag-details-title' });
+			const closeBtn = header.createEl('button', { text: '×', cls: 'omi-tag-details-close' });
+			closeBtn.addEventListener('click', () => {
+				detailsPanel.style.display = 'none';
+				selectedNode = null;
+			});
+
+			// Find memories with this tag
+			const memoriesWithTag = this.memories.filter(m =>
+				m.tags && m.tags.some(t => t.toLowerCase() === tag.toLowerCase())
+			);
+
+			const countDiv = detailsPanel.createDiv('omi-tag-details-count');
+			countDiv.setText(`${memoriesWithTag.length} ${memoriesWithTag.length === 1 ? 'memory' : 'memories'}`);
+
+			// Memory list
+			const memoryList = detailsPanel.createDiv('omi-tag-details-list');
+			for (const memory of memoriesWithTag) {
+				const item = memoryList.createDiv('omi-tag-memory-item');
+				const emoji = MEMORY_CATEGORY_EMOJI[memory.category] || '📌';
+				item.createEl('span', { text: emoji, cls: 'omi-tag-memory-emoji' });
+				item.createEl('span', { text: memory.content, cls: 'omi-tag-memory-content' });
+
+				// Click to edit
+				item.addEventListener('click', () => {
+					this.showEditMemoryDialog(memory);
+				});
+			}
+		};
+
+		// Click handler for selecting tags
+		canvas.addEventListener('click', (e) => {
+			const rect = canvas.getBoundingClientRect();
+			const mouseX = e.clientX - rect.left;
+			const mouseY = e.clientY - rect.top;
+
+			// Find clicked node
+			for (const node of nodes) {
+				const dx = mouseX - node.x;
+				const dy = mouseY - node.y;
+				const radius = Math.max(8, Math.min(25, node.count * 2));
+				if (dx * dx + dy * dy < radius * radius) {
+					selectedNode = node;
+					showTagDetails(node.label);
+					return;
+				}
+			}
+		});
+
+		canvas.addEventListener('mousemove', (e) => {
+			const rect = canvas.getBoundingClientRect();
+			const mouseX = e.clientX - rect.left;
+			const mouseY = e.clientY - rect.top;
+
+			// Find hovered node
+			hoveredNode = null;
+			for (const node of nodes) {
+				const dx = mouseX - node.x;
+				const dy = mouseY - node.y;
+				const radius = Math.max(8, Math.min(25, node.count * 2));
+				if (dx * dx + dy * dy < radius * radius) {
+					hoveredNode = node;
+					break;
+				}
+			}
+
+			if (hoveredNode) {
+				tooltip.style.display = 'block';
+				tooltip.style.left = `${e.clientX - graphContainer.getBoundingClientRect().left + 10}px`;
+				tooltip.style.top = `${e.clientY - graphContainer.getBoundingClientRect().top - 30}px`;
+				tooltip.setText(`${hoveredNode.label} (${hoveredNode.count} memories) - click to view`);
+				canvas.style.cursor = 'pointer';
+			} else {
+				tooltip.style.display = 'none';
+				canvas.style.cursor = 'grab';
+			}
+		});
+
+		canvas.addEventListener('mouseleave', () => {
+			tooltip.style.display = 'none';
+			hoveredNode = null;
+		});
+
+		// Force simulation parameters
+		const centerX = canvas.width / 2;
+		const centerY = canvas.height / 2;
+		const repulsion = 1500;
+		const attraction = 0.03;
+		const damping = 0.85;
+		const centerPull = 0.01;
+
+		// Create edge lookup for faster access
+		const edgeMap = new Map<string, typeof edges[0][]>();
+		for (const edge of edges) {
+			if (!edgeMap.has(edge.source)) edgeMap.set(edge.source, []);
+			if (!edgeMap.has(edge.target)) edgeMap.set(edge.target, []);
+			edgeMap.get(edge.source)!.push(edge);
+			edgeMap.get(edge.target)!.push(edge);
+		}
+
+		// Animation loop
+		let frameCount = 0;
+		const maxFrames = 300;
+
+		const animate = () => {
+			if (!ctx) return;
+			frameCount++;
+
+			// Apply forces only for first N frames
+			if (frameCount < maxFrames) {
+				// Repulsion between all nodes
+				for (let i = 0; i < nodes.length; i++) {
+					for (let j = i + 1; j < nodes.length; j++) {
+						const dx = nodes[j].x - nodes[i].x;
+						const dy = nodes[j].y - nodes[i].y;
+						const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+						const force = repulsion / (dist * dist);
+						const fx = (dx / dist) * force;
+						const fy = (dy / dist) * force;
+						nodes[i].vx -= fx;
+						nodes[i].vy -= fy;
+						nodes[j].vx += fx;
+						nodes[j].vy += fy;
+					}
+				}
+
+				// Attraction along edges
+				for (const edge of edges) {
+					const source = nodes.find(n => n.id === edge.source);
+					const target = nodes.find(n => n.id === edge.target);
+					if (source && target) {
+						const dx = target.x - source.x;
+						const dy = target.y - source.y;
+						const force = attraction * edge.weight;
+						source.vx += dx * force;
+						source.vy += dy * force;
+						target.vx -= dx * force;
+						target.vy -= dy * force;
+					}
+				}
+
+				// Center pull
+				for (const node of nodes) {
+					node.vx += (centerX - node.x) * centerPull;
+					node.vy += (centerY - node.y) * centerPull;
+				}
+
+				// Update positions with damping
+				for (const node of nodes) {
+					node.vx *= damping;
+					node.vy *= damping;
+					node.x += node.vx;
+					node.y += node.vy;
+
+					// Keep nodes within bounds
+					const margin = 30;
+					node.x = Math.max(margin, Math.min(canvas.width - margin, node.x));
+					node.y = Math.max(margin, Math.min(canvas.height - margin, node.y));
+				}
+			}
+
+			// Clear canvas
+			ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+			// Draw edges
+			for (const edge of edges) {
+				const source = nodes.find(n => n.id === edge.source);
+				const target = nodes.find(n => n.id === edge.target);
+				if (source && target) {
+					const isHighlighted = (hoveredNode && (edge.source === hoveredNode.id || edge.target === hoveredNode.id)) ||
+						(selectedNode && (edge.source === selectedNode.id || edge.target === selectedNode.id));
+					ctx.beginPath();
+					ctx.moveTo(source.x, source.y);
+					ctx.lineTo(target.x, target.y);
+					ctx.lineWidth = isHighlighted ? Math.min(4, edge.weight + 1) : Math.min(3, edge.weight * 0.5 + 0.5);
+					ctx.strokeStyle = isHighlighted ? 'var(--interactive-accent)' : 'rgba(128, 128, 128, 0.3)';
+					ctx.stroke();
+				}
+			}
+
+			// Draw nodes
+			for (const node of nodes) {
+				const radius = Math.max(8, Math.min(25, node.count * 2));
+				const isHovered = hoveredNode === node;
+				const isSelected = selectedNode === node;
+				const isConnected = (hoveredNode && edgeMap.get(hoveredNode.id)?.some(e => e.source === node.id || e.target === node.id)) ||
+					(selectedNode && edgeMap.get(selectedNode.id)?.some(e => e.source === node.id || e.target === node.id));
+
+				ctx.beginPath();
+				ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
+				ctx.fillStyle = isSelected ? 'var(--interactive-accent)' : (isHovered ? 'var(--interactive-accent)' : (isConnected ? 'var(--interactive-accent-hover)' : node.color));
+				ctx.fill();
+
+				if (isHovered || isSelected) {
+					ctx.strokeStyle = 'var(--text-normal)';
+					ctx.lineWidth = 2;
+					ctx.stroke();
+				}
+
+				// Draw label for larger nodes, hovered, selected, or connected
+				if (radius > 12 || isHovered || isSelected || isConnected) {
+					ctx.fillStyle = 'var(--text-normal)';
+					ctx.font = (isHovered || isSelected) ? 'bold 12px sans-serif' : '11px sans-serif';
+					ctx.textAlign = 'center';
+					ctx.textBaseline = 'middle';
+					ctx.fillText(node.label, node.x, node.y + radius + 12);
+				}
+			}
+
+			this.graphAnimationId = requestAnimationFrame(animate);
+		};
+
+		animate();
+	}
+
+	private buildTagCooccurrenceGraph(): { nodes: Array<{ id: string; label: string; count: number; x: number; y: number; vx: number; vy: number; color: string }>; edges: Array<{ source: string; target: string; weight: number }> } {
+		const tagCounts = new Map<string, { count: number; categories: Map<string, number> }>();
+		const cooccurrence = new Map<string, number>();
+
+		// Count tags and track co-occurrences
+		for (const memory of this.memories) {
+			if (!memory.tags || memory.tags.length === 0) continue;
+
+			const normalizedTags = memory.tags.map(t => t.toLowerCase());
+
+			for (const tag of normalizedTags) {
+				if (!tagCounts.has(tag)) {
+					tagCounts.set(tag, { count: 0, categories: new Map() });
+				}
+				const data = tagCounts.get(tag)!;
+				data.count++;
+				const cat = memory.category || 'other';
+				data.categories.set(cat, (data.categories.get(cat) || 0) + 1);
+			}
+
+			// Track co-occurrences (pairs)
+			for (let i = 0; i < normalizedTags.length; i++) {
+				for (let j = i + 1; j < normalizedTags.length; j++) {
+					const key = [normalizedTags[i], normalizedTags[j]].sort().join('|');
+					cooccurrence.set(key, (cooccurrence.get(key) || 0) + 1);
+				}
+			}
+		}
+
+		// Category colors
+		const categoryColors: Record<string, string> = {
+			work: '#6366f1',
+			system: '#8b5cf6',
+			skills: '#ec4899',
+			interests: '#f59e0b',
+			interesting: '#10b981',
+			lifestyle: '#06b6d4',
+			hobbies: '#84cc16',
+			habits: '#f97316',
+			core: '#ef4444',
+			other: '#6b7280',
+			manual: '#a855f7'
+		};
+
+		// Build nodes
+		const nodes = Array.from(tagCounts.entries()).map(([tag, data]) => {
+			// Get dominant category for color
+			let dominantCat = 'other';
+			let maxCount = 0;
+			for (const [cat, count] of data.categories) {
+				if (count > maxCount) {
+					maxCount = count;
+					dominantCat = cat;
+				}
+			}
+			return {
+				id: tag,
+				label: tag,
+				count: data.count,
+				x: 0,
+				y: 0,
+				vx: 0,
+				vy: 0,
+				color: categoryColors[dominantCat] || categoryColors.other
+			};
+		});
+
+		// Build edges
+		const edges = Array.from(cooccurrence.entries()).map(([key, weight]) => {
+			const [source, target] = key.split('|');
+			return { source, target, weight };
+		});
+
+		return { nodes, edges };
 	}
 
 	private renderConversationsTab(container: HTMLElement): void {
