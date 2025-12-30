@@ -26,7 +26,6 @@ export class OmiHubView extends ItemView {
 
 	// View mode state
 	viewMode: 'dashboard' | 'list' | 'kanban' | 'calendar' = 'dashboard';
-	kanbanLayout: 'status' | 'date' = 'status';
 	calendarViewType: 'monthly' | 'weekly' = 'monthly';
 	calendarCurrentDate: Date = new Date();
 	calendarShowCompleted = false;  // Hide completed tasks in calendar by default
@@ -114,7 +113,6 @@ export class OmiHubView extends ItemView {
 		// Load saved hub and view preferences
 		this.activeTab = this.plugin.settings.activeHubTab || 'tasks';
 		this.viewMode = this.plugin.settings.tasksViewMode || 'list';
-		this.kanbanLayout = this.plugin.settings.tasksKanbanLayout || 'status';
 		this.calendarViewType = this.plugin.settings.tasksCalendarType || 'monthly';
 		this.memoriesCategoryFilter = this.plugin.settings.memoriesCategoryFilter || null;
 		this.memoriesViewMode = this.plugin.settings.memoriesViewMode || 'list';
@@ -4590,14 +4588,20 @@ export class OmiHubView extends ItemView {
 		tabs.setAttribute('role', 'tablist');
 		tabs.setAttribute('aria-label', 'Task view modes');
 
-		const modes: Array<{ id: 'dashboard' | 'list' | 'kanban' | 'calendar'; label: string }> = [
+		// Primary tabs (always visible)
+		const primaryModes: Array<{ id: 'dashboard' | 'list'; label: string }> = [
 			{ id: 'dashboard', label: '🎯 Today' },
-			{ id: 'list', label: '☰ List' },
-			{ id: 'kanban', label: '⧉ Kanban' },
+			{ id: 'list', label: '☰ List' }
+		];
+
+		// Secondary views (in dropdown)
+		const moreViews: Array<{ id: 'kanban' | 'calendar'; label: string }> = [
+			{ id: 'kanban', label: '📌 Kanban' },
 			{ id: 'calendar', label: '📅 Calendar' }
 		];
 
-		for (const mode of modes) {
+		// Render primary tabs
+		for (const mode of primaryModes) {
 			const tab = tabs.createEl('button', {
 				text: mode.label,
 				cls: `omi-view-tab ${this.viewMode === mode.id ? 'active' : ''}`
@@ -4607,12 +4611,62 @@ export class OmiHubView extends ItemView {
 			tab.setAttribute('aria-label', `${mode.label} view`);
 			tab.addEventListener('click', async () => {
 				this.viewMode = mode.id;
-				// Save preference
 				this.plugin.settings.tasksViewMode = mode.id;
 				await this.plugin.saveSettings();
 				this.render();
 			});
 		}
+
+		// "More" dropdown for secondary views
+		const isMoreActive = moreViews.some(v => v.id === this.viewMode);
+		const moreContainer = tabs.createDiv('omi-view-more-container');
+
+		const moreBtn = moreContainer.createEl('button', {
+			cls: `omi-view-tab omi-view-more-btn ${isMoreActive ? 'active' : ''}`
+		});
+		moreBtn.innerHTML = isMoreActive
+			? `${moreViews.find(v => v.id === this.viewMode)?.label} ▾`
+			: 'More ▾';
+		moreBtn.setAttribute('aria-haspopup', 'true');
+		moreBtn.setAttribute('aria-expanded', 'false');
+
+		moreBtn.addEventListener('click', (e) => {
+			e.stopPropagation();
+			const existingDropdown = moreContainer.querySelector('.omi-view-more-dropdown');
+			if (existingDropdown) {
+				existingDropdown.remove();
+				moreBtn.setAttribute('aria-expanded', 'false');
+				return;
+			}
+
+			// Create dropdown
+			const dropdown = moreContainer.createDiv('omi-view-more-dropdown');
+			moreBtn.setAttribute('aria-expanded', 'true');
+
+			for (const view of moreViews) {
+				const item = dropdown.createEl('button', {
+					text: view.label,
+					cls: `omi-view-more-item ${this.viewMode === view.id ? 'active' : ''}`
+				});
+				item.addEventListener('click', async () => {
+					this.viewMode = view.id;
+					this.plugin.settings.tasksViewMode = view.id;
+					await this.plugin.saveSettings();
+					dropdown.remove();
+					this.render();
+				});
+			}
+
+			// Close on click outside
+			const closeHandler = (evt: MouseEvent) => {
+				if (!moreContainer.contains(evt.target as Node)) {
+					dropdown.remove();
+					moreBtn.setAttribute('aria-expanded', 'false');
+					document.removeEventListener('click', closeHandler);
+				}
+			};
+			setTimeout(() => document.addEventListener('click', closeHandler), 10);
+		});
 	}
 
 	// ========================================
@@ -4995,47 +5049,18 @@ export class OmiHubView extends ItemView {
 	// ==================== KANBAN VIEW ====================
 
 	private renderKanbanView(container: HTMLElement): void {
-		// Layout toggle (Status vs Date)
-		const layoutToggle = container.createDiv('omi-kanban-layout-toggle');
-		const statusBtn = layoutToggle.createEl('button', {
-			text: '⏳ Status',
-			cls: `omi-layout-toggle-btn ${this.kanbanLayout === 'status' ? 'active' : ''}`
-		});
-		const dateBtn = layoutToggle.createEl('button', {
-			text: '📅 Date',
-			cls: `omi-layout-toggle-btn ${this.kanbanLayout === 'date' ? 'active' : ''}`
-		});
-
-		statusBtn.addEventListener('click', async () => {
-			this.kanbanLayout = 'status';
-			this.plugin.settings.tasksKanbanLayout = 'status';
-			await this.plugin.saveSettings();
-			this.render();
-		});
-		dateBtn.addEventListener('click', async () => {
-			this.kanbanLayout = 'date';
-			this.plugin.settings.tasksKanbanLayout = 'date';
-			await this.plugin.saveSettings();
-			this.render();
-		});
-
 		const board = container.createDiv('omi-kanban-board');
 		const filtered = this.getFilteredTasks();
 
-		// Only show pending tasks by default in Kanban
+		// Only show pending tasks in Kanban
 		const pendingTasks = filtered.filter(t => !t.completed);
 
-		if (this.kanbanLayout === 'status') {
-			this.renderKanbanColumn(board, '⏳ Pending', pendingTasks, 'pending');
-			this.renderKanbanColumn(board, '✅ Completed', filtered.filter(t => t.completed), 'completed');
-		} else {
-			// Date-based layout: Today, Tomorrow, No Deadline, Later
-			const grouped = this.groupTasksByDateColumn(pendingTasks);
-			this.renderKanbanColumn(board, '🌅 Today', grouped.today, 'today');
-			this.renderKanbanColumn(board, '📆 Tomorrow', grouped.tomorrow, 'tomorrow');
-			this.renderKanbanColumn(board, '📋 No Deadline', grouped.noDeadline, 'noDeadline');
-			this.renderKanbanColumn(board, '🗓️ Later', grouped.later, 'later');
-		}
+		// Date-based layout: Today, Tomorrow, No Deadline, Later
+		const grouped = this.groupTasksByDateColumn(pendingTasks);
+		this.renderKanbanColumn(board, '🌅 Today', grouped.today, 'today');
+		this.renderKanbanColumn(board, '📆 Tomorrow', grouped.tomorrow, 'tomorrow');
+		this.renderKanbanColumn(board, '📋 No Deadline', grouped.noDeadline, 'noDeadline');
+		this.renderKanbanColumn(board, '🗓️ Later', grouped.later, 'later');
 	}
 
 	private renderKanbanColumn(board: HTMLElement, title: string, tasks: TaskWithUI[], columnId: string): void {
@@ -5178,24 +5203,13 @@ export class OmiHubView extends ItemView {
 		if (!task?.id) return;
 
 		try {
-			if (this.kanbanLayout === 'status') {
-				// Status-based: update completed status
-				const newCompleted = columnId === 'completed';
-				if (task.completed !== newCompleted) {
-					await this.plugin.api.updateActionItem(task.id, { completed: newCompleted });
-					task.completed = newCompleted;
-					this.render();
-					this.requestBackupSync();
-				}
-			} else {
-				// Date-based: update due date
-				const newDueAt = this.getDateForColumn(columnId);
-				const utcDate = this.localToUTC(newDueAt);
-				await this.plugin.api.updateActionItem(task.id, { due_at: utcDate });
-				task.dueAt = newDueAt;
-				this.render();
-				this.requestBackupSync();
-			}
+			// Date-based: update due date
+			const newDueAt = this.getDateForColumn(columnId);
+			const utcDate = this.localToUTC(newDueAt);
+			await this.plugin.api.updateActionItem(task.id, { due_at: utcDate });
+			task.dueAt = newDueAt;
+			this.render();
+			this.requestBackupSync();
 		} catch (error) {
 			console.error('Error updating task via drag:', error);
 			new Notice('Failed to update task');

@@ -17,7 +17,6 @@ export interface OmiConversationsSettings {
 	tasksViewAutoRefresh: number;  // Auto-refresh interval for tasks view (minutes, 0 = disabled)
 	// Tasks View preferences (persisted)
 	tasksViewMode: 'dashboard' | 'list' | 'kanban' | 'calendar';
-	tasksKanbanLayout: 'status' | 'date';
 	tasksCalendarType: 'monthly' | 'weekly';
 	// Incremental conversation sync tracking
 	lastConversationSyncTimestamp: string | null;

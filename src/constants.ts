@@ -35,7 +35,6 @@ export const DEFAULT_SETTINGS: OmiConversationsSettings = {
 	tasksViewAutoRefresh: 10,  // Auto-refresh every 10 minutes by default
 	// Tasks View preferences defaults
 	tasksViewMode: 'dashboard',
-	tasksKanbanLayout: 'status',
 	tasksCalendarType: 'monthly',
 	// Incremental conversation sync tracking defaults
 	lastConversationSyncTimestamp: null,
