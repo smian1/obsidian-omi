@@ -4372,3 +4372,664 @@ svg.leaflet-image-layer.leaflet-interactive path {
     border-radius: 4px;
     min-width: 60px;
 }
+
+/* ========================================
+   STATS DASHBOARD v2 - TILE SYSTEM
+   ======================================== */
+
+/* Dashboard Container */
+.omi-stats-dashboard {
+    padding: 0;
+}
+
+/* Insights Banner */
+.omi-stats-insights-banner {
+    background: linear-gradient(135deg, var(--omi-purple-primary), var(--omi-purple-accent));
+    border-radius: var(--omi-radius-lg);
+    padding: 16px 20px;
+    margin-bottom: 20px;
+    color: white;
+}
+
+.omi-insights-text {
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.5;
+}
+
+/* Stats Grid Layout */
+.omi-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+}
+
+/* Stats Tile Base */
+.omi-stats-tile {
+    background: var(--background-secondary);
+    border-radius: var(--omi-radius-lg);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.omi-stats-tile--full {
+    grid-column: 1 / -1;
+}
+
+.omi-stats-tile-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.omi-stats-tile-icon {
+    font-size: 16px;
+}
+
+.omi-stats-tile-title {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+}
+
+/* KPI Tiles */
+.omi-stats-kpi-tile {
+    min-height: 120px;
+}
+
+.omi-stats-kpi-value {
+    margin: 4px 0;
+}
+
+.omi-stats-big-number {
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--interactive-accent);
+    line-height: 1.1;
+}
+
+.omi-stats-trend {
+    font-size: 13px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: var(--omi-radius-full);
+    display: inline-block;
+}
+
+.omi-stats-trend.positive {
+    color: var(--omi-status-completed);
+    background: rgba(34, 197, 94, 0.15);
+}
+
+.omi-stats-trend.negative {
+    color: var(--omi-status-overdue);
+    background: rgba(239, 68, 68, 0.15);
+}
+
+.omi-stats-subtitle {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: auto;
+}
+
+/* Sparkline */
+.omi-stats-sparkline {
+    height: 30px;
+    width: 100%;
+    margin: 8px 0;
+}
+
+.omi-stats-sparkline svg {
+    width: 100%;
+    height: 100%;
+}
+
+/* Achievements Tile */
+.omi-stats-achievements-tile {
+    min-height: 120px;
+}
+
+.omi-stats-achievements-progress {
+    margin: 4px 0;
+}
+
+.omi-stats-progress-bar {
+    height: 6px;
+    background: var(--background-modifier-border);
+    border-radius: var(--omi-radius-full);
+    overflow: hidden;
+    margin: 8px 0;
+}
+
+.omi-stats-progress-fill {
+    height: 100%;
+    background: var(--interactive-accent);
+    border-radius: var(--omi-radius-full);
+    transition: width var(--omi-duration-long) var(--omi-easing-standard);
+}
+
+.omi-stats-achievement-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.omi-stats-badge {
+    font-size: 18px;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--omi-radius-md);
+    cursor: default;
+    transition: transform var(--omi-duration-short) ease;
+    position: relative;
+}
+
+.omi-stats-badge.unlocked {
+    background: rgba(139, 92, 246, 0.15);
+}
+
+.omi-stats-badge.locked {
+    opacity: 0.3;
+    filter: grayscale(100%);
+}
+
+.omi-stats-badge.has-progress {
+    opacity: 0.6;
+    filter: grayscale(50%);
+}
+
+.omi-stats-badge:hover {
+    transform: scale(1.15);
+}
+
+/* Time Pattern Heatmap */
+.omi-stats-heatmap-tile {
+    padding: 16px 20px;
+}
+
+.omi-stats-peak-info {
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--text-muted);
+    font-weight: normal;
+}
+
+.omi-stats-hour-day-heatmap {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 12px;
+}
+
+.omi-heatmap-row {
+    display: grid;
+    grid-template-columns: 40px repeat(7, 1fr);
+    gap: 4px;
+    align-items: center;
+}
+
+.omi-heatmap-row.omi-heatmap-header {
+    margin-bottom: 4px;
+}
+
+.omi-heatmap-row.omi-heatmap-header .omi-heatmap-label {
+    font-weight: 600;
+    text-align: center;
+}
+
+.omi-heatmap-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-align: right;
+    padding-right: 8px;
+}
+
+.omi-heatmap-cell {
+    aspect-ratio: 1;
+    border-radius: var(--omi-radius-sm);
+    background: var(--background-modifier-border);
+    transition: all var(--omi-duration-short) ease;
+    min-height: 24px;
+}
+
+.omi-heatmap-cell.clickable {
+    cursor: pointer;
+}
+
+.omi-heatmap-cell.clickable:hover {
+    transform: scale(1.1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.omi-heatmap-cell.omi-heatmap-level-0 {
+    background: var(--background-modifier-border);
+}
+
+.omi-heatmap-cell.omi-heatmap-level-1 {
+    background: rgba(139, 92, 246, 0.25);
+}
+
+.omi-heatmap-cell.omi-heatmap-level-2 {
+    background: rgba(139, 92, 246, 0.45);
+}
+
+.omi-heatmap-cell.omi-heatmap-level-3 {
+    background: rgba(139, 92, 246, 0.7);
+}
+
+.omi-heatmap-cell.omi-heatmap-level-4 {
+    background: var(--interactive-accent);
+}
+
+/* Category Tiles */
+.omi-stats-categories-tile {
+    min-height: 200px;
+}
+
+.omi-stats-category-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.omi-stats-category-tile {
+    background: var(--background-primary);
+    border-radius: var(--omi-radius-md);
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    text-align: center;
+    transition: all var(--omi-duration-short) ease;
+    border: 1px solid transparent;
+}
+
+.omi-stats-category-tile.clickable:hover {
+    border-color: var(--interactive-accent);
+    background: var(--background-modifier-hover);
+}
+
+.omi-category-emoji {
+    font-size: 24px;
+}
+
+.omi-category-name {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-normal);
+    text-transform: capitalize;
+}
+
+.omi-category-duration {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--interactive-accent);
+}
+
+.omi-category-count {
+    font-size: 10px;
+    color: var(--text-muted);
+}
+
+.omi-category-bar {
+    width: 100%;
+    height: 4px;
+    background: var(--background-modifier-border);
+    border-radius: var(--omi-radius-full);
+    margin-top: 4px;
+}
+
+.omi-category-bar-fill {
+    height: 100%;
+    background: var(--interactive-accent);
+    border-radius: var(--omi-radius-full);
+    transition: width var(--omi-duration-long) ease;
+}
+
+/* Duration Distribution */
+.omi-stats-duration-tile {
+    min-height: 200px;
+}
+
+.omi-stats-duration-chart {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.omi-stats-duration-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.omi-duration-label {
+    width: 60px;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.omi-duration-bar-container {
+    flex: 1;
+    height: 16px;
+    background: var(--background-primary);
+    border-radius: var(--omi-radius-sm);
+    overflow: hidden;
+}
+
+.omi-duration-bar {
+    height: 100%;
+    background: var(--interactive-accent);
+    border-radius: var(--omi-radius-sm);
+    transition: width var(--omi-duration-long) ease;
+}
+
+.omi-duration-percentage {
+    width: 40px;
+    font-size: 12px;
+    color: var(--text-muted);
+    text-align: right;
+}
+
+/* Memories Tile */
+.omi-stats-memories-tile {
+    min-height: 200px;
+}
+
+.omi-stats-memory-total {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+}
+
+.omi-stats-unit {
+    font-size: 14px;
+    color: var(--text-muted);
+}
+
+.omi-stats-recent-badge {
+    font-size: 12px;
+    color: var(--omi-status-completed);
+    font-weight: 600;
+}
+
+.omi-stats-memory-categories {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 12px;
+}
+
+.omi-stats-memory-cat-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.omi-memory-cat-label {
+    width: 80px;
+    font-size: 11px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.omi-memory-cat-bar {
+    flex: 1;
+    height: 8px;
+    background: var(--background-primary);
+    border-radius: var(--omi-radius-full);
+    overflow: hidden;
+}
+
+.omi-memory-cat-fill {
+    height: 100%;
+    background: var(--interactive-accent);
+    border-radius: var(--omi-radius-full);
+    transition: width var(--omi-duration-long) ease;
+}
+
+.omi-memory-cat-count {
+    width: 30px;
+    font-size: 11px;
+    color: var(--text-muted);
+    text-align: right;
+}
+
+.omi-stats-memory-tags {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--background-modifier-border);
+}
+
+.omi-tags-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    display: block;
+    margin-bottom: 8px;
+}
+
+.omi-stats-tags-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.omi-stats-tag {
+    font-size: 11px;
+    padding: 4px 8px;
+    background: var(--background-primary);
+    border-radius: var(--omi-radius-full);
+    color: var(--text-muted);
+    transition: all var(--omi-duration-short) ease;
+}
+
+.omi-stats-tag.clickable:hover {
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+}
+
+/* Task Performance Tile */
+.omi-stats-tasks-tile {
+    min-height: 200px;
+}
+
+.omi-stats-completion-rate {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    margin: 8px 0;
+}
+
+.omi-stats-donut {
+    width: 70px;
+    height: 70px;
+}
+
+.omi-donut-text {
+    font-size: 10px;
+    font-weight: 700;
+    fill: var(--text-normal);
+    text-anchor: middle;
+    dominant-baseline: middle;
+}
+
+.omi-rate-label {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.omi-stats-task-funnel {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 12px;
+}
+
+.omi-stats-funnel-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.omi-funnel-label {
+    width: 70px;
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.omi-funnel-bar {
+    flex: 1;
+    height: 10px;
+    background: var(--background-primary);
+    border-radius: var(--omi-radius-sm);
+    overflow: hidden;
+}
+
+.omi-funnel-fill {
+    height: 100%;
+    border-radius: var(--omi-radius-sm);
+    transition: width var(--omi-duration-long) ease;
+}
+
+.omi-funnel-count {
+    width: 35px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-normal);
+    text-align: right;
+}
+
+/* Locations Tile */
+.omi-stats-locations-tile {
+    padding: 16px 20px;
+}
+
+.omi-stats-location-count {
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--text-muted);
+    font-weight: normal;
+}
+
+.omi-stats-location-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 12px 0;
+}
+
+.omi-stats-location-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: var(--background-primary);
+    border-radius: var(--omi-radius-md);
+    flex: 1;
+    min-width: 200px;
+}
+
+.omi-location-address {
+    font-size: 12px;
+    color: var(--text-normal);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 200px;
+}
+
+.omi-location-count {
+    font-size: 11px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+/* Link Buttons */
+.omi-stats-link-btn {
+    padding: 8px 16px;
+    background: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--omi-radius-md);
+    color: var(--text-normal);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all var(--omi-duration-short) ease;
+    margin-top: auto;
+}
+
+.omi-stats-link-btn:hover {
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+    border-color: var(--interactive-accent);
+}
+
+/* Empty States */
+.omi-stats-empty-state {
+    font-size: 13px;
+    color: var(--text-muted);
+    text-align: center;
+    padding: 16px;
+}
+
+.omi-stats-loading {
+    font-size: 13px;
+    color: var(--text-muted);
+    text-align: center;
+    padding: 16px;
+}
+
+/* Mobile Responsive - Stats Dashboard v2 */
+@media (max-width: 900px) {
+    .omi-stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .omi-stats-category-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 600px) {
+    .omi-stats-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .omi-stats-kpi-tile {
+        min-height: auto;
+    }
+
+    .omi-stats-big-number {
+        font-size: 28px;
+    }
+
+    .omi-stats-category-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .omi-stats-hour-day-heatmap {
+        overflow-x: auto;
+    }
+
+    .omi-heatmap-row {
+        min-width: 320px;
+    }
+
+    .omi-stats-location-item {
+        min-width: 100%;
+    }
+}

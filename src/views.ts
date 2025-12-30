@@ -2097,7 +2097,7 @@ export class OmiHubView extends ItemView {
 	// ==================== STATS DASHBOARD ====================
 
 	private renderConversationsStats(container: HTMLElement): void {
-		const statsContainer = container.createDiv('omi-conversations-stats');
+		const statsContainer = container.createDiv('omi-conversations-stats omi-stats-dashboard');
 
 		const conversations = this.plugin.settings.syncedConversations || {};
 		const conversationArray = Object.values(conversations) as SyncedConversationMeta[];
@@ -2110,8 +2110,66 @@ export class OmiHubView extends ItemView {
 			return;
 		}
 
+		// Load stats data (memories and tasks) if not already loaded
+		if (!this.statsDataLoaded && !this.isLoadingStats) {
+			this.loadStatsData();
+		}
+
 		// Time range selector
-		const timeRangeContainer = statsContainer.createDiv('omi-stats-time-range');
+		this.renderStatsTimeRange(statsContainer);
+
+		// Compute all stats data
+		const stats = this.computeStatsData(conversationArray);
+
+		// Insights Banner
+		this.renderInsightsBanner(statsContainer, stats);
+
+		// Main tile grid
+		const grid = statsContainer.createDiv('omi-stats-grid');
+
+		// Row 1: KPI tiles
+		this.renderConversationsKPITile(grid, stats);
+		this.renderTimeRecordedKPITile(grid, stats);
+		this.renderAchievementsTile(grid, stats);
+
+		// Row 2: Time patterns heatmap (full width)
+		this.renderTimePatternHeatmap(grid, stats);
+
+		// Row 3: Categories and Duration Distribution
+		this.renderCategoryTilesGrid(grid, stats);
+		this.renderDurationDistributionTile(grid, stats);
+
+		// Row 4: Memories and Tasks
+		this.renderMemoriesTile(grid, stats);
+		this.renderTaskPerformanceTile(grid, stats);
+
+		// Row 5: Locations (if data exists)
+		if (stats.uniqueLocations > 0) {
+			this.renderLocationsTile(grid, stats);
+		}
+	}
+
+	private async loadStatsData(): Promise<void> {
+		this.isLoadingStats = true;
+		try {
+			// Load memories and tasks in parallel
+			const [memories, tasks] = await Promise.all([
+				this.plugin.api.getAllMemories().catch(() => []),
+				this.plugin.api.getAllActionItems().catch(() => [])
+			]);
+			this.statsMemories = memories;
+			this.statsTasks = tasks;
+			this.statsDataLoaded = true;
+			this.render(); // Re-render with loaded data
+		} catch (error) {
+			console.error('Error loading stats data:', error);
+		} finally {
+			this.isLoadingStats = false;
+		}
+	}
+
+	private renderStatsTimeRange(container: HTMLElement): void {
+		const timeRangeContainer = container.createDiv('omi-stats-time-range');
 		const ranges: { key: 'week' | 'month' | '30days' | 'all'; label: string }[] = [
 			{ key: 'all', label: 'All Time' },
 			{ key: '30days', label: 'Last 30 Days' },
@@ -2129,139 +2187,1038 @@ export class OmiHubView extends ItemView {
 				this.render();
 			});
 		}
+	}
 
-		// Filter conversations based on selected time range
+	private computeStatsData(conversationArray: SyncedConversationMeta[]): StatsData {
 		const now = new Date();
-		let filteredConvs: SyncedConversationMeta[];
-		let rangeLabel: string;
+		let startDate: Date;
+		let endDate = now;
 
+		// Determine time range
 		switch (this.statsTimeRange) {
-			case 'week': {
-				const weekStart = this.getWeekStartDate(now);
-				filteredConvs = conversationArray.filter(c => new Date(c.date + 'T00:00:00') >= weekStart);
-				rangeLabel = 'This Week';
+			case 'week':
+				startDate = this.getWeekStartDate(now);
 				break;
-			}
-			case 'month': {
-				const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-				filteredConvs = conversationArray.filter(c => new Date(c.date + 'T00:00:00') >= monthStart);
-				rangeLabel = 'This Month';
+			case 'month':
+				startDate = new Date(now.getFullYear(), now.getMonth(), 1);
 				break;
-			}
-			case '30days': {
-				const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-				filteredConvs = conversationArray.filter(c => new Date(c.date + 'T00:00:00') >= thirtyDaysAgo);
-				rangeLabel = 'Last 30 Days';
+			case '30days':
+				startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 				break;
-			}
 			case 'all':
 			default:
-				filteredConvs = conversationArray;
-				rangeLabel = 'All Time';
+				startDate = new Date(0);
 		}
 
-		// Top stats cards
-		const topStats = statsContainer.createDiv('omi-stats-top-row');
+		// Filter conversations
+		const filteredConvs = conversationArray.filter(c => {
+			const convDate = new Date(c.date + 'T00:00:00');
+			return convDate >= startDate && convDate <= endDate;
+		});
 
-		// Conversation count
-		const countCard = topStats.createDiv('omi-stats-card');
-		countCard.createEl('div', { text: String(filteredConvs.length), cls: 'omi-stats-value' });
-		countCard.createEl('div', { text: 'conversations', cls: 'omi-stats-label' });
+		// Basic stats
+		const conversationCount = filteredConvs.length;
+		const totalDuration = filteredConvs.reduce((sum, c) => sum + (c.duration || 0), 0);
+		const avgDuration = conversationCount > 0 ? totalDuration / conversationCount : 0;
 
-		// Total time
-		const totalDuration = filteredConvs.reduce((sum: number, c: SyncedConversationMeta) => sum + (c.duration || 0), 0);
-		const timeCard = topStats.createDiv('omi-stats-card');
-		timeCard.createEl('div', { text: this.formatDuration(totalDuration), cls: 'omi-stats-value' });
-		timeCard.createEl('div', { text: 'total time', cls: 'omi-stats-label' });
+		// Compute previous period for comparison
+		const periodLength = endDate.getTime() - startDate.getTime();
+		const prevStart = new Date(startDate.getTime() - periodLength);
+		const prevEnd = new Date(startDate.getTime() - 1);
 
-		// Top category
-		const categoryCount = new Map<string, number>();
-		for (const conv of filteredConvs) {
-			const cat = conv.category || 'other';
-			categoryCount.set(cat, (categoryCount.get(cat) || 0) + 1);
+		const prevConvs = this.statsTimeRange !== 'all' ? conversationArray.filter(c => {
+			const convDate = new Date(c.date + 'T00:00:00');
+			return convDate >= prevStart && convDate <= prevEnd;
+		}) : [];
+
+		const prevPeriodConversations = prevConvs.length;
+		const prevPeriodDuration = prevConvs.reduce((sum, c) => sum + (c.duration || 0), 0);
+
+		const conversationTrend = prevPeriodConversations > 0
+			? ((conversationCount - prevPeriodConversations) / prevPeriodConversations) * 100
+			: 0;
+		const durationTrend = prevPeriodDuration > 0
+			? ((totalDuration - prevPeriodDuration) / prevPeriodDuration) * 100
+			: 0;
+
+		// Weekly data for sparklines (last 12 weeks)
+		const weeklyConversations: number[] = [];
+		const weeklyDuration: number[] = [];
+		for (let i = 11; i >= 0; i--) {
+			const weekEnd = new Date(now.getTime() - i * 7 * 24 * 60 * 60 * 1000);
+			const weekStart = new Date(weekEnd.getTime() - 7 * 24 * 60 * 60 * 1000);
+			const weekConvs = conversationArray.filter(c => {
+				const convDate = new Date(c.date + 'T00:00:00');
+				return convDate >= weekStart && convDate < weekEnd;
+			});
+			weeklyConversations.push(weekConvs.length);
+			weeklyDuration.push(weekConvs.reduce((sum, c) => sum + (c.duration || 0), 0));
 		}
-		let topCategory = 'N/A';
-		let topCategoryCount = 0;
-		for (const [cat, count] of categoryCount) {
-			if (count > topCategoryCount) {
-				topCategory = cat;
-				topCategoryCount = count;
+
+		// Hour x Day heatmap
+		const heatmap = this.computeHourDayHeatmap(filteredConvs);
+		const { peakDay, peakHour } = this.findPeakTime(heatmap);
+
+		// Streak calculation
+		const streak = this.computeStreak(conversationArray);
+
+		// Categories
+		const categories = this.computeCategoryStats(filteredConvs, totalDuration);
+		const topCategory = categories.length > 0 ? categories[0].category : 'N/A';
+
+		// Duration distribution
+		const durationBuckets = this.computeDurationDistribution(filteredConvs);
+
+		// Memory stats
+		const memoryStats = this.computeMemoryStats();
+
+		// Task stats
+		const taskStats = this.computeTaskStats();
+
+		// Location stats
+		const { uniqueLocations, topLocations } = this.computeLocationStats(filteredConvs);
+
+		// Time-based counts for achievements
+		const lateNightCount = filteredConvs.filter(c => {
+			const hour = this.parseTimeToHour(c.time);
+			return hour >= 22 || hour < 4;
+		}).length;
+
+		const earlyMorningCount = filteredConvs.filter(c => {
+			const hour = this.parseTimeToHour(c.time);
+			return hour >= 5 && hour < 8;
+		}).length;
+
+		// Compute achievements
+		const achievements = this.computeAchievements({
+			conversationCount: conversationArray.length, // Use all-time for achievements
+			streak,
+			lateNightCount,
+			earlyMorningCount,
+			uniqueLocations,
+			memoryCount: memoryStats?.total || 0,
+			taskCompletionRate: taskStats?.completionRate || 0
+		});
+
+		return {
+			timeRange: this.statsTimeRange,
+			startDate,
+			endDate,
+			conversationCount,
+			totalDuration,
+			avgDuration,
+			weeklyConversations,
+			weeklyDuration,
+			prevPeriodConversations,
+			prevPeriodDuration,
+			conversationTrend,
+			durationTrend,
+			heatmap,
+			peakDay,
+			peakHour,
+			streak,
+			categories,
+			topCategory,
+			durationBuckets,
+			memoryStats,
+			taskStats,
+			uniqueLocations,
+			topLocations,
+			achievements,
+			lateNightCount,
+			earlyMorningCount
+		};
+	}
+
+	private computeHourDayHeatmap(convs: SyncedConversationMeta[]): HeatmapCell[] {
+		const cells: HeatmapCell[] = [];
+		const data = new Map<string, { count: number; duration: number }>();
+
+		// Initialize all cells
+		for (let day = 0; day < 7; day++) {
+			for (let hour = 0; hour < 24; hour++) {
+				data.set(`${day}-${hour}`, { count: 0, duration: 0 });
 			}
 		}
-		const topCatCard = topStats.createDiv('omi-stats-card');
-		topCatCard.createEl('div', { text: topCategory, cls: 'omi-stats-value omi-stats-category' });
-		topCatCard.createEl('div', { text: 'top category', cls: 'omi-stats-label' });
 
-		// Total tasks
-		const totalTasks = filteredConvs.reduce((sum: number, c: SyncedConversationMeta) => sum + (c.actionItemCount || 0), 0);
-		const tasksCard = topStats.createDiv('omi-stats-card');
-		tasksCard.createEl('div', { text: String(totalTasks), cls: 'omi-stats-value' });
-		tasksCard.createEl('div', { text: 'tasks created', cls: 'omi-stats-label' });
-
-		// Total events
-		const totalEvents = filteredConvs.reduce((sum: number, c: SyncedConversationMeta) => sum + (c.eventCount || 0), 0);
-		const eventsCard = topStats.createDiv('omi-stats-card');
-		eventsCard.createEl('div', { text: String(totalEvents), cls: 'omi-stats-value' });
-		eventsCard.createEl('div', { text: 'events', cls: 'omi-stats-label' });
-
-		// Category breakdown
-		const categorySection = statsContainer.createDiv('omi-stats-section');
-		categorySection.createEl('h4', { text: `Category Breakdown (${rangeLabel})` });
-
-		const categoryDurations = new Map<string, number>();
-		for (const conv of filteredConvs) {
-			const cat = conv.category || 'other';
-			categoryDurations.set(cat, (categoryDurations.get(cat) || 0) + (conv.duration || 0));
+		// Populate with data
+		for (const conv of convs) {
+			const convDate = new Date(conv.startedAt || conv.date + 'T' + this.convertTo24Hour(conv.time));
+			const day = convDate.getDay();
+			const hour = convDate.getHours();
+			const key = `${day}-${hour}`;
+			const cell = data.get(key)!;
+			cell.count++;
+			cell.duration += conv.duration || 0;
 		}
 
-		const sortedCategories = Array.from(categoryDurations.entries())
-			.sort((a, b) => b[1] - a[1]);
+		// Find max for normalization
+		const maxCount = Math.max(...Array.from(data.values()).map(d => d.count), 1);
 
-		for (const [category, duration] of sortedCategories) {
-			const catRow = categorySection.createDiv('omi-stats-category-row');
+		// Convert to array
+		for (let day = 0; day < 7; day++) {
+			for (let hour = 0; hour < 24; hour++) {
+				const cell = data.get(`${day}-${hour}`)!;
+				cells.push({
+					day,
+					hour,
+					count: cell.count,
+					duration: cell.duration,
+					intensity: cell.count / maxCount
+				});
+			}
+		}
 
-			const label = catRow.createDiv('omi-stats-category-label');
-			label.createEl('span', { text: this.getCategoryEmoji(category) });
-			label.createEl('span', { text: category });
+		return cells;
+	}
 
-			const barContainer = catRow.createDiv('omi-stats-bar-container');
-			const bar = barContainer.createDiv('omi-stats-bar');
-			const percentage = totalDuration > 0 ? (duration / totalDuration) * 100 : 0;
-			bar.style.width = `${percentage}%`;
+	private findPeakTime(heatmap: HeatmapCell[]): { peakDay: string; peakHour: string } {
+		const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+		let maxCell = heatmap[0];
 
-			catRow.createEl('span', {
-				text: `${Math.round(percentage)}% (${this.formatDuration(duration)})`,
-				cls: 'omi-stats-percentage'
+		for (const cell of heatmap) {
+			if (cell.count > maxCell.count) {
+				maxCell = cell;
+			}
+		}
+
+		const hourStr = maxCell.hour === 0 ? '12am' :
+			maxCell.hour < 12 ? `${maxCell.hour}am` :
+				maxCell.hour === 12 ? '12pm' :
+					`${maxCell.hour - 12}pm`;
+
+		return {
+			peakDay: dayNames[maxCell.day],
+			peakHour: hourStr
+		};
+	}
+
+	private computeStreak(convs: SyncedConversationMeta[]): number {
+		if (convs.length === 0) return 0;
+
+		// Get unique dates sorted descending
+		const dates = [...new Set(convs.map(c => c.date))].sort().reverse();
+		if (dates.length === 0) return 0;
+
+		const today = this.formatDateOnly(new Date());
+		const yesterday = this.formatDateOnly(new Date(Date.now() - 24 * 60 * 60 * 1000));
+
+		// Start from today or yesterday
+		let streak = 0;
+		let currentDate = dates[0] === today || dates[0] === yesterday ? new Date(dates[0] + 'T00:00:00') : null;
+
+		if (!currentDate) return 0;
+
+		const dateSet = new Set(dates);
+
+		while (dateSet.has(this.formatDateOnly(currentDate))) {
+			streak++;
+			currentDate = new Date(currentDate.getTime() - 24 * 60 * 60 * 1000);
+		}
+
+		return streak;
+	}
+
+	private computeCategoryStats(convs: SyncedConversationMeta[], totalDuration: number): CategoryStat[] {
+		const categoryData = new Map<string, { count: number; duration: number }>();
+
+		for (const conv of convs) {
+			const cat = conv.category || 'other';
+			const data = categoryData.get(cat) || { count: 0, duration: 0 };
+			data.count++;
+			data.duration += conv.duration || 0;
+			categoryData.set(cat, data);
+		}
+
+		return Array.from(categoryData.entries())
+			.map(([category, data]) => ({
+				category,
+				count: data.count,
+				duration: data.duration,
+				percentage: totalDuration > 0 ? (data.duration / totalDuration) * 100 : 0
+			}))
+			.sort((a, b) => b.duration - a.duration);
+	}
+
+	private computeDurationDistribution(convs: SyncedConversationMeta[]): DurationBucket[] {
+		const buckets: DurationBucket[] = [
+			{ label: 'Quick', min: 0, max: 5, count: 0, percentage: 0 },
+			{ label: 'Short', min: 5, max: 15, count: 0, percentage: 0 },
+			{ label: 'Medium', min: 15, max: 30, count: 0, percentage: 0 },
+			{ label: 'Long', min: 30, max: 60, count: 0, percentage: 0 },
+			{ label: 'Extended', min: 60, max: Infinity, count: 0, percentage: 0 }
+		];
+
+		for (const conv of convs) {
+			const duration = conv.duration || 0;
+			for (const bucket of buckets) {
+				if (duration >= bucket.min && duration < bucket.max) {
+					bucket.count++;
+					break;
+				}
+			}
+		}
+
+		const total = convs.length || 1;
+		for (const bucket of buckets) {
+			bucket.percentage = (bucket.count / total) * 100;
+		}
+
+		return buckets;
+	}
+
+	private computeMemoryStats(): MemoryStats | null {
+		if (this.statsMemories.length === 0) return null;
+
+		const byCategory: Record<string, number> = {};
+		const tagCounts: Record<string, number> = {};
+		const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+		let recentCount = 0;
+
+		for (const memory of this.statsMemories) {
+			// Count by category
+			const cat = memory.category || 'other';
+			byCategory[cat] = (byCategory[cat] || 0) + 1;
+
+			// Count tags
+			for (const tag of memory.tags || []) {
+				tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+			}
+
+			// Recent count
+			if (new Date(memory.created_at) >= sevenDaysAgo) {
+				recentCount++;
+			}
+		}
+
+		// Get top tags
+		const topTags = Object.entries(tagCounts)
+			.sort((a, b) => b[1] - a[1])
+			.slice(0, 8)
+			.map(([tag, count]) => ({ tag, count }));
+
+		return {
+			total: this.statsMemories.length,
+			byCategory,
+			topTags,
+			recentCount
+		};
+	}
+
+	private computeTaskStats(): TaskStats | null {
+		if (this.statsTasks.length === 0) return null;
+
+		const now = new Date();
+		let completed = 0;
+		let pending = 0;
+		let overdue = 0;
+		let totalCompletionTime = 0;
+		let completedWithTime = 0;
+
+		for (const task of this.statsTasks) {
+			if (task.completed) {
+				completed++;
+				if (task.created_at && task.completed_at) {
+					const createdAt = new Date(task.created_at);
+					const completedAt = new Date(task.completed_at);
+					totalCompletionTime += (completedAt.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24);
+					completedWithTime++;
+				}
+			} else {
+				pending++;
+				if (task.due_at && new Date(task.due_at) < now) {
+					overdue++;
+				}
+			}
+		}
+
+		return {
+			total: this.statsTasks.length,
+			completed,
+			pending,
+			overdue,
+			completionRate: this.statsTasks.length > 0 ? completed / this.statsTasks.length : 0,
+			avgCompletionDays: completedWithTime > 0 ? totalCompletionTime / completedWithTime : null
+		};
+	}
+
+	private computeLocationStats(convs: SyncedConversationMeta[]): { uniqueLocations: number; topLocations: { address: string; count: number }[] } {
+		const locationCounts = new Map<string, number>();
+
+		for (const conv of convs) {
+			if (conv.geolocation?.address) {
+				const addr = conv.geolocation.address;
+				locationCounts.set(addr, (locationCounts.get(addr) || 0) + 1);
+			}
+		}
+
+		const topLocations = Array.from(locationCounts.entries())
+			.sort((a, b) => b[1] - a[1])
+			.slice(0, 5)
+			.map(([address, count]) => ({ address, count }));
+
+		return {
+			uniqueLocations: locationCounts.size,
+			topLocations
+		};
+	}
+
+	private computeAchievements(data: {
+		conversationCount: number;
+		streak: number;
+		lateNightCount: number;
+		earlyMorningCount: number;
+		uniqueLocations: number;
+		memoryCount: number;
+		taskCompletionRate: number;
+	}): Achievement[] {
+		const achievements: Achievement[] = [
+			{
+				id: 'streak_7',
+				icon: '🔥',
+				title: '7-Day Streak',
+				description: 'Record conversations 7 days in a row',
+				unlocked: data.streak >= 7,
+				threshold: 7,
+				current: data.streak,
+				progress: Math.min(data.streak / 7, 1)
+			},
+			{
+				id: 'streak_30',
+				icon: '⚡',
+				title: '30-Day Streak',
+				description: 'Record conversations 30 days in a row',
+				unlocked: data.streak >= 30,
+				threshold: 30,
+				current: data.streak,
+				progress: Math.min(data.streak / 30, 1)
+			},
+			{
+				id: 'conversations_100',
+				icon: '💬',
+				title: 'Centurion',
+				description: 'Record 100 conversations',
+				unlocked: data.conversationCount >= 100,
+				threshold: 100,
+				current: data.conversationCount,
+				progress: Math.min(data.conversationCount / 100, 1)
+			},
+			{
+				id: 'conversations_500',
+				icon: '🗣️',
+				title: 'Chatterbox',
+				description: 'Record 500 conversations',
+				unlocked: data.conversationCount >= 500,
+				threshold: 500,
+				current: data.conversationCount,
+				progress: Math.min(data.conversationCount / 500, 1)
+			},
+			{
+				id: 'conversations_1000',
+				icon: '🏆',
+				title: 'Conversation Master',
+				description: 'Record 1000 conversations',
+				unlocked: data.conversationCount >= 1000,
+				threshold: 1000,
+				current: data.conversationCount,
+				progress: Math.min(data.conversationCount / 1000, 1)
+			},
+			{
+				id: 'night_owl',
+				icon: '🦉',
+				title: 'Night Owl',
+				description: 'Record 50 late-night conversations (10pm-4am)',
+				unlocked: data.lateNightCount >= 50,
+				threshold: 50,
+				current: data.lateNightCount,
+				progress: Math.min(data.lateNightCount / 50, 1)
+			},
+			{
+				id: 'early_bird',
+				icon: '🐦',
+				title: 'Early Bird',
+				description: 'Record 50 early morning conversations (5-8am)',
+				unlocked: data.earlyMorningCount >= 50,
+				threshold: 50,
+				current: data.earlyMorningCount,
+				progress: Math.min(data.earlyMorningCount / 50, 1)
+			},
+			{
+				id: 'globe_trotter',
+				icon: '🌍',
+				title: 'Globe Trotter',
+				description: 'Record conversations in 10+ locations',
+				unlocked: data.uniqueLocations >= 10,
+				threshold: 10,
+				current: data.uniqueLocations,
+				progress: Math.min(data.uniqueLocations / 10, 1)
+			},
+			{
+				id: 'memory_master',
+				icon: '🧠',
+				title: 'Memory Master',
+				description: 'Build up 100 memories',
+				unlocked: data.memoryCount >= 100,
+				threshold: 100,
+				current: data.memoryCount,
+				progress: Math.min(data.memoryCount / 100, 1)
+			},
+			{
+				id: 'task_crusher',
+				icon: '✅',
+				title: 'Task Crusher',
+				description: 'Achieve 80% task completion rate',
+				unlocked: data.taskCompletionRate >= 0.8,
+				threshold: 80,
+				current: Math.round(data.taskCompletionRate * 100),
+				progress: data.taskCompletionRate / 0.8
+			}
+		];
+
+		return achievements;
+	}
+
+	private parseTimeToHour(timeStr: string): number {
+		const match = timeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+		if (!match) return 0;
+
+		let hour = parseInt(match[1]);
+		const isPM = match[3]?.toUpperCase() === 'PM';
+		const isAM = match[3]?.toUpperCase() === 'AM';
+
+		if (isPM && hour !== 12) hour += 12;
+		if (isAM && hour === 12) hour = 0;
+
+		return hour;
+	}
+
+	private convertTo24Hour(timeStr: string): string {
+		const match = timeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+		if (!match) return '00:00:00';
+
+		let hour = parseInt(match[1]);
+		const minute = match[2];
+		const isPM = match[3]?.toUpperCase() === 'PM';
+		const isAM = match[3]?.toUpperCase() === 'AM';
+
+		if (isPM && hour !== 12) hour += 12;
+		if (isAM && hour === 12) hour = 0;
+
+		return `${hour.toString().padStart(2, '0')}:${minute}:00`;
+	}
+
+	// ==================== STATS TILE RENDERERS ====================
+
+	private renderInsightsBanner(container: HTMLElement, stats: StatsData): void {
+		const banner = container.createDiv('omi-stats-insights-banner');
+
+		// Build insight text
+		const insights: string[] = [];
+
+		// Streak insight
+		if (stats.streak > 0) {
+			insights.push(`🔥 ${stats.streak}-day streak!`);
+		}
+
+		// Conversation trend
+		if (stats.conversationTrend !== 0 && this.statsTimeRange !== 'all') {
+			const direction = stats.conversationTrend > 0 ? 'up' : 'down';
+			const arrow = stats.conversationTrend > 0 ? '↑' : '↓';
+			insights.push(`${arrow} ${Math.abs(Math.round(stats.conversationTrend))}% ${direction} from last period`);
+		}
+
+		// Peak time
+		if (stats.conversationCount > 0) {
+			insights.push(`Peak: ${stats.peakDay} ${stats.peakHour}`);
+		}
+
+		// Unlocked achievements
+		const newAchievements = stats.achievements.filter(a => a.unlocked);
+		if (newAchievements.length > 0) {
+			const latest = newAchievements[newAchievements.length - 1];
+			insights.push(`${latest.icon} ${latest.title} unlocked!`);
+		}
+
+		const text = insights.length > 0
+			? insights.join(' • ')
+			: `${stats.conversationCount} conversations tracked`;
+
+		banner.createEl('span', { text, cls: 'omi-insights-text' });
+	}
+
+	private renderConversationsKPITile(container: HTMLElement, stats: StatsData): void {
+		const tile = container.createDiv('omi-stats-tile omi-stats-kpi-tile');
+
+		const header = tile.createDiv('omi-stats-tile-header');
+		header.createEl('span', { text: '💬', cls: 'omi-stats-tile-icon' });
+		header.createEl('span', { text: 'Conversations', cls: 'omi-stats-tile-title' });
+
+		const value = tile.createDiv('omi-stats-kpi-value');
+		value.createEl('span', { text: stats.conversationCount.toLocaleString(), cls: 'omi-stats-big-number' });
+
+		// Sparkline
+		this.renderSparkline(tile, stats.weeklyConversations, 'var(--omi-accent)');
+
+		// Trend
+		if (stats.conversationTrend !== 0 && this.statsTimeRange !== 'all') {
+			const trendClass = stats.conversationTrend > 0 ? 'positive' : 'negative';
+			const arrow = stats.conversationTrend > 0 ? '↑' : '↓';
+			tile.createEl('span', {
+				text: `${arrow} ${Math.abs(Math.round(stats.conversationTrend))}%`,
+				cls: `omi-stats-trend ${trendClass}`
+			});
+		}
+	}
+
+	private renderTimeRecordedKPITile(container: HTMLElement, stats: StatsData): void {
+		const tile = container.createDiv('omi-stats-tile omi-stats-kpi-tile');
+
+		const header = tile.createDiv('omi-stats-tile-header');
+		header.createEl('span', { text: '⏱️', cls: 'omi-stats-tile-icon' });
+		header.createEl('span', { text: 'Time Recorded', cls: 'omi-stats-tile-title' });
+
+		const value = tile.createDiv('omi-stats-kpi-value');
+		value.createEl('span', { text: this.formatDuration(stats.totalDuration), cls: 'omi-stats-big-number' });
+
+		// Sparkline
+		this.renderSparkline(tile, stats.weeklyDuration, 'var(--omi-accent)');
+
+		// Trend
+		if (stats.durationTrend !== 0 && this.statsTimeRange !== 'all') {
+			const trendClass = stats.durationTrend > 0 ? 'positive' : 'negative';
+			const arrow = stats.durationTrend > 0 ? '↑' : '↓';
+			tile.createEl('span', {
+				text: `${arrow} ${Math.abs(Math.round(stats.durationTrend))}%`,
+				cls: `omi-stats-trend ${trendClass}`
 			});
 		}
 
-		// Daily activity chart
-		const dailySection = statsContainer.createDiv('omi-stats-section');
-		dailySection.createEl('h4', { text: 'Daily Activity' });
+		// Average
+		tile.createEl('span', {
+			text: `Avg: ${Math.round(stats.avgDuration)} min`,
+			cls: 'omi-stats-subtitle'
+		});
+	}
 
-		const dailyChart = dailySection.createDiv('omi-stats-daily-chart');
-		const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+	private renderAchievementsTile(container: HTMLElement, stats: StatsData): void {
+		const tile = container.createDiv('omi-stats-tile omi-stats-achievements-tile');
 
-		// Count conversations per day of week
-		const dayActivity = new Map<number, number>();
-		for (const conv of filteredConvs) {
-			const convDate = new Date(conv.date + 'T00:00:00');
-			const dayOfWeek = convDate.getDay();
-			dayActivity.set(dayOfWeek, (dayActivity.get(dayOfWeek) || 0) + 1);
+		const header = tile.createDiv('omi-stats-tile-header');
+		header.createEl('span', { text: '🏆', cls: 'omi-stats-tile-icon' });
+		header.createEl('span', { text: 'Achievements', cls: 'omi-stats-tile-title' });
+
+		const unlocked = stats.achievements.filter(a => a.unlocked).length;
+		const total = stats.achievements.length;
+
+		const progressText = tile.createDiv('omi-stats-achievements-progress');
+		progressText.createEl('span', { text: `${unlocked}/${total}`, cls: 'omi-stats-big-number' });
+
+		// Progress bar
+		const progressBar = tile.createDiv('omi-stats-progress-bar');
+		const fill = progressBar.createDiv('omi-stats-progress-fill');
+		fill.style.width = `${(unlocked / total) * 100}%`;
+
+		// Show badges
+		const badges = tile.createDiv('omi-stats-achievement-badges');
+		for (const achievement of stats.achievements) {
+			const badge = badges.createEl('span', {
+				text: achievement.icon,
+				cls: `omi-stats-badge ${achievement.unlocked ? 'unlocked' : 'locked'}`,
+				title: `${achievement.title}\n${achievement.description}\n${achievement.unlocked ? 'Unlocked!' : `Progress: ${achievement.current}/${achievement.threshold}`}`
+			});
+
+			// Partial progress ring for locked badges
+			if (!achievement.unlocked && achievement.progress && achievement.progress > 0) {
+				badge.style.setProperty('--progress', `${achievement.progress * 100}%`);
+				badge.addClass('has-progress');
+			}
+		}
+	}
+
+	private renderTimePatternHeatmap(container: HTMLElement, stats: StatsData): void {
+		const tile = container.createDiv('omi-stats-tile omi-stats-tile--full omi-stats-heatmap-tile');
+
+		const header = tile.createDiv('omi-stats-tile-header');
+		header.createEl('span', { text: '📅', cls: 'omi-stats-tile-icon' });
+		header.createEl('span', { text: 'Time Patterns', cls: 'omi-stats-tile-title' });
+
+		const peakInfo = header.createEl('span', {
+			text: `Peak: ${stats.peakDay} ${stats.peakHour}`,
+			cls: 'omi-stats-peak-info'
+		});
+
+		const heatmapGrid = tile.createDiv('omi-stats-hour-day-heatmap');
+
+		// Day labels (column headers)
+		const dayNames = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+		const dayRow = heatmapGrid.createDiv('omi-heatmap-row omi-heatmap-header');
+		for (const day of dayNames) {
+			dayRow.createEl('span', { text: day, cls: 'omi-heatmap-label' });
 		}
 
-		const maxActivity = Math.max(...Array.from(dayActivity.values()), 1);
+		// Hour rows (6am to 11pm, grouped by 3 hours)
+		const hourLabels = ['6am', '9am', '12pm', '3pm', '6pm', '9pm'];
+		const hourRanges = [[6, 7, 8], [9, 10, 11], [12, 13, 14], [15, 16, 17], [18, 19, 20], [21, 22, 23]];
 
-		for (let i = 0; i < 7; i++) {
-			const dayBar = dailyChart.createDiv('omi-stats-day-bar');
-			const count = dayActivity.get(i) || 0;
-			const height = (count / maxActivity) * 100;
+		for (let i = 0; i < hourLabels.length; i++) {
+			const row = heatmapGrid.createDiv('omi-heatmap-row');
+			row.createEl('span', { text: hourLabels[i], cls: 'omi-heatmap-label' });
 
-			const bar = dayBar.createDiv('omi-stats-day-fill');
-			bar.style.height = `${height}%`;
+			// Days 1-7 (Mon-Sun, reordered from Sun=0)
+			const dayOrder = [1, 2, 3, 4, 5, 6, 0]; // Mon to Sun
+			for (const dayIdx of dayOrder) {
+				// Aggregate cells for this time block
+				let count = 0;
+				let duration = 0;
+				let maxIntensity = 0;
 
-			dayBar.createEl('span', { text: dayNames[i], cls: 'omi-stats-day-label' });
+				for (const hour of hourRanges[i]) {
+					const cell = stats.heatmap.find(c => c.day === dayIdx && c.hour === hour);
+					if (cell) {
+						count += cell.count;
+						duration += cell.duration;
+						maxIntensity = Math.max(maxIntensity, cell.intensity);
+					}
+				}
+
+				const cellEl = row.createDiv('omi-heatmap-cell');
+
+				// Set intensity level (0-4)
+				const level = maxIntensity === 0 ? 0 :
+					maxIntensity < 0.25 ? 1 :
+						maxIntensity < 0.5 ? 2 :
+							maxIntensity < 0.75 ? 3 : 4;
+
+				cellEl.addClass(`omi-heatmap-level-${level}`);
+				cellEl.setAttribute('title', `${count} conversations\n${this.formatDuration(duration)}`);
+
+				// Click to filter by this time slot
+				if (count > 0) {
+					cellEl.addClass('clickable');
+					const dayName = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][dayIdx];
+					const hours = hourRanges[i];
+					cellEl.addEventListener('click', () => {
+						new Notice(`${count} conversations on ${dayName}s ${hourLabels[i]}-${i < hourLabels.length - 1 ? hourLabels[i + 1] : '12am'}`);
+					});
+				}
+			}
 		}
+	}
+
+	private renderCategoryTilesGrid(container: HTMLElement, stats: StatsData): void {
+		const tile = container.createDiv('omi-stats-tile omi-stats-categories-tile');
+
+		const header = tile.createDiv('omi-stats-tile-header');
+		header.createEl('span', { text: '🏷️', cls: 'omi-stats-tile-icon' });
+		header.createEl('span', { text: 'Categories', cls: 'omi-stats-tile-title' });
+
+		const grid = tile.createDiv('omi-stats-category-grid');
+
+		// Show top 6 categories
+		const topCategories = stats.categories.slice(0, 6);
+
+		for (const cat of topCategories) {
+			const catTile = grid.createDiv('omi-stats-category-tile clickable');
+			catTile.createEl('span', { text: this.getCategoryEmoji(cat.category), cls: 'omi-category-emoji' });
+			catTile.createEl('span', { text: cat.category, cls: 'omi-category-name' });
+			catTile.createEl('span', { text: this.formatDuration(cat.duration), cls: 'omi-category-duration' });
+			catTile.createEl('span', { text: `${cat.count} conv`, cls: 'omi-category-count' });
+
+			// Mini progress bar
+			const bar = catTile.createDiv('omi-category-bar');
+			const fill = bar.createDiv('omi-category-bar-fill');
+			fill.style.width = `${cat.percentage}%`;
+
+			// Click to filter
+			catTile.addEventListener('click', () => {
+				// TODO: Implement category filter navigation
+				new Notice(`${cat.category}: ${cat.count} conversations, ${this.formatDuration(cat.duration)}`);
+			});
+		}
+	}
+
+	private renderDurationDistributionTile(container: HTMLElement, stats: StatsData): void {
+		const tile = container.createDiv('omi-stats-tile omi-stats-duration-tile');
+
+		const header = tile.createDiv('omi-stats-tile-header');
+		header.createEl('span', { text: '📊', cls: 'omi-stats-tile-icon' });
+		header.createEl('span', { text: 'Duration Distribution', cls: 'omi-stats-tile-title' });
+
+		const chart = tile.createDiv('omi-stats-duration-chart');
+
+		for (const bucket of stats.durationBuckets) {
+			const row = chart.createDiv('omi-stats-duration-row');
+			row.createEl('span', { text: bucket.label, cls: 'omi-duration-label' });
+
+			const barContainer = row.createDiv('omi-duration-bar-container');
+			const bar = barContainer.createDiv('omi-duration-bar');
+			bar.style.width = `${bucket.percentage}%`;
+
+			row.createEl('span', {
+				text: `${Math.round(bucket.percentage)}%`,
+				cls: 'omi-duration-percentage'
+			});
+		}
+
+		// Average duration
+		tile.createEl('div', {
+			text: `Average: ${Math.round(stats.avgDuration)} min`,
+			cls: 'omi-stats-subtitle'
+		});
+	}
+
+	private renderMemoriesTile(container: HTMLElement, stats: StatsData): void {
+		const tile = container.createDiv('omi-stats-tile omi-stats-memories-tile');
+
+		const header = tile.createDiv('omi-stats-tile-header');
+		header.createEl('span', { text: '🧠', cls: 'omi-stats-tile-icon' });
+		header.createEl('span', { text: 'Memories', cls: 'omi-stats-tile-title' });
+
+		if (!stats.memoryStats || stats.memoryStats.total === 0) {
+			if (this.isLoadingStats) {
+				tile.createEl('div', { text: 'Loading...', cls: 'omi-stats-loading' });
+			} else {
+				tile.createEl('div', { text: 'No memories synced', cls: 'omi-stats-empty-state' });
+				const linkBtn = tile.createEl('button', { text: 'Go to Memories', cls: 'omi-stats-link-btn' });
+				linkBtn.addEventListener('click', () => {
+					this.activeTab = 'memories';
+					this.plugin.settings.activeHubTab = 'memories';
+					this.plugin.saveSettings();
+					this.loadMemories();
+					this.render();
+				});
+			}
+			return;
+		}
+
+		const memStats = stats.memoryStats;
+
+		// Total count
+		const total = tile.createDiv('omi-stats-memory-total');
+		total.createEl('span', { text: memStats.total.toLocaleString(), cls: 'omi-stats-big-number' });
+		total.createEl('span', { text: ' memories', cls: 'omi-stats-unit' });
+
+		// Recent indicator
+		if (memStats.recentCount > 0) {
+			tile.createEl('div', {
+				text: `+${memStats.recentCount} this week`,
+				cls: 'omi-stats-recent-badge'
+			});
+		}
+
+		// Category breakdown (top 4)
+		const categories = tile.createDiv('omi-stats-memory-categories');
+		const sortedCats = Object.entries(memStats.byCategory)
+			.sort((a, b) => b[1] - a[1])
+			.slice(0, 4);
+
+		for (const [cat, count] of sortedCats) {
+			const catRow = categories.createDiv('omi-stats-memory-cat-row');
+			const emoji = MEMORY_CATEGORY_EMOJI[cat] || '📌';
+			catRow.createEl('span', { text: `${emoji} ${cat}`, cls: 'omi-memory-cat-label' });
+
+			const bar = catRow.createDiv('omi-memory-cat-bar');
+			const fill = bar.createDiv('omi-memory-cat-fill');
+			fill.style.width = `${(count / memStats.total) * 100}%`;
+
+			catRow.createEl('span', { text: String(count), cls: 'omi-memory-cat-count' });
+		}
+
+		// Top tags
+		if (memStats.topTags.length > 0) {
+			const tagsSection = tile.createDiv('omi-stats-memory-tags');
+			tagsSection.createEl('span', { text: 'Top tags:', cls: 'omi-tags-label' });
+			const tagsList = tagsSection.createDiv('omi-stats-tags-list');
+			for (const { tag, count } of memStats.topTags.slice(0, 6)) {
+				const tagEl = tagsList.createEl('span', {
+					text: `${tag} (${count})`,
+					cls: 'omi-stats-tag clickable'
+				});
+				tagEl.addEventListener('click', () => {
+					// Navigate to memories tab with this tag
+					this.activeTab = 'memories';
+					this.plugin.settings.activeHubTab = 'memories';
+					this.plugin.saveSettings();
+					this.selectedTagForDetails = tag;
+					this.loadMemories();
+					this.render();
+				});
+			}
+		}
+	}
+
+	private renderTaskPerformanceTile(container: HTMLElement, stats: StatsData): void {
+		const tile = container.createDiv('omi-stats-tile omi-stats-tasks-tile');
+
+		const header = tile.createDiv('omi-stats-tile-header');
+		header.createEl('span', { text: '✅', cls: 'omi-stats-tile-icon' });
+		header.createEl('span', { text: 'Task Performance', cls: 'omi-stats-tile-title' });
+
+		if (!stats.taskStats || stats.taskStats.total === 0) {
+			if (this.isLoadingStats) {
+				tile.createEl('div', { text: 'Loading...', cls: 'omi-stats-loading' });
+			} else {
+				tile.createEl('div', { text: 'No tasks synced', cls: 'omi-stats-empty-state' });
+				const linkBtn = tile.createEl('button', { text: 'Go to Tasks', cls: 'omi-stats-link-btn' });
+				linkBtn.addEventListener('click', () => {
+					this.activeTab = 'tasks';
+					this.plugin.settings.activeHubTab = 'tasks';
+					this.plugin.saveSettings();
+					this.loadTasks();
+					this.render();
+				});
+			}
+			return;
+		}
+
+		const taskStats = stats.taskStats;
+
+		// Completion rate donut
+		const rateContainer = tile.createDiv('omi-stats-completion-rate');
+		const rate = Math.round(taskStats.completionRate * 100);
+
+		// SVG donut chart
+		const svgNS = 'http://www.w3.org/2000/svg';
+		const svg = document.createElementNS(svgNS, 'svg');
+		svg.setAttribute('viewBox', '0 0 36 36');
+		svg.setAttribute('class', 'omi-stats-donut');
+
+		// Background circle
+		const bgCircle = document.createElementNS(svgNS, 'circle');
+		bgCircle.setAttribute('cx', '18');
+		bgCircle.setAttribute('cy', '18');
+		bgCircle.setAttribute('r', '15.915');
+		bgCircle.setAttribute('fill', 'none');
+		bgCircle.setAttribute('stroke', 'var(--background-modifier-border)');
+		bgCircle.setAttribute('stroke-width', '3');
+		svg.appendChild(bgCircle);
+
+		// Progress circle
+		const progressCircle = document.createElementNS(svgNS, 'circle');
+		progressCircle.setAttribute('cx', '18');
+		progressCircle.setAttribute('cy', '18');
+		progressCircle.setAttribute('r', '15.915');
+		progressCircle.setAttribute('fill', 'none');
+		progressCircle.setAttribute('stroke', 'var(--omi-status-completed)');
+		progressCircle.setAttribute('stroke-width', '3');
+		progressCircle.setAttribute('stroke-dasharray', `${rate}, 100`);
+		progressCircle.setAttribute('stroke-linecap', 'round');
+		progressCircle.setAttribute('transform', 'rotate(-90 18 18)');
+		svg.appendChild(progressCircle);
+
+		// Center text
+		const text = document.createElementNS(svgNS, 'text');
+		text.setAttribute('x', '18');
+		text.setAttribute('y', '20.5');
+		text.setAttribute('class', 'omi-donut-text');
+		text.textContent = `${rate}%`;
+		svg.appendChild(text);
+
+		rateContainer.appendChild(svg);
+		rateContainer.createEl('span', { text: 'completion', cls: 'omi-rate-label' });
+
+		// Funnel bars
+		const funnel = tile.createDiv('omi-stats-task-funnel');
+
+		const rows = [
+			{ label: 'Created', count: taskStats.total, color: 'var(--text-muted)' },
+			{ label: 'Pending', count: taskStats.pending, color: 'var(--omi-status-pending)' },
+			{ label: 'Completed', count: taskStats.completed, color: 'var(--omi-status-completed)' }
+		];
+
+		if (taskStats.overdue > 0) {
+			rows.splice(2, 0, { label: 'Overdue', count: taskStats.overdue, color: 'var(--omi-status-overdue)' });
+		}
+
+		for (const row of rows) {
+			const rowEl = funnel.createDiv('omi-stats-funnel-row');
+			rowEl.createEl('span', { text: row.label, cls: 'omi-funnel-label' });
+
+			const bar = rowEl.createDiv('omi-funnel-bar');
+			const fill = bar.createDiv('omi-funnel-fill');
+			fill.style.width = `${(row.count / taskStats.total) * 100}%`;
+			fill.style.backgroundColor = row.color;
+
+			rowEl.createEl('span', { text: String(row.count), cls: 'omi-funnel-count' });
+		}
+
+		// Avg completion time
+		if (taskStats.avgCompletionDays !== null) {
+			tile.createEl('div', {
+				text: `Avg completion: ${taskStats.avgCompletionDays.toFixed(1)} days`,
+				cls: 'omi-stats-subtitle'
+			});
+		}
+	}
+
+	private renderLocationsTile(container: HTMLElement, stats: StatsData): void {
+		const tile = container.createDiv('omi-stats-tile omi-stats-tile--full omi-stats-locations-tile');
+
+		const header = tile.createDiv('omi-stats-tile-header');
+		header.createEl('span', { text: '📍', cls: 'omi-stats-tile-icon' });
+		header.createEl('span', { text: 'Locations', cls: 'omi-stats-tile-title' });
+		header.createEl('span', {
+			text: `${stats.uniqueLocations} unique places`,
+			cls: 'omi-stats-location-count'
+		});
+
+		const list = tile.createDiv('omi-stats-location-list');
+
+		for (const loc of stats.topLocations) {
+			const item = list.createDiv('omi-stats-location-item');
+			item.createEl('span', { text: loc.address, cls: 'omi-location-address' });
+			item.createEl('span', { text: `${loc.count} conv`, cls: 'omi-location-count' });
+		}
+
+		// Link to map view
+		const mapBtn = tile.createEl('button', { text: '🗺️ View on Map', cls: 'omi-stats-link-btn' });
+		mapBtn.addEventListener('click', () => {
+			// Switch to map view
+			this.plugin.settings.conversationsViewMode = 'map';
+			this.plugin.saveSettings();
+			this.render();
+		});
+	}
+
+	private renderSparkline(container: HTMLElement, data: number[], color: string): void {
+		if (data.length < 2) return;
+
+		const sparkline = container.createDiv('omi-stats-sparkline');
+
+		const svgNS = 'http://www.w3.org/2000/svg';
+		const svg = document.createElementNS(svgNS, 'svg');
+		svg.setAttribute('viewBox', '0 0 100 30');
+		svg.setAttribute('preserveAspectRatio', 'none');
+
+		const max = Math.max(...data, 1);
+		const min = Math.min(...data, 0);
+		const range = max - min || 1;
+
+		// Build path
+		const points = data.map((val, i) => {
+			const x = (i / (data.length - 1)) * 100;
+			const y = 30 - ((val - min) / range) * 28 - 1;
+			return `${x},${y}`;
+		});
+
+		const path = document.createElementNS(svgNS, 'path');
+		path.setAttribute('d', `M ${points.join(' L ')}`);
+		path.setAttribute('fill', 'none');
+		path.setAttribute('stroke', color);
+		path.setAttribute('stroke-width', '2');
+		path.setAttribute('stroke-linecap', 'round');
+		path.setAttribute('stroke-linejoin', 'round');
+		svg.appendChild(path);
+
+		// Area fill
+		const area = document.createElementNS(svgNS, 'path');
+		area.setAttribute('d', `M 0,30 L ${points.join(' L ')} L 100,30 Z`);
+		area.setAttribute('fill', color);
+		area.setAttribute('fill-opacity', '0.1');
+		svg.appendChild(area);
+
+		sparkline.appendChild(svg);
 	}
 
 	private getCategoryEmoji(category: string): string {
