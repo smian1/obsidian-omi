@@ -822,8 +822,13 @@ export class OmiHubView extends ItemView {
 		legend.createEl('div', { text: 'Tag Graph', cls: 'omi-graph-legend-title' });
 		legend.createEl('div', { text: `${nodes.length} tags`, cls: 'omi-graph-legend-stat' });
 		legend.createEl('div', { text: `${edges.length} connections`, cls: 'omi-graph-legend-stat' });
+		// Density indicator
+		const densityRow = legend.createDiv('omi-graph-legend-density');
+		densityRow.createEl('span', { text: 'Fewer', cls: 'omi-graph-legend-density-label' });
+		const gradient = densityRow.createEl('span', { cls: 'omi-graph-legend-gradient' });
+		gradient.style.background = 'linear-gradient(to right, #C4B5FD, #6D28D9)';
+		densityRow.createEl('span', { text: 'More', cls: 'omi-graph-legend-density-label' });
 		legend.createEl('div', { text: 'Scroll to zoom • Drag to pan', cls: 'omi-graph-legend-hint' });
-		legend.createEl('div', { text: 'Drag tags to rearrange', cls: 'omi-graph-legend-hint' });
 
 		// Track interaction state
 		let hoveredNode: typeof nodes[0] | null = null;
@@ -1152,21 +1157,18 @@ export class OmiHubView extends ItemView {
 				ctx.fillStyle = isSelected ? 'var(--interactive-accent)' : (isHovered || isDragged ? 'var(--interactive-accent)' : (isConnected ? 'var(--interactive-accent-hover)' : node.color));
 				ctx.fill();
 
-				if (isHovered || isSelected || isDragged) {
-					ctx.strokeStyle = 'var(--text-normal)';
-					ctx.lineWidth = 2 / scale;
-					ctx.stroke();
-				}
+				// Add border for better visibility
+				ctx.strokeStyle = isHovered || isSelected || isDragged ? 'var(--text-normal)' : 'rgba(255,255,255,0.3)';
+				ctx.lineWidth = (isHovered || isSelected || isDragged ? 2 : 1) / scale;
+				ctx.stroke();
 
-				// Draw label for larger nodes, hovered, selected, dragged, or connected
-				if (radius > 12 || isHovered || isSelected || isDragged || isConnected) {
-					ctx.fillStyle = 'var(--text-normal)';
-					const fontSize = ((isHovered || isSelected || isDragged) ? 12 : 11) / scale;
-					ctx.font = `${(isHovered || isSelected || isDragged) ? 'bold ' : ''}${fontSize}px sans-serif`;
-					ctx.textAlign = 'center';
-					ctx.textBaseline = 'middle';
-					ctx.fillText(node.label, node.x, node.y + radius + 12 / scale);
-				}
+				// Always show label for all nodes
+				ctx.fillStyle = 'var(--text-normal)';
+				const fontSize = ((isHovered || isSelected || isDragged) ? 11 : 9) / scale;
+				ctx.font = `${(isHovered || isSelected || isDragged) ? 'bold ' : ''}${fontSize}px sans-serif`;
+				ctx.textAlign = 'center';
+				ctx.textBaseline = 'middle';
+				ctx.fillText(node.label, node.x, node.y + radius + 10 / scale);
 			}
 
 			// Restore context
@@ -1215,32 +1217,27 @@ export class OmiHubView extends ItemView {
 			}
 		}
 
-		// Category colors
-		const categoryColors: Record<string, string> = {
-			work: '#6366f1',
-			system: '#8b5cf6',
-			skills: '#ec4899',
-			interests: '#f59e0b',
-			interesting: '#10b981',
-			lifestyle: '#06b6d4',
-			hobbies: '#84cc16',
-			habits: '#f97316',
-			core: '#ef4444',
-			other: '#6b7280',
-			manual: '#a855f7'
+		// Find max count for density scaling
+		let maxTagCount = 1;
+		for (const [, data] of tagCounts) {
+			if (data.count > maxTagCount) maxTagCount = data.count;
+		}
+
+		// Density-based color function (purple gradient: light to dark based on count)
+		const getDensityColor = (count: number): string => {
+			// Normalize count to 0-1 range (using sqrt for better distribution)
+			const normalized = Math.sqrt(count / maxTagCount);
+			// Interpolate from light purple (#C4B5FD) to deep purple (#6D28D9)
+			const lightR = 196, lightG = 181, lightB = 253;
+			const darkR = 109, darkG = 40, darkB = 217;
+			const r = Math.round(lightR + (darkR - lightR) * normalized);
+			const g = Math.round(lightG + (darkG - lightG) * normalized);
+			const b = Math.round(lightB + (darkB - lightB) * normalized);
+			return `rgb(${r}, ${g}, ${b})`;
 		};
 
-		// Build nodes
+		// Build nodes with density-based coloring
 		const nodes = Array.from(tagCounts.entries()).map(([tag, data]) => {
-			// Get dominant category for color
-			let dominantCat = 'other';
-			let maxCount = 0;
-			for (const [cat, count] of data.categories) {
-				if (count > maxCount) {
-					maxCount = count;
-					dominantCat = cat;
-				}
-			}
 			return {
 				id: tag,
 				label: tag,
@@ -1249,7 +1246,7 @@ export class OmiHubView extends ItemView {
 				y: 0,
 				vx: 0,
 				vy: 0,
-				color: categoryColors[dominantCat] || categoryColors.other
+				color: getDensityColor(data.count)
 			};
 		});
 

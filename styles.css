@@ -4326,3 +4326,24 @@ svg.leaflet-image-layer.leaflet-interactive path {
     margin-top: 6px;
     font-style: italic;
 }
+
+.omi-graph-legend-density {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--background-modifier-border);
+}
+
+.omi-graph-legend-density-label {
+    font-size: 9px;
+    color: var(--text-muted);
+}
+
+.omi-graph-legend-gradient {
+    flex: 1;
+    height: 8px;
+    border-radius: 4px;
+    min-width: 60px;
+}
