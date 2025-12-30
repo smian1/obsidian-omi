@@ -3554,14 +3554,30 @@ export class OmiHubView extends ItemView {
 			text: `📍 ${conversationsWithGeo.length} conversations across ${Object.keys(uniqueLocations).length} locations`
 		});
 
-		// Map container element
-		const mapEl = mapContainer.createDiv('omi-map-container');
+		// Map container element - uses flexbox to fill available space
+		const mapEl = mapContainer.createDiv('omi-map-leaflet-container');
 		mapEl.id = 'omi-leaflet-map-' + Date.now(); // Unique ID
-		mapEl.style.height = '500px';
 
 		// Load Leaflet and initialize map
 		this.loadLeaflet().then(() => {
 			this.initializeMap(mapEl, conversationsWithGeo, uniqueLocations);
+
+			// Add resize observer to handle window resizing
+			const resizeObserver = new ResizeObserver(() => {
+				if (this.mapInstance) {
+					this.mapInstance.invalidateSize();
+				}
+			});
+			resizeObserver.observe(mapEl);
+
+			// Store observer for cleanup
+			this.registerEvent(
+				this.app.workspace.on('resize', () => {
+					if (this.mapInstance) {
+						this.mapInstance.invalidateSize();
+					}
+				})
+			);
 		}).catch(err => {
 			console.error('Failed to load Leaflet:', err);
 			mapEl.createEl('p', {
