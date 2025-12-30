@@ -4578,6 +4578,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
     flex-direction: column;
     gap: 4px;
     margin-top: 12px;
+    max-width: 500px;
 }
 
 .omi-stats-hour-day-heatmap .omi-stats-hm-row {
@@ -4605,10 +4606,11 @@ svg.leaflet-image-layer.leaflet-interactive path {
 
 .omi-stats-hm-cell {
     aspect-ratio: 1;
+    width: 100%;
+    max-width: 56px;
     border-radius: var(--omi-radius-sm);
     background: var(--background-modifier-border);
     transition: all var(--omi-duration-short) ease;
-    min-height: 24px;
 }
 
 .omi-stats-hm-cell.clickable {

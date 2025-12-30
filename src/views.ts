@@ -2859,7 +2859,7 @@ export class OmiHubView extends ItemView {
 	}
 
 	private renderTimePatternHeatmap(container: HTMLElement, stats: StatsData): void {
-		const tile = container.createDiv('omi-stats-tile omi-stats-tile--full omi-stats-heatmap-tile');
+		const tile = container.createDiv('omi-stats-tile omi-stats-heatmap-tile');
 
 		const header = tile.createDiv('omi-stats-tile-header');
 		header.createEl('span', { text: '📅', cls: 'omi-stats-tile-icon' });
