@@ -2554,6 +2554,15 @@ export class OmiHubView extends ItemView {
 		if (progress.isCancelled && cancelBtn) {
 			cancelBtn.remove();
 		}
+
+		// Also update conversations count in-place if syncing conversations
+		if (progress.type === 'conversations') {
+			const countEl = container.querySelector('[data-stat-type="conversations-count"]');
+			if (countEl) {
+				const currentCount = Object.keys(this.plugin.settings.syncedConversations || {}).length;
+				countEl.textContent = currentCount.toString();
+			}
+		}
 	}
 
 	private renderSyncLiveBanner(container: HTMLElement): void {
@@ -2668,7 +2677,7 @@ export class OmiHubView extends ItemView {
 
 		if (type === 'conversations') {
 			const count = Object.keys(settings.syncedConversations || {}).length;
-			this.createSyncStatItem(container, count.toString(), 'tracked');
+			this.createSyncStatItem(container, count.toString(), 'tracked', 'conversations-count');
 		} else if (type === 'tasks') {
 			const pending = this.tasks.filter(t => !t.completed).length;
 			const total = this.tasks.length;
@@ -2680,9 +2689,12 @@ export class OmiHubView extends ItemView {
 		}
 	}
 
-	private createSyncStatItem(container: HTMLElement, value: string, label: string): void {
+	private createSyncStatItem(container: HTMLElement, value: string, label: string, dataType?: string): void {
 		const stat = container.createDiv('omi-sync-card__stat');
-		stat.createDiv({ cls: 'omi-sync-card__stat-value', text: value });
+		const valueEl = stat.createDiv({ cls: 'omi-sync-card__stat-value', text: value });
+		if (dataType) {
+			valueEl.setAttribute('data-stat-type', dataType);
+		}
 		stat.createDiv({ cls: 'omi-sync-card__stat-label', text: label });
 	}
 
