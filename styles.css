@@ -7149,6 +7149,83 @@ svg.leaflet-image-layer.leaflet-interactive path {
 }
 
 /* ============================================
+   ADVANCED OPTIONS SECTION
+   ============================================ */
+
+.omi-sync-card__advanced {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--background-modifier-border);
+}
+
+.omi-sync-card__advanced-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    padding: 6px 0;
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 500;
+    user-select: none;
+    transition: color 0.15s ease;
+}
+
+.omi-sync-card__advanced-header:hover {
+    color: var(--text-normal);
+}
+
+.omi-sync-card__advanced-icon {
+    font-size: 10px;
+    transition: transform 0.2s ease;
+}
+
+.omi-sync-card__advanced--open .omi-sync-card__advanced-icon {
+    transform: rotate(90deg);
+}
+
+.omi-sync-card__advanced-content {
+    padding-top: 12px;
+}
+
+.omi-sync-card__resync-day {
+    background: var(--background-primary);
+    border-radius: 8px;
+    padding: 12px;
+    border: 1px solid var(--background-modifier-border);
+}
+
+.omi-sync-card__resync-day-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-normal);
+    margin-bottom: 4px;
+}
+
+.omi-sync-card__resync-day-desc {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+    line-height: 1.4;
+}
+
+.omi-sync-card__resync-day-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.omi-sync-card__resync-date {
+    flex: 1;
+    min-width: 0;
+}
+
+.omi-sync-card__resync-day-row .omi-sync-card__btn {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+/* ============================================
    SYNC LOG / TIMELINE
    ============================================ */
 

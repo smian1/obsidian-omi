@@ -2670,6 +2670,11 @@ export class OmiHubView extends ItemView {
 		// Actions
 		const actions = card.createDiv('omi-sync-card__actions');
 		this.renderSyncCardActions(actions, type, isSyncing);
+
+		// Advanced Options (conversations only)
+		if (type === 'conversations') {
+			this.renderSyncCardAdvanced(card, isSyncing);
+		}
 	}
 
 	private renderSyncCardStats(container: HTMLElement, type: string): void {
@@ -2907,6 +2912,68 @@ export class OmiHubView extends ItemView {
 				});
 			}
 		}
+	}
+
+	/**
+	 * Render collapsible Advanced Options section for Conversations card
+	 * Contains "Resync Single Day" feature
+	 */
+	private renderSyncCardAdvanced(card: HTMLElement, isSyncing: boolean): void {
+		const advancedSection = card.createDiv('omi-sync-card__advanced');
+
+		// Collapsible header
+		const advancedHeader = advancedSection.createDiv('omi-sync-card__advanced-header');
+		const toggleIcon = advancedHeader.createSpan({ cls: 'omi-sync-card__advanced-icon', text: '▶' });
+		advancedHeader.createSpan({ text: 'Advanced Options' });
+
+		// Hidden content (shown on click)
+		const advancedContent = advancedSection.createDiv('omi-sync-card__advanced-content');
+		advancedContent.style.display = 'none';
+
+		// Resync Single Day section
+		const resyncDaySection = advancedContent.createDiv('omi-sync-card__resync-day');
+		resyncDaySection.createDiv({
+			cls: 'omi-sync-card__resync-day-title',
+			text: 'Resync Single Day'
+		});
+		resyncDaySection.createDiv({
+			cls: 'omi-sync-card__resync-day-desc',
+			text: 'Re-fetch conversations for a specific date (useful when Omi device loads historical data)'
+		});
+
+		// Date picker row
+		const dateRow = resyncDaySection.createDiv('omi-sync-card__resync-day-row');
+
+		const dateInput = dateRow.createEl('input', {
+			type: 'date',
+			cls: 'omi-sync-card__date-input omi-sync-card__resync-date'
+		});
+		// Default to today
+		const today = new Date();
+		dateInput.value = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+		const resyncBtn = dateRow.createEl('button', {
+			text: 'Resync Day',
+			cls: 'omi-sync-card__btn omi-sync-card__btn--secondary'
+		});
+		resyncBtn.disabled = isSyncing;
+		resyncBtn.addEventListener('click', async () => {
+			const dateStr = dateInput.value;
+			if (!dateStr) {
+				new Notice('Please select a date');
+				return;
+			}
+			await this.plugin.resyncDay(dateStr);
+			this.render();
+		});
+
+		// Toggle visibility on header click
+		advancedHeader.addEventListener('click', () => {
+			const isHidden = advancedContent.style.display === 'none';
+			advancedContent.style.display = isHidden ? 'block' : 'none';
+			toggleIcon.textContent = isHidden ? '▼' : '▶';
+			advancedSection.toggleClass('omi-sync-card__advanced--open', isHidden);
+		});
 	}
 
 	private renderSyncLogTimeline(container: HTMLElement): void {

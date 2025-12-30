@@ -170,6 +170,71 @@ export class OmiAPI {
 		}
 	}
 
+	/**
+	 * Fetch conversations for a specific local date (YYYY-MM-DD)
+	 * Used for "Resync Single Day" feature
+	 *
+	 * Uses server-side filtering with start_date + end_date for efficiency:
+	 * - start_date is inclusive
+	 * - end_date is exclusive
+	 * So for "2025-04-01", we use start_date=2025-04-01&end_date=2025-04-02
+	 *
+	 * This fetches only that day's conversations in 1-2 API calls instead of 50+
+	 */
+	async getConversationsForDate(
+		localDateStr: string,  // YYYY-MM-DD in user's local timezone
+		onProgress?: (step: string, progress: number) => void
+	): Promise<Conversation[]> {
+		const conversations: Conversation[] = [];
+		let offset = 0;
+		let apiCalls = 0;
+
+		// Calculate the next day for end_date (exclusive)
+		const targetDate = new Date(localDateStr + 'T00:00:00');
+		const nextDay = new Date(targetDate);
+		nextDay.setDate(nextDay.getDate() + 1);
+		const endDateStr = `${nextDay.getFullYear()}-${String(nextDay.getMonth() + 1).padStart(2, '0')}-${String(nextDay.getDate()).padStart(2, '0')}`;
+
+		try {
+			while (true) {
+				apiCalls++;
+				onProgress?.(`Fetching page ${apiCalls} for ${localDateStr}...`, Math.min(80, apiCalls * 20));
+
+				// Use server-side date filtering: start_date (inclusive) to end_date (exclusive)
+				const params = new URLSearchParams({
+					limit: this.batchSize.toString(),
+					offset: offset.toString(),
+					include_transcript: 'true',
+					start_date: localDateStr,  // Inclusive: include this date
+					end_date: endDateStr       // Exclusive: don't include this date
+				});
+
+				const batch = await this.makeRequest(
+					`${this.baseUrl}/v1/dev/user/conversations`,
+					params
+				);
+
+				if (!batch || batch.length === 0) break;
+
+				// Server handles filtering, just add all returned conversations
+				conversations.push(...batch);
+				onProgress?.(`Found ${conversations.length} conversations...`, Math.min(90, apiCalls * 20 + 10));
+
+				// If we got less than the batch size, we've reached the end
+				if (batch.length < this.batchSize) break;
+
+				offset += this.batchSize;
+				await new Promise(resolve => setTimeout(resolve, 500));
+			}
+
+			onProgress?.(`Found ${conversations.length} conversations for ${localDateStr}`, 100);
+			return conversations;
+		} catch (error) {
+			console.error('Error fetching conversations for date:', error);
+			throw error;
+		}
+	}
+
 	private async makeRequest(url: string, params: URLSearchParams): Promise<Conversation[]> {
 		let retries = 0;
 		while (true) {
