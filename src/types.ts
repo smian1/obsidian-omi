@@ -20,7 +20,6 @@ export interface OmiConversationsSettings {
 	tasksCalendarType: 'monthly' | 'weekly';
 	// Incremental conversation sync tracking
 	lastConversationSyncTimestamp: string | null;
-	syncedConversationIds: string[];
 	// Hub view settings
 	activeHubTab: 'tasks' | 'conversations' | 'memories' | 'stats' | 'heatmap' | 'map';
 	syncedConversations: Record<string, SyncedConversationMeta>;
@@ -28,6 +27,11 @@ export interface OmiConversationsSettings {
 	memoriesCategoryFilter: string | null;
 	memoriesViewAutoRefresh: number;  // Auto-refresh interval (minutes, 0 = disabled)
 	memoriesViewMode: 'list' | 'graph';  // View mode: list or tag graph
+	memoriesHubFilePath: string;  // Backup file name (e.g., 'Memories.md')
+	// Daily notes integration
+	enableDailyNotesLink: boolean;  // Toggle daily notes linking
+	dailyNotesFolder: string;  // Path to daily notes folder
+	dailyNotesFormat: string;  // Date format for daily note filenames (e.g., "YYYY-MM-DD")
 	// Gamification settings
 	taskCompletionStreak: number;  // Current streak of days with task completions
 	lastTaskCompletionDate: string | null;  // YYYY-MM-DD of last completion

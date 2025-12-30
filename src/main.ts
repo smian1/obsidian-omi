@@ -3,7 +3,7 @@ import { OmiConversationsSettings, Conversation, SyncedConversationMeta } from '
 import { DEFAULT_SETTINGS, VIEW_TYPE_OMI_HUB } from './constants';
 import { getCategoryEmoji } from './utils';
 import { OmiAPI } from './api';
-import { TasksHubSync } from './services';
+import { TasksHubSync, MemoriesHubSync } from './services';
 import { OmiHubView } from './views';
 import { OmiConversationsSettingTab } from './settings';
 
@@ -11,6 +11,7 @@ export default class OmiConversationsPlugin extends Plugin {
 	settings: OmiConversationsSettings;
 	api: OmiAPI;
 	tasksHubSync: TasksHubSync;
+	memoriesHubSync: MemoriesHubSync;
 	private tasksHubSyncInterval: number | null = null;
 	private conversationSyncInterval: number | null = null;
 
@@ -18,6 +19,7 @@ export default class OmiConversationsPlugin extends Plugin {
 		await this.loadSettings();
 		this.api = new OmiAPI(this.settings.apiKey);
 		this.tasksHubSync = new TasksHubSync(this);
+		this.memoriesHubSync = new MemoriesHubSync(this);
 
 		// Register the Omi Hub view
 		this.registerView(
@@ -54,6 +56,17 @@ export default class OmiConversationsPlugin extends Plugin {
 				} else {
 					new Notice('Tasks Hub is not enabled. Enable it in settings.');
 				}
+			}
+		});
+
+		// Add command for syncing Memories Hub
+		this.addCommand({
+			id: 'sync-memories-hub',
+			name: 'Sync Memories Hub',
+			callback: async () => {
+				new Notice('Syncing Memories Hub...');
+				await this.memoriesHubSync.pullFromAPI();
+				new Notice('Memories Hub synced');
 			}
 		});
 
@@ -161,6 +174,13 @@ export default class OmiConversationsPlugin extends Plugin {
 
 	async loadSettings() {
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+
+		// Migration: remove deprecated syncedConversationIds if it exists
+		const settingsData = this.settings as unknown as Record<string, unknown>;
+		if ('syncedConversationIds' in settingsData) {
+			delete settingsData.syncedConversationIds;
+			await this.saveData(this.settings);
+		}
 	}
 
 	async saveSettings() {
@@ -180,7 +200,7 @@ export default class OmiConversationsPlugin extends Plugin {
 			// If full resync, clear tracking data
 			if (fullResync) {
 				this.settings.lastConversationSyncTimestamp = null;
-				this.settings.syncedConversationIds = [];
+				this.settings.syncedConversations = {};
 				await this.saveSettings();
 			}
 
@@ -200,9 +220,10 @@ export default class OmiConversationsPlugin extends Plugin {
 			}
 
 			// Filter to only new conversations (skip already synced)
+			const syncedIds = new Set(Object.keys(this.settings.syncedConversations));
 			const newConversations = fullResync
 				? allConversations
-				: allConversations.filter(conv => !this.settings.syncedConversationIds.includes(conv.id));
+				: allConversations.filter(conv => !syncedIds.has(conv.id));
 
 			if (newConversations.length === 0) {
 				new Notice('No new conversations to sync');
@@ -226,9 +247,13 @@ export default class OmiConversationsPlugin extends Plugin {
 			}
 
 			// For incremental sync, we need to merge with existing conversations for each date
+			// Track dates that need navigation updates
+			const newDates: string[] = [];
+
 			for (const [dateStr, conversations] of conversationsByDate) {
-				const dateFolderPath = `${folderPath}/${dateStr}`;
+				const dateFolderPath = this.getDateFolderPath(folderPath, dateStr);
 				await this.ensureFolderExists(dateFolderPath);
+				newDates.push(dateStr);
 
 				// For incremental sync, load existing conversations from the date folder
 				// and merge with new ones to create complete files
@@ -244,8 +269,17 @@ export default class OmiConversationsPlugin extends Plugin {
 					allDateConversations = existingConversations;
 				}
 
-				// Create index file with links
-				await this.createIndexFile(dateFolderPath, dateStr, allDateConversations);
+				// Get prev/next dates for navigation
+				const allDates = this.getAllSyncedDates();
+				// Include dates being synced now
+				const allDatesSet = new Set([...allDates, ...Array.from(conversationsByDate.keys())]);
+				const sortedAllDates = Array.from(allDatesSet).sort();
+				const dateIndex = sortedAllDates.indexOf(dateStr);
+				const prevDate = dateIndex > 0 ? sortedAllDates[dateIndex - 1] : null;
+				const nextDate = dateIndex < sortedAllDates.length - 1 ? sortedAllDates[dateIndex + 1] : null;
+
+				// Create index file with links and navigation
+				await this.createIndexFile(dateFolderPath, dateStr, allDateConversations, prevDate, nextDate);
 
 				// Create separate files for each section (if enabled)
 				if (this.settings.includeOverview) {
@@ -262,18 +296,15 @@ export default class OmiConversationsPlugin extends Plugin {
 				}
 			}
 
+			// Update adjacent days' navigation links (they now have new prev/next)
+			if (!fullResync && newDates.length > 0) {
+				await this.updateAdjacentDayNavigation(folderPath, newDates, allConversations);
+			}
+
 			// Update tracking after successful sync
-			const newIds = newConversations.map(c => c.id);
-			this.settings.syncedConversationIds = [
-				...this.settings.syncedConversationIds,
-				...newIds
-			];
 			this.settings.lastConversationSyncTimestamp = new Date().toISOString();
 
-			// Store conversation metadata for Hub display
-			if (fullResync) {
-				this.settings.syncedConversations = {};
-			}
+			// Store conversation metadata for Hub display (also serves as sync tracking)
 			for (const conv of newConversations) {
 				const localDate = new Date(conv.created_at);
 				const year = localDate.getFullYear();
@@ -316,6 +347,14 @@ export default class OmiConversationsPlugin extends Plugin {
 
 			await this.saveSettings();
 
+			// Also sync memories backup and regenerate master index
+			await this.memoriesHubSync.pullFromAPI();
+			await this.generateMasterIndex();
+
+			// Update daily notes with links to Omi conversations
+			const syncedDates = Array.from(conversationsByDate.keys());
+			await this.updateDailyNotes(syncedDates);
+
 			const syncType = fullResync ? '' : 'new ';
 			new Notice(`Synced ${newConversations.length} ${syncType}conversations across ${conversationsByDate.size} days`);
 		} catch (error) {
@@ -325,9 +364,352 @@ export default class OmiConversationsPlugin extends Plugin {
 	}
 
 	private async ensureFolderExists(path: string) {
-		const folder = this.app.vault.getFolderByPath(path);
-		if (!folder) {
-			await this.app.vault.createFolder(path);
+		// Handle nested folder creation by creating each level
+		const parts = path.split('/').filter(p => p.length > 0);
+		let currentPath = '';
+		for (const part of parts) {
+			currentPath = currentPath ? `${currentPath}/${part}` : part;
+			const folder = this.app.vault.getFolderByPath(currentPath);
+			if (!folder) {
+				await this.app.vault.createFolder(currentPath);
+			}
+		}
+	}
+
+	// Convert YYYY-MM-DD to YYYY/MM/DD folder path
+	private getDateFolderPath(basePath: string, dateStr: string): string {
+		const [year, month, day] = dateStr.split('-');
+		return `${basePath}/${year}/${month}/${day}`;
+	}
+
+	// Format a string as an Obsidian tag with omi/ prefix
+	private formatOmiTag(value: string): string {
+		// Convert to lowercase, replace spaces with hyphens, remove special chars
+		return 'omi/' + value.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9\-\/]/g, '');
+	}
+
+	// Generate YAML frontmatter for a day's conversations
+	private generateFrontmatter(dateStr: string, conversations: Conversation[]): string {
+		// Aggregate stats
+		const totalDuration = conversations.reduce((sum, conv) => {
+			const start = new Date(conv.started_at).getTime();
+			const end = new Date(conv.finished_at).getTime();
+			return sum + Math.round((end - start) / 60000);
+		}, 0);
+
+		const totalActionItems = conversations.reduce((sum, conv) =>
+			sum + (conv.structured?.action_items?.length || 0), 0);
+
+		const totalEvents = conversations.reduce((sum, conv) =>
+			sum + (conv.structured?.events?.length || 0), 0);
+
+		// Get primary category (most common)
+		const categories = conversations.map(c => c.structured?.category || 'other');
+		const categoryCounts = categories.reduce((acc, cat) => {
+			acc[cat] = (acc[cat] || 0) + 1;
+			return acc;
+		}, {} as Record<string, number>);
+		const primaryCategory = Object.entries(categoryCounts)
+			.sort((a, b) => b[1] - a[1])[0]?.[0] || 'other';
+
+		// Get unique locations
+		const locations = conversations
+			.filter(c => c.geolocation?.address)
+			.map(c => c.geolocation!.address!);
+		const uniqueLocations = [...new Set(locations)];
+		const primaryLocation = uniqueLocations[0] || null;
+
+		// Build tags array
+		const tags: string[] = [];
+		// Add category tags
+		const uniqueCategories = [...new Set(categories)];
+		for (const cat of uniqueCategories) {
+			tags.push(this.formatOmiTag(cat));
+		}
+		// Add location tags (simplified to city level)
+		for (const loc of uniqueLocations.slice(0, 3)) {
+			const city = this.extractCity(loc);
+			if (city) {
+				tags.push(this.formatOmiTag(`location/${city}`));
+			}
+		}
+
+		// Build frontmatter
+		const lines: string[] = ['---'];
+		lines.push(`date: ${dateStr}`);
+		lines.push(`conversations: ${conversations.length}`);
+		lines.push(`duration: ${totalDuration}`);
+		lines.push(`category: ${primaryCategory}`);
+		if (primaryLocation) {
+			lines.push(`location: "${primaryLocation}"`);
+		}
+		lines.push(`action_items: ${totalActionItems}`);
+		lines.push(`events: ${totalEvents}`);
+		if (tags.length > 0) {
+			lines.push('tags:');
+			for (const tag of tags) {
+				lines.push(`  - ${tag}`);
+			}
+		}
+		lines.push('---');
+		lines.push('');
+
+		return lines.join('\n');
+	}
+
+	// Extract city from address string
+	private extractCity(address: string): string | null {
+		const parts = address.split(',').map(p => p.trim());
+		// Usually city is second-to-last or third-to-last part
+		if (parts.length >= 2) {
+			// Return the first meaningful part (usually city name)
+			return parts[0].toLowerCase().replace(/\s+/g, '-');
+		}
+		return null;
+	}
+
+	// Get all synced dates sorted chronologically
+	private getAllSyncedDates(): string[] {
+		const dates = new Set<string>();
+		for (const meta of Object.values(this.settings.syncedConversations)) {
+			dates.add(meta.date);
+		}
+		return Array.from(dates).sort();
+	}
+
+	// Generate master index file with all conversations grouped
+	private async generateMasterIndex(): Promise<void> {
+		const folderPath = normalizePath(this.settings.folderPath);
+		const conversations = Object.values(this.settings.syncedConversations);
+
+		if (conversations.length === 0) {
+			return;
+		}
+
+		const content: string[] = [];
+		content.push('# Omi Conversations Index');
+		content.push('');
+		content.push(`> ${conversations.length} conversations | Last updated: ${new Date().toLocaleString()}`);
+		content.push('');
+
+		// Quick Stats
+		const totalDuration = conversations.reduce((sum, c) => sum + (c.duration || 0), 0);
+		const hours = Math.floor(totalDuration / 60);
+		const mins = totalDuration % 60;
+		const uniqueDates = new Set(conversations.map(c => c.date)).size;
+
+		content.push('## Quick Stats');
+		content.push(`- **Total Conversations:** ${conversations.length}`);
+		content.push(`- **Time Recorded:** ${hours}h ${mins}m`);
+		content.push(`- **Days with Conversations:** ${uniqueDates}`);
+		content.push('');
+
+		// By Category
+		content.push('## By Category');
+		const byCategory = this.groupConversationsByCategory(conversations);
+		for (const [category, convs] of Object.entries(byCategory)) {
+			const emoji = getCategoryEmoji(category);
+			content.push(`### ${emoji} ${this.capitalizeFirst(category)} (${convs.length})`);
+			// Show first 10
+			for (const conv of convs.slice(0, 10)) {
+				const convPath = this.getDateFolderPath(folderPath, conv.date);
+				content.push(`- [[${convPath}/${conv.date}|${conv.date}]] - ${conv.emoji} ${conv.title}`);
+			}
+			if (convs.length > 10) {
+				content.push(`- *...and ${convs.length - 10} more*`);
+			}
+			content.push('');
+		}
+
+		// By Location
+		const withLocation = conversations.filter(c => c.geolocation?.address);
+		if (withLocation.length > 0) {
+			content.push('## By Location');
+			const byLocation = this.groupConversationsByLocation(withLocation);
+			const topLocations = Object.entries(byLocation)
+				.sort((a, b) => b[1].length - a[1].length)
+				.slice(0, 10);
+
+			for (const [location, convs] of topLocations) {
+				content.push(`### 📍 ${location} (${convs.length})`);
+				for (const conv of convs.slice(0, 5)) {
+					const convPath = this.getDateFolderPath(folderPath, conv.date);
+					content.push(`- [[${convPath}/${conv.date}|${conv.date}]] - ${conv.emoji} ${conv.title}`);
+				}
+				if (convs.length > 5) {
+					content.push(`- *...and ${convs.length - 5} more*`);
+				}
+				content.push('');
+			}
+		}
+
+		// Timeline (grouped by month)
+		content.push('## Timeline');
+		const byMonth = this.groupConversationsByMonth(conversations);
+		for (const [monthKey, convs] of Object.entries(byMonth)) {
+			content.push(`### ${monthKey}`);
+			for (const conv of convs) {
+				const convPath = this.getDateFolderPath(folderPath, conv.date);
+				content.push(`- [[${convPath}/${conv.date}|${conv.date} ${conv.time}]] - ${conv.emoji} ${conv.title}`);
+			}
+			content.push('');
+		}
+
+		const filePath = `${folderPath}/_omi-index.md`;
+		await this.writeFile(filePath, content.join('\n'));
+	}
+
+	private groupConversationsByCategory(convs: SyncedConversationMeta[]): Record<string, SyncedConversationMeta[]> {
+		const groups: Record<string, SyncedConversationMeta[]> = {};
+		for (const conv of convs) {
+			const cat = conv.category || 'other';
+			if (!groups[cat]) groups[cat] = [];
+			groups[cat].push(conv);
+		}
+		// Sort each group by date descending
+		for (const cat of Object.keys(groups)) {
+			groups[cat].sort((a, b) => b.date.localeCompare(a.date));
+		}
+		return groups;
+	}
+
+	private groupConversationsByLocation(convs: SyncedConversationMeta[]): Record<string, SyncedConversationMeta[]> {
+		const groups: Record<string, SyncedConversationMeta[]> = {};
+		for (const conv of convs) {
+			const address = conv.geolocation?.address;
+			if (!address) continue;
+			// Simplify address to city level
+			const simplified = this.simplifyAddress(address);
+			if (!groups[simplified]) groups[simplified] = [];
+			groups[simplified].push(conv);
+		}
+		return groups;
+	}
+
+	private simplifyAddress(address: string): string {
+		const parts = address.split(',').map(p => p.trim());
+		// Take last 2-3 parts for city/state/country
+		if (parts.length >= 3) {
+			return `${parts[parts.length - 3]}, ${parts[parts.length - 2]}`;
+		} else if (parts.length >= 2) {
+			return `${parts[parts.length - 2]}, ${parts[parts.length - 1]}`;
+		}
+		return address;
+	}
+
+	private groupConversationsByMonth(convs: SyncedConversationMeta[]): Record<string, SyncedConversationMeta[]> {
+		const groups: Record<string, SyncedConversationMeta[]> = {};
+		// Sort by date descending first
+		const sorted = [...convs].sort((a, b) => b.date.localeCompare(a.date));
+		for (const conv of sorted) {
+			const [year, month] = conv.date.split('-');
+			const monthName = new Date(parseInt(year), parseInt(month) - 1).toLocaleString('default', { month: 'long' });
+			const key = `${monthName} ${year}`;
+			if (!groups[key]) groups[key] = [];
+			groups[key].push(conv);
+		}
+		return groups;
+	}
+
+	private capitalizeFirst(str: string): string {
+		return str.charAt(0).toUpperCase() + str.slice(1);
+	}
+
+	// Format date string according to daily notes format setting
+	private formatDateForDailyNote(dateStr: string): string {
+		const [year, month, day] = dateStr.split('-');
+		// Simple format replacement - supports common patterns
+		return this.settings.dailyNotesFormat
+			.replace('YYYY', year)
+			.replace('MM', month)
+			.replace('DD', day)
+			.replace('M', String(parseInt(month)))
+			.replace('D', String(parseInt(day)));
+	}
+
+	// Update daily notes with links to Omi conversations
+	private async updateDailyNotes(dates: string[]): Promise<void> {
+		if (!this.settings.enableDailyNotesLink) {
+			return;
+		}
+
+		for (const dateStr of dates) {
+			const dailyNoteFilename = this.formatDateForDailyNote(dateStr);
+			const dailyNotePath = this.settings.dailyNotesFolder
+				? normalizePath(`${this.settings.dailyNotesFolder}/${dailyNoteFilename}.md`)
+				: normalizePath(`${dailyNoteFilename}.md`);
+
+			const existingFile = this.app.vault.getFileByPath(dailyNotePath);
+			if (!existingFile) {
+				// Daily note doesn't exist for this date - skip
+				continue;
+			}
+
+			// Read existing content
+			const content = await this.app.vault.read(existingFile);
+
+			// Check if Omi section already exists
+			const omiSectionMarker = '## Omi Conversations';
+			if (content.includes(omiSectionMarker)) {
+				// Already has Omi section - update it
+				const omiConvPath = this.getDateFolderPath(this.settings.folderPath, dateStr);
+				const newSection = `${omiSectionMarker}\nSee [[${omiConvPath}/${dateStr}|today's conversations]]`;
+
+				// Replace existing section (up to next ## or end of file)
+				const regex = new RegExp(`${omiSectionMarker}[\\s\\S]*?(?=\\n## |$)`, 'g');
+				const updatedContent = content.replace(regex, newSection + '\n');
+				await this.app.vault.modify(existingFile, updatedContent);
+			} else {
+				// Add new Omi section at the end
+				const omiConvPath = this.getDateFolderPath(this.settings.folderPath, dateStr);
+				const omiSection = `\n\n${omiSectionMarker}\nSee [[${omiConvPath}/${dateStr}|today's conversations]]`;
+				await this.app.vault.modify(existingFile, content + omiSection);
+			}
+		}
+	}
+
+	// Update navigation links for days adjacent to newly synced dates
+	private async updateAdjacentDayNavigation(folderPath: string, newDates: string[], allConversations: Conversation[]) {
+		const allDates = this.getAllSyncedDates();
+		const adjacentDatesToUpdate = new Set<string>();
+
+		for (const dateStr of newDates) {
+			const idx = allDates.indexOf(dateStr);
+			// Previous day needs its "next" link updated
+			if (idx > 0) {
+				adjacentDatesToUpdate.add(allDates[idx - 1]);
+			}
+			// Next day needs its "prev" link updated
+			if (idx < allDates.length - 1) {
+				adjacentDatesToUpdate.add(allDates[idx + 1]);
+			}
+		}
+
+		// Remove dates that were just synced (they're already updated)
+		for (const d of newDates) {
+			adjacentDatesToUpdate.delete(d);
+		}
+
+		// Update each adjacent day's index file
+		for (const dateStr of adjacentDatesToUpdate) {
+			const dateFolderPath = this.getDateFolderPath(folderPath, dateStr);
+
+			// Get conversations for this date
+			const dateConversations = allConversations.filter(conv => {
+				const convDate = new Date(conv.created_at);
+				const convYear = convDate.getFullYear();
+				const convMonth = String(convDate.getMonth() + 1).padStart(2, '0');
+				const convDay = String(convDate.getDate()).padStart(2, '0');
+				return `${convYear}-${convMonth}-${convDay}` === dateStr;
+			});
+
+			if (dateConversations.length > 0) {
+				const idx = allDates.indexOf(dateStr);
+				const prevDate = idx > 0 ? allDates[idx - 1] : null;
+				const nextDate = idx < allDates.length - 1 ? allDates[idx + 1] : null;
+
+				await this.createIndexFile(dateFolderPath, dateStr, dateConversations, prevDate, nextDate);
+			}
 		}
 	}
 
@@ -341,11 +723,40 @@ export default class OmiConversationsPlugin extends Plugin {
 		}
 	}
 
-	private async createIndexFile(folderPath: string, dateStr: string, conversations: Conversation[]) {
+	private async createIndexFile(folderPath: string, dateStr: string, conversations: Conversation[], prevDate: string | null = null, nextDate: string | null = null) {
 		const content: string[] = [];
+
+		// Add YAML frontmatter
+		content.push(this.generateFrontmatter(dateStr, conversations));
+
+		// Add prev/next navigation
+		if (prevDate || nextDate) {
+			const navParts: string[] = [];
+			if (prevDate) {
+				const prevPath = this.getDateFolderPath(this.settings.folderPath, prevDate);
+				navParts.push(`[[${prevPath}/${prevDate}|← ${prevDate}]]`);
+			}
+			navParts.push(`**${dateStr}**`);
+			if (nextDate) {
+				const nextPath = this.getDateFolderPath(this.settings.folderPath, nextDate);
+				navParts.push(`[[${nextPath}/${nextDate}|${nextDate} →]]`);
+			}
+			content.push(navParts.join(' | '));
+			content.push('');
+			content.push('---');
+			content.push('');
+		}
+
 		content.push(`# ${dateStr} - Conversations`);
 		content.push('');
 		content.push(`**Total Conversations:** ${conversations.length}`);
+
+		// Add location summary if any conversations have location
+		const locationsWithAddress = conversations.filter(c => c.geolocation?.address);
+		if (locationsWithAddress.length > 0) {
+			const uniqueLocations = [...new Set(locationsWithAddress.map(c => c.geolocation!.address!))];
+			content.push(`**Locations:** ${uniqueLocations.join(', ')}`);
+		}
 		content.push('');
 
 		// Add links to sections
@@ -407,6 +818,11 @@ export default class OmiConversationsPlugin extends Plugin {
 			// Add clean heading with conversation ID for reliable matching
 			content.push(`#### ${time} - ${emoji} ${title}`);
 			content.push(`<!-- conv_id: ${conv.id} -->`);
+
+			// Add location if available
+			if (conv.geolocation?.address) {
+				content.push(`📍 *${conv.geolocation.address}*`);
+			}
 
 			// Add transcript link on separate line if enabled
 			if (this.settings.includeTranscript) {

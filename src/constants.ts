@@ -38,7 +38,6 @@ export const DEFAULT_SETTINGS: OmiConversationsSettings = {
 	tasksCalendarType: 'monthly',
 	// Incremental conversation sync tracking defaults
 	lastConversationSyncTimestamp: null,
-	syncedConversationIds: [],
 	// Hub view settings
 	activeHubTab: 'tasks',
 	syncedConversations: {},
@@ -46,6 +45,11 @@ export const DEFAULT_SETTINGS: OmiConversationsSettings = {
 	memoriesCategoryFilter: null,
 	memoriesViewAutoRefresh: 10,  // Auto-refresh every 10 minutes by default
 	memoriesViewMode: 'list',  // Default to list view
+	memoriesHubFilePath: 'Memories.md',  // Backup file name
+	// Daily notes integration
+	enableDailyNotesLink: false,  // Disabled by default
+	dailyNotesFolder: '',  // Empty = root of vault
+	dailyNotesFormat: 'YYYY-MM-DD',  // Default format
 	// Gamification settings
 	taskCompletionStreak: 0,
 	lastTaskCompletionDate: null,

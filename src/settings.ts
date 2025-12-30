@@ -148,8 +148,9 @@ export class OmiConversationsSettingTab extends PluginSettingTab {
 				}));
 
 		// Show sync status and reset button
+		const syncedCount = Object.keys(this.plugin.settings.syncedConversations).length;
 		const syncStatusDesc = this.plugin.settings.lastConversationSyncTimestamp
-			? `Last synced: ${new Date(this.plugin.settings.lastConversationSyncTimestamp).toLocaleString()}. ${this.plugin.settings.syncedConversationIds.length} conversations tracked.`
+			? `Last synced: ${new Date(this.plugin.settings.lastConversationSyncTimestamp).toLocaleString()}. ${syncedCount} conversations tracked.`
 			: 'No sync history yet. Run a sync to start tracking.';
 
 		new Setting(containerEl)
@@ -160,7 +161,7 @@ export class OmiConversationsSettingTab extends PluginSettingTab {
 				.setTooltip('Clear sync history to force a full resync next time')
 				.onClick(async () => {
 					this.plugin.settings.lastConversationSyncTimestamp = null;
-					this.plugin.settings.syncedConversationIds = [];
+					this.plugin.settings.syncedConversations = {};
 					await this.plugin.saveSettings();
 					new Notice('Sync history cleared. Next sync will fetch all conversations.');
 					// Refresh the settings display
@@ -210,6 +211,50 @@ export class OmiConversationsSettingTab extends PluginSettingTab {
 				.setValue(this.plugin.settings.includeTranscript)
 				.onChange(async (value) => {
 					this.plugin.settings.includeTranscript = value;
+					await this.plugin.saveSettings();
+				}));
+
+		// ============================================
+		// DAILY NOTES INTEGRATION
+		// ============================================
+		new Setting(containerEl)
+			.setName('Daily Notes')
+			.setHeading();
+
+		containerEl.createEl('p', {
+			text: 'Automatically add links to Omi conversations in your daily notes.',
+			cls: 'setting-item-description'
+		});
+
+		new Setting(containerEl)
+			.setName('Enable daily notes linking')
+			.setDesc('Add "Omi Conversations" section to daily notes when syncing')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.enableDailyNotesLink)
+				.onChange(async (value) => {
+					this.plugin.settings.enableDailyNotesLink = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Daily notes folder')
+			.setDesc('Path to your daily notes folder (leave empty for vault root)')
+			.addText(text => text
+				.setPlaceholder('Daily Notes')
+				.setValue(this.plugin.settings.dailyNotesFolder)
+				.onChange(async (value) => {
+					this.plugin.settings.dailyNotesFolder = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Daily notes format')
+			.setDesc('Filename format for daily notes (e.g., YYYY-MM-DD)')
+			.addText(text => text
+				.setPlaceholder('YYYY-MM-DD')
+				.setValue(this.plugin.settings.dailyNotesFormat)
+				.onChange(async (value) => {
+					this.plugin.settings.dailyNotesFormat = value;
 					await this.plugin.saveSettings();
 				}));
 

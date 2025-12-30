@@ -1954,6 +1954,12 @@ export class OmiHubView extends ItemView {
 		}
 	}
 
+	// Convert YYYY-MM-DD to YYYY/MM/DD folder path
+	private getDateFolderPath(basePath: string, dateStr: string): string {
+		const [year, month, day] = dateStr.split('-');
+		return `${basePath}/${year}/${month}/${day}`;
+	}
+
 	private async loadConversationDetails(convId: string): Promise<void> {
 		const conv = this.plugin.settings.syncedConversations[convId];
 		if (!conv) return;
@@ -1963,7 +1969,7 @@ export class OmiHubView extends ItemView {
 
 		try {
 			const folderPath = this.plugin.settings.folderPath;
-			const basePath = `${folderPath}/${conv.date}`;
+			const basePath = this.getDateFolderPath(folderPath, conv.date);
 
 			// Read and parse overview
 			const overviewPath = `${basePath}/overview.md`;

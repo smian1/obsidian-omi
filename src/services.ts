@@ -1,5 +1,6 @@
 import { normalizePath, Notice } from 'obsidian';
-import { ActionItemFromAPI } from './types';
+import { ActionItemFromAPI, MemoryFromAPI } from './types';
+import { MEMORY_CATEGORY_EMOJI } from './constants';
 import type OmiConversationsPlugin from './main';
 
 export class TasksHubSync {
@@ -116,6 +117,123 @@ export class TasksHubSync {
 		if (existingFile) {
 			await this.plugin.app.vault.modify(existingFile, content);
 		} else {
+			await this.plugin.app.vault.create(filePath, content);
+		}
+	}
+}
+
+export class MemoriesHubSync {
+	private plugin: OmiConversationsPlugin;
+
+	constructor(plugin: OmiConversationsPlugin) {
+		this.plugin = plugin;
+	}
+
+	// Get full path to memories file (inside the conversations folder)
+	public getMemoriesFilePath(): string {
+		const folderPath = this.plugin.settings.folderPath;
+		const fileName = this.plugin.settings.memoriesHubFilePath;
+		return normalizePath(`${folderPath}/${fileName}`);
+	}
+
+	generateMarkdown(memories: MemoryFromAPI[]): string {
+		const lines: string[] = [];
+
+		// Add header explaining this is read-only backup
+		lines.push('# Omi Memories');
+		lines.push('');
+		lines.push('> This file is auto-generated for backup/search. Use the **Omi Memories** view to edit.');
+		lines.push('');
+
+		if (memories.length === 0) {
+			lines.push('*No memories yet.*');
+			return lines.join('\n');
+		}
+
+		// Group by category
+		const byCategory = this.groupByCategory(memories);
+
+		// Sort categories by count (most memories first)
+		const sortedCategories = Object.entries(byCategory)
+			.sort((a, b) => b[1].length - a[1].length);
+
+		for (const [category, mems] of sortedCategories) {
+			const emoji = MEMORY_CATEGORY_EMOJI[category] || '📌';
+			lines.push(`## ${emoji} ${this.capitalizeFirst(category)}`);
+			lines.push('');
+			for (const mem of mems) {
+				lines.push(this.formatMemoryLine(mem));
+			}
+			lines.push('');
+		}
+
+		return lines.join('\n');
+	}
+
+	private formatMemoryLine(memory: MemoryFromAPI): string {
+		const date = new Date(memory.created_at).toLocaleDateString('en-US', {
+			month: 'short',
+			day: 'numeric',
+			year: 'numeric'
+		});
+
+		// Format tags with #omi/ prefix
+		const tags = memory.tags.length > 0
+			? ' ' + memory.tags.map(t => `#omi/${t.toLowerCase().replace(/\s+/g, '-')}`).join(' ')
+			: '';
+
+		// Use Obsidian-native comment %%...%% for invisible ID
+		return `- ${memory.content}${tags} *(${date})* %%id:${memory.id}%%`;
+	}
+
+	private groupByCategory(memories: MemoryFromAPI[]): Record<string, MemoryFromAPI[]> {
+		const groups: Record<string, MemoryFromAPI[]> = {};
+		for (const mem of memories) {
+			const cat = mem.category || 'other';
+			if (!groups[cat]) groups[cat] = [];
+			groups[cat].push(mem);
+		}
+		// Sort each group by created_at (newest first)
+		for (const cat of Object.keys(groups)) {
+			groups[cat].sort((a, b) =>
+				new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+			);
+		}
+		return groups;
+	}
+
+	private capitalizeFirst(str: string): string {
+		return str.charAt(0).toUpperCase() + str.slice(1);
+	}
+
+	async pullFromAPI(): Promise<void> {
+		if (!this.plugin.settings.apiKey) {
+			return;
+		}
+
+		try {
+			const memories = await this.plugin.api.getAllMemories();
+			await this.writeToFile(memories);
+		} catch (error) {
+			console.error('Memories Hub: Error pulling from API:', error);
+			new Notice('Failed to sync memories backup from Omi');
+		}
+	}
+
+	private async writeToFile(memories: MemoryFromAPI[]): Promise<void> {
+		const filePath = this.getMemoriesFilePath();
+		const content = this.generateMarkdown(memories);
+
+		const existingFile = this.plugin.app.vault.getFileByPath(filePath);
+		if (existingFile) {
+			await this.plugin.app.vault.modify(existingFile, content);
+		} else {
+			// Ensure folder exists
+			const folderPath = this.plugin.settings.folderPath;
+			const folder = this.plugin.app.vault.getFolderByPath(folderPath);
+			if (!folder) {
+				await this.plugin.app.vault.createFolder(folderPath);
+			}
 			await this.plugin.app.vault.create(filePath, content);
 		}
 	}
