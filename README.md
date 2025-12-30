@@ -1,19 +1,17 @@
 # Omi Conversations for Obsidian
 
-Sync your Omi AI conversation memories directly into organized Obsidian markdown files.
+Sync your [Omi AI](https://omi.me) conversations, tasks, and memories to Obsidian as searchable markdown files with Dataview-compatible metadata.
 
 ## Features
 
-- 📥 **Automatic Sync** - Download your Omi conversations with a single click
-- 📁 **Smart Organization** - Each day gets its own folder with separate files for:
-  - Overview summaries
-  - Action items
-  - Calendar events
-  - Full transcripts
-- 🔗 **Cross-Linked Navigation** - Jump between related sections easily
-- ⚙️ **Flexible Content** - Toggle which sections to sync (overview, action items, events, transcript)
-- 🕐 **Local Timezone** - All timestamps shown in your local time
-- 🔄 **Incremental Sync** - Only fetches conversations from your specified start date onwards
+- **Conversations Sync** - Download conversations with AI summaries, action items, events, and transcripts
+- **Omi Hub** - Interactive dashboard with multiple views (tasks, conversations, memories, stats, map)
+- **Tasks Hub** - Bidirectional task sync with list, kanban, and calendar views
+- **Memories** - Browse and search your Omi memories with tag graph visualization
+- **Stats Dashboard** - Analytics, heatmaps, and achievement tracking
+- **Map View** - Geographic visualization of conversations
+- **Dataview Integration** - YAML frontmatter for powerful queries
+- **Daily Notes** - Automatic linking to your daily notes
 
 ## Installation
 
@@ -24,103 +22,404 @@ Sync your Omi AI conversation memories directly into organized Obsidian markdown
 3. Reload Obsidian
 4. Enable "Omi Conversations" in Community Plugins
 
-## Configuration
+## Quick Start
 
-1. Open Obsidian Settings → Omi Conversations
-2. Enter your **Omi Developer API Key** (from Omi developer settings)
-3. Set your **Folder Path** (default: "Omi Conversations")
-4. Set your **Start Date** (YYYY-MM-DD format)
-5. Toggle which **Content Options** you want to sync
+1. Open **Settings > Omi Conversations**
+2. Enter your **Omi Developer API Key** (see below)
+3. Click the brain icon in the ribbon to open **Omi Hub**
+4. Go to the **Sync** tab and click **Full Resync**
 
 ### Getting Your Omi API Key
 
 1. Open the Omi app on your device
-2. Navigate to **Settings** → **Developer**
-3. Under the "Developer API Keys" section, click **"Create Key"**
-4. Give your key a descriptive name (e.g., "Obsidian")
-5. **Copy the key immediately** - you won't be able to see it again!
-6. Paste the key into the plugin settings in Obsidian
+2. Navigate to **Settings > Developer**
+3. Click **"Create Key"** under Developer API Keys
+4. Copy the key (starts with `omi_dev_`)
+5. Paste into plugin settings
 
-That's it! No app creation or additional configuration needed.
+## File Structure
 
-## Usage
-
-### Sync Conversations
-
-Click the 🧠 brain icon in the left ribbon, or use the command palette:
-- `Ctrl/Cmd + P` → "Omi Conversations: Sync"
-
-### Folder Structure
+The plugin creates organized markdown files in a nested hierarchy:
 
 ```
 Omi Conversations/
-└── 2025-09-30/
-    ├── 2025-09-30.md      ← Index with links to all conversations
-    ├── overview.md         ← AI-generated summaries
-    ├── action-items.md     ← Extracted tasks and action items
-    ├── events.md           ← Calendar events from conversations
-    └── transcript.md       ← Full conversation transcripts
+├── _omi-index.md          # Master index linking all conversations
+├── Memories.md            # Searchable backup of all memories
+├── Tasks.md               # Backup of all tasks
+└── 2025/
+    └── 01/
+        └── 09/
+            ├── 2025-01-09.md    # Daily index with navigation
+            ├── overview.md       # AI summaries for each conversation
+            ├── action-items.md   # Tasks extracted from conversations
+            ├── events.md         # Calendar events mentioned
+            └── transcript.md     # Full conversation transcripts
 ```
 
-### Navigation
+### Daily Index Navigation
 
-The index file (`2025-09-30.md`) contains:
-- Links to each section (Overview, Action Items, Events, Transcript)
-- List of all conversations with direct links to each section
+Each daily index includes prev/next day navigation:
 
-Example:
 ```markdown
-## Conversations
-- **09:18 PM** - 🔧 User Requests Code Fixes - [[overview#...]] | [[action-items#...]] | [[transcript#...]]
+[[2025/01/08/2025-01-08|<< 2025-01-08]] | **2025-01-09** | [[2025/01/10/2025-01-10|2025-01-10 >>]]
 ```
 
-### Content Options
+## YAML Frontmatter
 
-Toggle what gets synced in settings:
+Each file includes structured metadata compatible with [Dataview](https://github.com/blacksmithgu/obsidian-dataview):
 
-- **Include Overview** - AI-generated conversation summaries
-- **Include Action Items** - Extracted tasks and to-dos (with checkboxes)
-- **Include Events** - Calendar events extracted from conversations
-- **Include Transcript** - Full conversation transcripts with speaker labels and timestamps
+```yaml
+---
+date: 2025-01-09
+category: work
+duration: 45
+location: San Francisco, CA
+conversations: 3
+action_items: 5
+events: 2
+tags:
+  - omi/work
+  - omi/location/san-francisco
+---
+```
 
-## File Format
+### Properties
 
-### Overview
-- H4 headings with timestamp and emoji
-- Links to transcript for full details
-- AI-generated summary of each conversation
+| Property | Description |
+|----------|-------------|
+| `date` | Date of the conversation (YYYY-MM-DD) |
+| `category` | AI-detected category (work, personal, health, etc.) |
+| `duration` | Length in minutes |
+| `location` | Address where conversation occurred |
+| `conversations` | Number of conversations that day |
+| `action_items` | Tasks extracted from conversations |
+| `events` | Calendar events mentioned |
+| `tags` | Hierarchical tags with `omi/` prefix |
 
-### Action Items
-- Flat list format with checkboxes
-- Links back to overview for context
-- Grouped by conversation source
+## Tags
 
-### Events
-- Event title, date/time, and duration
-- Links back to overview for context
-- Only shows conversations with events
+All tags use the `#omi/` prefix to avoid conflicts with your existing tags:
 
-### Transcript
-- H4 headings matching overview format
-- Speaker labels with timestamps (MM:SS)
-- Complete conversation text
+- **Categories**: `#omi/work`, `#omi/personal`, `#omi/health`, `#omi/finance`
+- **Locations**: `#omi/location/san-francisco`, `#omi/location/new-york`
+
+## Dataview Queries
+
+With the [Dataview plugin](https://github.com/blacksmithgu/obsidian-dataview) installed, you can query your Omi data:
+
+### Basic Queries
+
+#### List work conversations
+```dataview
+TABLE date, duration, location
+FROM "Omi Conversations"
+WHERE category = "work"
+SORT date DESC
+```
+
+#### Conversations by location
+```dataview
+LIST
+FROM #omi/location/san-francisco
+SORT date DESC
+```
+
+#### Pending action items
+```dataview
+TASK
+FROM "Omi Conversations"
+WHERE !completed
+LIMIT 20
+```
+
+---
+
+### 📊 Analytics & Summaries
+
+#### Weekly conversation summary
+```dataview
+TABLE
+    length(rows) as "Conversations",
+    sum(rows.duration) as "Total Min",
+    round(sum(rows.duration)/60, 1) as "Hours"
+FROM "Omi Conversations"
+WHERE date >= date(today) - dur(7 days)
+GROUP BY dateformat(date, "ccc, MMM d") as Day
+SORT date DESC
+```
+
+#### Category breakdown with stats
+```dataview
+TABLE WITHOUT ID
+    category as "Category",
+    length(rows) as "Count",
+    round(sum(rows.duration)/60, 1) + " hrs" as "Time",
+    round(length(rows) / 7 * 100) + "%" as "% of Week"
+FROM "Omi Conversations"
+WHERE date >= date(today) - dur(7 days)
+GROUP BY category
+SORT length(rows) DESC
+```
+
+#### Monthly totals dashboard
+```dataview
+TABLE WITHOUT ID
+    dateformat(date, "MMMM yyyy") as "Month",
+    length(rows) as "Conversations",
+    round(sum(rows.duration)/60, 1) + " hours" as "Total Time",
+    round(average(rows.duration), 0) + " min" as "Avg Length"
+FROM "Omi Conversations"
+GROUP BY dateformat(date, "yyyy-MM")
+SORT date DESC
+LIMIT 6
+```
+
+---
+
+### 🔥 Insights & Patterns
+
+#### Long conversations (deep work sessions)
+```dataview
+TABLE date, category, duration + " min" as "Length", location
+FROM "Omi Conversations"
+WHERE duration > 30
+SORT duration DESC
+LIMIT 10
+```
+
+#### Most productive locations
+```dataview
+TABLE WITHOUT ID
+    location as "Location",
+    length(rows) as "Visits",
+    round(sum(rows.duration)/60, 1) + " hrs" as "Time Spent"
+FROM "Omi Conversations"
+WHERE location != null
+GROUP BY location
+SORT sum(rows.duration) DESC
+LIMIT 5
+```
+
+#### Recent activity streak
+```dataview
+LIST WITHOUT ID
+    "📅 " + dateformat(date, "ccc, MMM d") + " — " +
+    length(rows) + " conversations (" +
+    sum(rows.duration) + " min)"
+FROM "Omi Conversations"
+WHERE date >= date(today) - dur(14 days)
+GROUP BY date
+SORT date DESC
+```
+
+---
+
+### 🎯 Task & Action Item Queries
+
+#### Action items by conversation
+```dataview
+TABLE WITHOUT ID
+    file.link as "Day",
+    action_items as "Tasks",
+    category
+FROM "Omi Conversations"
+WHERE action_items > 0
+SORT date DESC
+LIMIT 10
+```
+
+#### Days with most action items
+```dataview
+TABLE WITHOUT ID
+    dateformat(date, "MMM d, yyyy") as "Date",
+    action_items as "Tasks Created",
+    category,
+    duration + " min" as "Duration"
+FROM "Omi Conversations"
+WHERE action_items > 3
+SORT action_items DESC
+```
+
+---
+
+### 🗓️ Time-Based Views
+
+#### Today's conversations
+```dataview
+LIST
+FROM "Omi Conversations"
+WHERE date = date(today)
+SORT file.ctime DESC
+```
+
+#### This week's highlights
+```dataview
+TABLE WITHOUT ID
+    dateformat(date, "ccc") as "Day",
+    category,
+    duration + " min" as "Duration",
+    action_items as "Tasks"
+FROM "Omi Conversations"
+WHERE date >= date(today) - dur(7 days)
+SORT date DESC
+```
+
+#### Busiest days of the week
+```dataview
+TABLE WITHOUT ID
+    dateformat(date, "cccc") as "Day of Week",
+    length(rows) as "Total Conversations",
+    round(average(rows.duration), 0) + " min" as "Avg Duration"
+FROM "Omi Conversations"
+GROUP BY dateformat(date, "c")
+SORT length(rows) DESC
+```
+
+---
+
+### 🏷️ Tag-Based Queries
+
+#### All work-related conversations
+```dataview
+LIST
+FROM #omi/work
+SORT date DESC
+LIMIT 15
+```
+
+#### Cross-reference: Work + specific location
+```dataview
+TABLE date, duration, location
+FROM #omi/work AND #omi/location/san-francisco
+SORT date DESC
+```
+
+#### Browse by any category
+```dataview
+TABLE WITHOUT ID
+    category as "Category",
+    length(rows) as "Count",
+    min(rows.date) as "First",
+    max(rows.date) as "Latest"
+FROM "Omi Conversations"
+GROUP BY category
+SORT length(rows) DESC
+```
+
+---
+
+### 🔗 Daily Notes Integration
+
+#### Embed today's Omi summary in your daily note
+```dataview
+TABLE WITHOUT ID
+    file.link as "Conversation",
+    duration + " min" as "Duration",
+    action_items as "Tasks"
+FROM "Omi Conversations"
+WHERE date = this.file.day
+```
+
+#### Link recent conversations from daily note
+```dataview
+LIST
+FROM "Omi Conversations"
+WHERE date >= this.file.day - dur(3 days) AND date <= this.file.day
+SORT date DESC
+```
+
+## Omi Hub
+
+Click the brain icon to open Omi Hub, a unified dashboard with multiple tabs:
+
+### Tasks Tab
+- **Dashboard** - Overview with pending tasks and streaks
+- **List** - Collapsible sections by due date
+- **Kanban** - Drag-and-drop columns
+- **Calendar** - Monthly/weekly grid view
+
+### Conversations Tab
+- **List** - Card view of synced conversations
+- **Timeline** - Daily/weekly timeline visualization
+- **Detail** - Split pane with summary and transcript
+
+### Memories Tab
+- **List** - Browse memories by category
+- **Graph** - Tag relationship visualization
+
+### Stats Tab
+- Analytics with time range filtering
+- Category breakdown
+- Duration distribution
+- Achievements and streaks
+
+### Heatmap Tab
+- Activity calendar showing conversation frequency
+
+### Map Tab
+- Geographic view using conversation geolocation data
+
+### Sync Tab
+- Live sync progress with cancel button
+- Status cards for conversations, tasks, memories
+- Auto-sync toggles and interval settings
+- Sync history log (last 24 hours)
+
+## Daily Notes Integration
+
+Automatically add links to Omi conversations in your daily notes:
+
+1. Go to **Settings > Omi Conversations > Daily Notes**
+2. Enable **"Daily notes linking"**
+3. Set your daily notes folder and filename format
+
+After syncing, your daily note will include:
+
+```markdown
+## Omi Conversations
+See [[Omi Conversations/2025/01/09/2025-01-09|today's conversations]]
+```
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `Omi Conversations: Sync conversations` | Fetch new conversations |
+| `Omi Conversations: Full resync` | Re-download all conversations |
+| `Omi Conversations: Sync Tasks Hub` | Refresh tasks backup file |
+| `Omi Conversations: Sync Memories Hub` | Refresh memories backup file |
+| `Omi Conversations: Open Omi Hub` | Open the main dashboard |
+
+## Settings
+
+| Setting | Description |
+|---------|-------------|
+| **API Key** | Your Omi developer API key (`omi_dev_*`) |
+| **Folder Path** | Where to store conversation files |
+| **Start Date** | Only sync conversations after this date |
+| **Auto-sync** | Automatically sync at intervals (0 = disabled) |
+| **Include Overview** | Create overview.md with AI summaries |
+| **Include Action Items** | Create action-items.md with tasks |
+| **Include Events** | Create events.md with calendar events |
+| **Include Transcript** | Create transcript.md with full text |
+| **Enable Tasks Hub** | Enable tasks backup file |
+| **Daily Notes Folder** | Path to daily notes folder |
+| **Daily Notes Format** | Filename format (e.g., YYYY-MM-DD) |
 
 ## Troubleshooting
 
 ### Rate Limiting
-If you see rate limit warnings:
 - The plugin automatically retries with exponential backoff
-- Reduce sync frequency if syncing large date ranges
+- Check the Sync tab for detailed error messages
 
 ### Links Not Working
-- Ensure you're using the latest version
-- Headings must match exactly (including emojis and timestamps)
+- Ensure headings match exactly (including emojis and timestamps)
 - Try re-syncing to regenerate files
 
 ### No Conversations Appearing
 - Verify your API Key is correct (starts with `omi_dev_`)
-- Ensure your start date is correct (YYYY-MM-DD format)
-- Check that you have conversations in your Omi account
+- Check your start date (YYYY-MM-DD format)
+- Confirm you have conversations in your Omi account
 
 ### Timezone Issues
 - All timestamps are converted to your computer's local timezone
@@ -130,17 +429,18 @@ If you see rate limit warnings:
 
 This plugin uses the Omi Developer API:
 - Endpoint: `GET /v1/dev/user/conversations`
-- Authentication: Developer API key (starts with `omi_dev_`)
-- Features: Automatic user identification, pagination, date filtering
-- See [docs.omi.me](https://docs.omi.me) for more details
+- Authentication: Developer API key
+- Features: Server-side date filtering, pagination, incremental sync
+- See [docs.omi.me](https://docs.omi.me) for details
 
 ## License
 
 MIT
 
 ## Credits
+
 By Salman M.
 
 ## Support
 
-For issues or feature requests, please visit the [GitHub repository](https://github.com/smian1/obsidian-omi)
+For issues or feature requests, visit [GitHub](https://github.com/smian1/obsidian-omi)
