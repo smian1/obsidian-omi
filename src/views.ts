@@ -1,6 +1,6 @@
 import { ItemView, WorkspaceLeaf, Notice, debounce } from 'obsidian';
 import { VIEW_TYPE_OMI_HUB, MEMORY_CATEGORY_EMOJI } from './constants';
-import { TaskWithUI, SyncedConversationMeta, ConversationDetailData, ActionItem, CalendarEvent, TranscriptSegment, MemoryWithUI, StatsData, HeatmapCell, CategoryStat, DurationBucket, MemoryStats, TaskStats, Achievement, ActionItemFromAPI, MemoryFromAPI } from './types';
+import { TaskWithUI, SyncedConversationMeta, ConversationDetailData, ActionItem, CalendarEvent, TranscriptSegment, MemoryWithUI, StatsData, HeatmapCell, CategoryStat, DurationBucket, MemoryStats, TaskStats, Achievement, AchievementData, AchievementCategory, ActionItemFromAPI, MemoryFromAPI } from './types';
 import { AddTaskModal, DatePickerModal, EditTaskModal, CalendarDatePickerModal, AddMemoryModal, EditMemoryModal, AchievementsModal } from './modals';
 import type OmiConversationsPlugin from './main';
 
@@ -2179,6 +2179,9 @@ export class OmiHubView extends ItemView {
 		if (stats.uniqueLocations > 0) {
 			this.renderLocationsTile(grid, stats);
 		}
+
+		// Row 6: Period Highlights (This Week/Month)
+		this.renderHighlightsTile(grid, stats);
 	}
 
 	private async loadStatsData(): Promise<void> {
@@ -2321,16 +2324,23 @@ export class OmiHubView extends ItemView {
 			return hour >= 5 && hour < 8;
 		}).length;
 
-		// Compute achievements
-		const achievements = this.computeAchievements({
-			conversationCount: conversationArray.length, // Use all-time for achievements
+		// Compute achievement data (all-time metrics)
+		const achievementData: AchievementData = {
+			conversationCount: conversationArray.length,
 			streak,
 			lateNightCount,
 			earlyMorningCount,
 			uniqueLocations,
 			memoryCount: memoryStats?.total || 0,
-			taskCompletionRate: taskStats?.completionRate || 0
-		});
+			completedTasksCount: taskStats?.completed || 0,
+			longestConversationMinutes: this.getLongestConversationMinutes(conversationArray),
+			conversationsOver30Min: this.countConversationsOverMinutes(conversationArray, 30),
+			conversationsOver60Min: this.countConversationsOverMinutes(conversationArray, 60),
+			totalHoursRecorded: totalDuration / 60, // totalDuration is in minutes
+			uniqueCategories: this.countUniqueCategories(conversationArray),
+			daysSinceFirstConversation: this.getDaysSinceFirstConversation(conversationArray)
+		};
+		const achievements = this.computeAchievements(achievementData);
 
 		return {
 			timeRange: this.statsTimeRange,
@@ -2645,119 +2655,460 @@ export class OmiHubView extends ItemView {
 		};
 	}
 
-	private computeAchievements(data: {
-		conversationCount: number;
-		streak: number;
-		lateNightCount: number;
-		earlyMorningCount: number;
-		uniqueLocations: number;
-		memoryCount: number;
-		taskCompletionRate: number;
-	}): Achievement[] {
+	private computeAchievements(data: AchievementData): Achievement[] {
 		const achievements: Achievement[] = [
+			// ==================== CONVERSATION MILESTONES (8) ====================
 			{
-				id: 'streak_7',
-				icon: '🔥',
-				title: '7-Day Streak',
-				description: 'Record conversations 7 days in a row',
-				unlocked: data.streak >= 7,
-				threshold: 7,
-				current: data.streak,
-				progress: Math.min(data.streak / 7, 1)
-			},
-			{
-				id: 'streak_30',
-				icon: '⚡',
-				title: '30-Day Streak',
-				description: 'Record conversations 30 days in a row',
-				unlocked: data.streak >= 30,
-				threshold: 30,
-				current: data.streak,
-				progress: Math.min(data.streak / 30, 1)
-			},
-			{
-				id: 'conversations_100',
+				id: 'conv_10',
 				icon: '💬',
+				title: 'First Steps',
+				description: 'Record 10 conversations',
+				category: 'conversations',
+				unlocked: data.conversationCount >= 10,
+				threshold: 10,
+				current: data.conversationCount,
+				progress: Math.min(data.conversationCount / 10, 1)
+			},
+			{
+				id: 'conv_50',
+				icon: '🗣️',
+				title: 'Getting Started',
+				description: 'Record 50 conversations',
+				category: 'conversations',
+				unlocked: data.conversationCount >= 50,
+				threshold: 50,
+				current: data.conversationCount,
+				progress: Math.min(data.conversationCount / 50, 1)
+			},
+			{
+				id: 'conv_100',
+				icon: '💯',
 				title: 'Centurion',
 				description: 'Record 100 conversations',
+				category: 'conversations',
 				unlocked: data.conversationCount >= 100,
 				threshold: 100,
 				current: data.conversationCount,
 				progress: Math.min(data.conversationCount / 100, 1)
 			},
 			{
-				id: 'conversations_500',
-				icon: '🗣️',
+				id: 'conv_250',
+				icon: '🎯',
+				title: 'Committed',
+				description: 'Record 250 conversations',
+				category: 'conversations',
+				unlocked: data.conversationCount >= 250,
+				threshold: 250,
+				current: data.conversationCount,
+				progress: Math.min(data.conversationCount / 250, 1)
+			},
+			{
+				id: 'conv_500',
+				icon: '🔥',
 				title: 'Chatterbox',
 				description: 'Record 500 conversations',
+				category: 'conversations',
 				unlocked: data.conversationCount >= 500,
 				threshold: 500,
 				current: data.conversationCount,
 				progress: Math.min(data.conversationCount / 500, 1)
 			},
 			{
-				id: 'conversations_1000',
+				id: 'conv_1000',
 				icon: '🏆',
 				title: 'Conversation Master',
-				description: 'Record 1000 conversations',
+				description: 'Record 1,000 conversations',
+				category: 'conversations',
 				unlocked: data.conversationCount >= 1000,
 				threshold: 1000,
 				current: data.conversationCount,
 				progress: Math.min(data.conversationCount / 1000, 1)
 			},
 			{
-				id: 'night_owl',
+				id: 'conv_2000',
+				icon: '👑',
+				title: 'Omi Legend',
+				description: 'Record 2,000 conversations',
+				category: 'conversations',
+				unlocked: data.conversationCount >= 2000,
+				threshold: 2000,
+				current: data.conversationCount,
+				progress: Math.min(data.conversationCount / 2000, 1)
+			},
+			{
+				id: 'conv_5000',
+				icon: '⭐',
+				title: 'Hall of Fame',
+				description: 'Record 5,000 conversations',
+				category: 'conversations',
+				unlocked: data.conversationCount >= 5000,
+				threshold: 5000,
+				current: data.conversationCount,
+				progress: Math.min(data.conversationCount / 5000, 1)
+			},
+
+			// ==================== STREAK ACHIEVEMENTS (6) ====================
+			{
+				id: 'streak_7',
+				icon: '📅',
+				title: 'Week Warrior',
+				description: '7-day conversation streak',
+				category: 'streaks',
+				unlocked: data.streak >= 7,
+				threshold: 7,
+				current: data.streak,
+				progress: Math.min(data.streak / 7, 1)
+			},
+			{
+				id: 'streak_14',
+				icon: '🔥',
+				title: 'Two Week Titan',
+				description: '14-day conversation streak',
+				category: 'streaks',
+				unlocked: data.streak >= 14,
+				threshold: 14,
+				current: data.streak,
+				progress: Math.min(data.streak / 14, 1)
+			},
+			{
+				id: 'streak_30',
+				icon: '⚡',
+				title: 'Monthly Master',
+				description: '30-day conversation streak',
+				category: 'streaks',
+				unlocked: data.streak >= 30,
+				threshold: 30,
+				current: data.streak,
+				progress: Math.min(data.streak / 30, 1)
+			},
+			{
+				id: 'streak_60',
+				icon: '💪',
+				title: 'Dedicated',
+				description: '60-day conversation streak',
+				category: 'streaks',
+				unlocked: data.streak >= 60,
+				threshold: 60,
+				current: data.streak,
+				progress: Math.min(data.streak / 60, 1)
+			},
+			{
+				id: 'streak_90',
+				icon: '🏅',
+				title: 'Unstoppable',
+				description: '90-day conversation streak',
+				category: 'streaks',
+				unlocked: data.streak >= 90,
+				threshold: 90,
+				current: data.streak,
+				progress: Math.min(data.streak / 90, 1)
+			},
+			{
+				id: 'streak_180',
+				icon: '🌟',
+				title: 'Streak Legend',
+				description: '180-day conversation streak',
+				category: 'streaks',
+				unlocked: data.streak >= 180,
+				threshold: 180,
+				current: data.streak,
+				progress: Math.min(data.streak / 180, 1)
+			},
+
+			// ==================== TIME-BASED ACHIEVEMENTS (6) ====================
+			{
+				id: 'time_night_25',
 				icon: '🦉',
 				title: 'Night Owl',
-				description: 'Record 50 late-night conversations (10pm-4am)',
-				unlocked: data.lateNightCount >= 50,
-				threshold: 50,
+				description: '25 late-night conversations (10pm-4am)',
+				category: 'time',
+				unlocked: data.lateNightCount >= 25,
+				threshold: 25,
 				current: data.lateNightCount,
-				progress: Math.min(data.lateNightCount / 50, 1)
+				progress: Math.min(data.lateNightCount / 25, 1)
 			},
 			{
-				id: 'early_bird',
+				id: 'time_night_100',
+				icon: '🌙',
+				title: 'Midnight Master',
+				description: '100 late-night conversations',
+				category: 'time',
+				unlocked: data.lateNightCount >= 100,
+				threshold: 100,
+				current: data.lateNightCount,
+				progress: Math.min(data.lateNightCount / 100, 1)
+			},
+			{
+				id: 'time_early_25',
 				icon: '🐦',
 				title: 'Early Bird',
-				description: 'Record 50 early morning conversations (5-8am)',
-				unlocked: data.earlyMorningCount >= 50,
-				threshold: 50,
+				description: '25 early morning conversations (5-8am)',
+				category: 'time',
+				unlocked: data.earlyMorningCount >= 25,
+				threshold: 25,
 				current: data.earlyMorningCount,
-				progress: Math.min(data.earlyMorningCount / 50, 1)
+				progress: Math.min(data.earlyMorningCount / 25, 1)
 			},
 			{
-				id: 'globe_trotter',
+				id: 'time_early_100',
+				icon: '🌅',
+				title: 'Dawn Patrol',
+				description: '100 early morning conversations',
+				category: 'time',
+				unlocked: data.earlyMorningCount >= 100,
+				threshold: 100,
+				current: data.earlyMorningCount,
+				progress: Math.min(data.earlyMorningCount / 100, 1)
+			},
+			{
+				id: 'time_marathon',
+				icon: '⏱️',
+				title: 'Marathon Talker',
+				description: 'Single conversation over 60 minutes',
+				category: 'time',
+				unlocked: data.conversationsOver60Min >= 1,
+				threshold: 1,
+				current: data.conversationsOver60Min,
+				progress: Math.min(data.conversationsOver60Min / 1, 1)
+			},
+			{
+				id: 'time_podcast',
+				icon: '🎙️',
+				title: 'Podcast Pro',
+				description: '10 conversations over 30 minutes',
+				category: 'time',
+				unlocked: data.conversationsOver30Min >= 10,
+				threshold: 10,
+				current: data.conversationsOver30Min,
+				progress: Math.min(data.conversationsOver30Min / 10, 1)
+			},
+
+			// ==================== LOCATION ACHIEVEMENTS (4) ====================
+			{
+				id: 'loc_5',
+				icon: '📍',
+				title: 'Explorer',
+				description: 'Visit 5 unique locations',
+				category: 'location',
+				unlocked: data.uniqueLocations >= 5,
+				threshold: 5,
+				current: data.uniqueLocations,
+				progress: Math.min(data.uniqueLocations / 5, 1)
+			},
+			{
+				id: 'loc_10',
 				icon: '🌍',
 				title: 'Globe Trotter',
-				description: 'Record conversations in 10+ locations',
+				description: 'Visit 10 unique locations',
+				category: 'location',
 				unlocked: data.uniqueLocations >= 10,
 				threshold: 10,
 				current: data.uniqueLocations,
 				progress: Math.min(data.uniqueLocations / 10, 1)
 			},
 			{
-				id: 'memory_master',
+				id: 'loc_25',
+				icon: '✈️',
+				title: 'World Traveler',
+				description: 'Visit 25 unique locations',
+				category: 'location',
+				unlocked: data.uniqueLocations >= 25,
+				threshold: 25,
+				current: data.uniqueLocations,
+				progress: Math.min(data.uniqueLocations / 25, 1)
+			},
+			{
+				id: 'loc_50',
+				icon: '🗺️',
+				title: 'Cartographer',
+				description: 'Visit 50 unique locations',
+				category: 'location',
+				unlocked: data.uniqueLocations >= 50,
+				threshold: 50,
+				current: data.uniqueLocations,
+				progress: Math.min(data.uniqueLocations / 50, 1)
+			},
+
+			// ==================== MEMORY ACHIEVEMENTS (4) ====================
+			{
+				id: 'mem_25',
+				icon: '💡',
+				title: 'Memory Starter',
+				description: 'Collect 25 memories',
+				category: 'memory',
+				unlocked: data.memoryCount >= 25,
+				threshold: 25,
+				current: data.memoryCount,
+				progress: Math.min(data.memoryCount / 25, 1)
+			},
+			{
+				id: 'mem_100',
 				icon: '🧠',
-				title: 'Memory Master',
-				description: 'Build up 100 memories',
+				title: 'Memory Builder',
+				description: 'Collect 100 memories',
+				category: 'memory',
 				unlocked: data.memoryCount >= 100,
 				threshold: 100,
 				current: data.memoryCount,
 				progress: Math.min(data.memoryCount / 100, 1)
 			},
 			{
-				id: 'task_crusher',
+				id: 'mem_250',
+				icon: '📚',
+				title: 'Knowledge Vault',
+				description: 'Collect 250 memories',
+				category: 'memory',
+				unlocked: data.memoryCount >= 250,
+				threshold: 250,
+				current: data.memoryCount,
+				progress: Math.min(data.memoryCount / 250, 1)
+			},
+			{
+				id: 'mem_500',
+				icon: '🏛️',
+				title: 'Memory Palace',
+				description: 'Collect 500 memories',
+				category: 'memory',
+				unlocked: data.memoryCount >= 500,
+				threshold: 500,
+				current: data.memoryCount,
+				progress: Math.min(data.memoryCount / 500, 1)
+			},
+
+			// ==================== TASK ACHIEVEMENTS (4) ====================
+			{
+				id: 'task_10',
 				icon: '✅',
+				title: 'Task Starter',
+				description: 'Complete 10 tasks',
+				category: 'task',
+				unlocked: data.completedTasksCount >= 10,
+				threshold: 10,
+				current: data.completedTasksCount,
+				progress: Math.min(data.completedTasksCount / 10, 1)
+			},
+			{
+				id: 'task_50',
+				icon: '⚡',
 				title: 'Task Crusher',
-				description: 'Achieve 80% task completion rate',
-				unlocked: data.taskCompletionRate >= 0.8,
-				threshold: 80,
-				current: Math.round(data.taskCompletionRate * 100),
-				progress: data.taskCompletionRate / 0.8
+				description: 'Complete 50 tasks',
+				category: 'task',
+				unlocked: data.completedTasksCount >= 50,
+				threshold: 50,
+				current: data.completedTasksCount,
+				progress: Math.min(data.completedTasksCount / 50, 1)
+			},
+			{
+				id: 'task_100',
+				icon: '🎯',
+				title: 'Productivity Pro',
+				description: 'Complete 100 tasks',
+				category: 'task',
+				unlocked: data.completedTasksCount >= 100,
+				threshold: 100,
+				current: data.completedTasksCount,
+				progress: Math.min(data.completedTasksCount / 100, 1)
+			},
+			{
+				id: 'task_250',
+				icon: '🏆',
+				title: 'Task Master',
+				description: 'Complete 250 tasks',
+				category: 'task',
+				unlocked: data.completedTasksCount >= 250,
+				threshold: 250,
+				current: data.completedTasksCount,
+				progress: Math.min(data.completedTasksCount / 250, 1)
+			},
+
+			// ==================== SPECIAL ACHIEVEMENTS (4) ====================
+			{
+				id: 'special_anniversary',
+				icon: '🎂',
+				title: 'Anniversary',
+				description: 'Use Omi for 1 year',
+				category: 'special',
+				unlocked: data.daysSinceFirstConversation >= 365,
+				threshold: 365,
+				current: data.daysSinceFirstConversation,
+				progress: Math.min(data.daysSinceFirstConversation / 365, 1)
+			},
+			{
+				id: 'special_categories',
+				icon: '🌈',
+				title: 'Category Explorer',
+				description: 'Have conversations in 5+ categories',
+				category: 'special',
+				unlocked: data.uniqueCategories >= 5,
+				threshold: 5,
+				current: data.uniqueCategories,
+				progress: Math.min(data.uniqueCategories / 5, 1)
+			},
+			{
+				id: 'special_hours_100',
+				icon: '📊',
+				title: 'Data Enthusiast',
+				description: 'Record 100+ hours of conversations',
+				category: 'special',
+				unlocked: data.totalHoursRecorded >= 100,
+				threshold: 100,
+				current: Math.round(data.totalHoursRecorded),
+				progress: Math.min(data.totalHoursRecorded / 100, 1)
+			},
+			{
+				id: 'special_hours_500',
+				icon: '🎬',
+				title: 'Recording Pro',
+				description: 'Record 500+ hours of conversations',
+				category: 'special',
+				unlocked: data.totalHoursRecorded >= 500,
+				threshold: 500,
+				current: Math.round(data.totalHoursRecorded),
+				progress: Math.min(data.totalHoursRecorded / 500, 1)
 			}
 		];
 
 		return achievements;
+	}
+
+	// Helper methods for achievement data computation
+	private getLongestConversationMinutes(convs: SyncedConversationMeta[]): number {
+		if (convs.length === 0) return 0;
+		return Math.max(...convs.map(c => c.duration || 0));
+	}
+
+	private countConversationsOverMinutes(convs: SyncedConversationMeta[], minutes: number): number {
+		return convs.filter(c => (c.duration || 0) >= minutes).length;
+	}
+
+	private countUniqueCategories(convs: SyncedConversationMeta[]): number {
+		const categories = new Set<string>();
+		for (const c of convs) {
+			if (c.category) {
+				categories.add(c.category);
+			}
+		}
+		return categories.size;
+	}
+
+	private getDaysSinceFirstConversation(convs: SyncedConversationMeta[]): number {
+		if (convs.length === 0) return 0;
+
+		// Find the earliest conversation date
+		let earliestDate: Date | null = null;
+		for (const c of convs) {
+			const convDate = new Date(c.startedAt || c.date);
+			if (!earliestDate || convDate < earliestDate) {
+				earliestDate = convDate;
+			}
+		}
+
+		if (!earliestDate) return 0;
+
+		const now = new Date();
+		const diffTime = Math.abs(now.getTime() - earliestDate.getTime());
+		const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+		return diffDays;
 	}
 
 	private parseTimeToHour(timeStr: string): number {
@@ -3294,6 +3645,125 @@ export class OmiHubView extends ItemView {
 				cls: 'omi-stats-cities-list'
 			});
 		}
+	}
+
+	private renderHighlightsTile(container: HTMLElement, stats: StatsData): void {
+		const tile = container.createDiv('omi-stats-tile omi-stats-tile--full omi-highlights-tile');
+
+		// Determine title based on time range
+		const titleText = this.getHighlightsTitle();
+		const header = tile.createDiv('omi-highlights-header');
+		header.createEl('span', { text: '📅', cls: 'omi-stats-tile-icon' });
+		header.createEl('span', { text: titleText, cls: 'omi-stats-tile-title' });
+
+		// 4 mini KPI cards
+		const kpis = tile.createDiv('omi-highlights-kpis');
+
+		// Conversations this period
+		this.renderHighlightKPI(kpis, {
+			value: String(stats.conversationCount),
+			label: 'convos',
+			trend: stats.conversationTrend
+		});
+
+		// Time recorded this period
+		this.renderHighlightKPI(kpis, {
+			value: this.formatDuration(stats.totalDuration),
+			label: 'recorded',
+			trend: stats.durationTrend
+		});
+
+		// Tasks completed
+		const tasksCompleted = stats.taskStats?.completed || 0;
+		this.renderHighlightKPI(kpis, {
+			value: String(tasksCompleted),
+			label: 'tasks done',
+			trend: null
+		});
+
+		// New locations (if any)
+		this.renderHighlightKPI(kpis, {
+			value: String(stats.uniqueLocations),
+			label: 'places',
+			trend: null
+		});
+
+		// Bullet highlights
+		const bullets = tile.createDiv('omi-highlights-bullets');
+		const bulletList = bullets.createEl('ul');
+
+		// Generate dynamic highlights based on data
+		const highlightItems = this.generateHighlightBullets(stats);
+		for (const item of highlightItems) {
+			bulletList.createEl('li', { text: item });
+		}
+	}
+
+	private getHighlightsTitle(): string {
+		switch (this.statsTimeRange) {
+			case 'week':
+				return "This Week's Highlights";
+			case 'month':
+				return "This Month's Highlights";
+			case '30days':
+				return "Last 30 Days Highlights";
+			case 'all':
+			default:
+				return "This Week's Highlights";
+		}
+	}
+
+	private renderHighlightKPI(container: HTMLElement, data: { value: string; label: string; trend: number | null }): void {
+		const kpi = container.createDiv('omi-highlight-kpi');
+
+		kpi.createEl('div', { text: data.value, cls: 'omi-highlight-kpi-value' });
+		kpi.createEl('div', { text: data.label, cls: 'omi-highlight-kpi-label' });
+
+		if (data.trend !== null && data.trend !== 0) {
+			const trendEl = kpi.createDiv('omi-highlight-kpi-trend');
+			const arrow = data.trend > 0 ? '↑' : '↓';
+			const trendClass = data.trend > 0 ? 'positive' : 'negative';
+			trendEl.addClass(trendClass);
+			trendEl.setText(`${arrow}${Math.abs(Math.round(data.trend))}%`);
+		}
+	}
+
+	private generateHighlightBullets(stats: StatsData): string[] {
+		const highlights: string[] = [];
+
+		// Most active day
+		if (stats.peakDay) {
+			highlights.push(`🌟 Most active day: ${stats.peakDay}`);
+		}
+
+		// Peak time
+		if (stats.peakHour) {
+			highlights.push(`⏰ Peak time: ${stats.peakHour}`);
+		}
+
+		// Streak status
+		if (stats.streak > 0) {
+			highlights.push(`🔥 Streak: ${stats.streak} days and counting!`);
+		}
+
+		// Top category
+		if (stats.topCategory && stats.topCategory !== 'Unknown') {
+			highlights.push(`🏷️ Top category: ${stats.topCategory}`);
+		}
+
+		// Memory count
+		if (stats.memoryStats && stats.memoryStats.recentCount > 0) {
+			highlights.push(`🧠 ${stats.memoryStats.recentCount} new memories this week`);
+		}
+
+		// Task completion
+		if (stats.taskStats && stats.taskStats.completed > 0) {
+			const rate = Math.round(stats.taskStats.completionRate * 100);
+			highlights.push(`✅ Task completion rate: ${rate}%`);
+		}
+
+		// Limit to 4 highlights
+		return highlights.slice(0, 4);
 	}
 
 	private renderSparkline(container: HTMLElement, data: number[], color: string): void {

@@ -5172,6 +5172,168 @@ svg.leaflet-image-layer.leaflet-interactive path {
     }
 }
 
+/* Achievement Modal - Category Sections */
+.omi-achievements-summary {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-bottom: 16px;
+    padding: 8px 12px;
+    background: var(--background-secondary-alt);
+    border-radius: var(--omi-radius-md);
+    text-align: center;
+}
+
+.omi-achievements-container {
+    max-height: 60vh;
+    overflow-y: auto;
+    padding-right: 8px;
+}
+
+.omi-achievement-section {
+    margin-bottom: 24px;
+}
+
+.omi-achievement-section:last-child {
+    margin-bottom: 0;
+}
+
+.omi-achievement-category-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    margin-bottom: 12px;
+    border-bottom: 2px solid var(--background-modifier-border);
+}
+
+.omi-achievement-category-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-normal);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.omi-achievement-category-count {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
+    background: var(--background-secondary-alt);
+    padding: 2px 8px;
+    border-radius: var(--omi-radius-full);
+}
+
+/* Highlights Tile */
+.omi-highlights-tile {
+    background: linear-gradient(135deg, var(--background-secondary) 0%, var(--background-primary) 100%);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--omi-radius-lg);
+    padding: var(--omi-spacing-lg);
+}
+
+.omi-highlights-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-bottom: var(--omi-spacing-md);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.omi-highlights-kpis {
+    display: flex;
+    gap: var(--omi-spacing-md);
+    margin-bottom: var(--omi-spacing-lg);
+    flex-wrap: wrap;
+}
+
+.omi-highlight-kpi {
+    flex: 1;
+    min-width: 100px;
+    text-align: center;
+    padding: var(--omi-spacing-md);
+    background: var(--background-primary);
+    border-radius: var(--omi-radius-md);
+    border: 1px solid var(--background-modifier-border);
+}
+
+.omi-highlight-kpi-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-normal);
+    line-height: 1.2;
+}
+
+.omi-highlight-kpi-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.omi-highlight-kpi-trend {
+    font-size: 11px;
+    font-weight: 600;
+    margin-top: 4px;
+}
+
+.omi-highlight-kpi-trend.positive {
+    color: var(--omi-status-completed);
+}
+
+.omi-highlight-kpi-trend.negative {
+    color: var(--omi-status-overdue);
+}
+
+.omi-highlight-kpi-trend.neutral {
+    color: var(--text-muted);
+}
+
+.omi-highlights-bullets {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.omi-highlights-bullets li {
+    padding: var(--omi-spacing-xs) 0;
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 1.5;
+    border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.omi-highlights-bullets li:last-child {
+    border-bottom: none;
+}
+
+.omi-highlights-bullets li::before {
+    content: "•";
+    color: var(--interactive-accent);
+    font-weight: bold;
+    margin-right: 8px;
+}
+
+.omi-highlights-empty {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 13px;
+    padding: var(--omi-spacing-lg);
+}
+
+/* Mobile Responsive - Highlights */
+@media (max-width: 600px) {
+    .omi-highlights-kpis {
+        flex-direction: column;
+    }
+
+    .omi-highlight-kpi {
+        min-width: unset;
+    }
+}
+
 /* Mobile Responsive - Stats Dashboard v2 */
 @media (max-width: 900px) {
     .omi-stats-grid {

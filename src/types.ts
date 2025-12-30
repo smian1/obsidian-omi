@@ -195,15 +195,35 @@ export interface TaskStats {
 	avgCompletionDays: number | null;
 }
 
+export type AchievementCategory = 'conversations' | 'streaks' | 'time' | 'location' | 'memory' | 'task' | 'special';
+
 export interface Achievement {
 	id: string;
 	icon: string;
 	title: string;
 	description: string;
+	category: AchievementCategory;
 	unlocked: boolean;
 	progress?: number;    // 0-1 for partial progress
 	threshold?: number;   // Target value
 	current?: number;     // Current value
+}
+
+// Data needed to compute all achievements
+export interface AchievementData {
+	conversationCount: number;
+	streak: number;
+	lateNightCount: number;
+	earlyMorningCount: number;
+	uniqueLocations: number;
+	memoryCount: number;
+	completedTasksCount: number;
+	longestConversationMinutes: number;
+	conversationsOver30Min: number;
+	conversationsOver60Min: number;
+	totalHoursRecorded: number;
+	uniqueCategories: number;
+	daysSinceFirstConversation: number;
 }
 
 export interface StatsData {

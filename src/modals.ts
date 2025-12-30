@@ -1,6 +1,21 @@
 import { App, Modal, Notice } from 'obsidian';
-import { TaskWithUI, MemoryWithUI, Achievement } from './types';
+import { TaskWithUI, MemoryWithUI, Achievement, AchievementCategory } from './types';
 import { MEMORY_CATEGORY_EMOJI } from './constants';
+
+// Category display names and order
+const ACHIEVEMENT_CATEGORY_LABELS: Record<AchievementCategory, string> = {
+	conversations: 'Conversation Milestones',
+	streaks: 'Streak Achievements',
+	time: 'Time-Based',
+	location: 'Location Achievements',
+	memory: 'Memory Achievements',
+	task: 'Task Achievements',
+	special: 'Special Achievements'
+};
+
+const ACHIEVEMENT_CATEGORY_ORDER: AchievementCategory[] = [
+	'conversations', 'streaks', 'time', 'location', 'memory', 'task', 'special'
+];
 
 export class ConfirmSyncModal extends Modal {
 	title: string;
@@ -820,26 +835,78 @@ export class AchievementsModal extends Modal {
 		const desc = contentEl.createEl('p', { cls: 'omi-achievements-desc' });
 		desc.setText('Track your Omi journey with these milestones. Keep using Omi to unlock more!');
 
-		const grid = contentEl.createDiv('omi-achievements-grid');
+		// Count unlocked achievements
+		const unlockedCount = this.achievements.filter(a => a.unlocked).length;
+		const totalCount = this.achievements.length;
 
-		// Separate unlocked and locked
-		const unlocked = this.achievements.filter(a => a.unlocked);
-		const locked = this.achievements.filter(a => !a.unlocked);
+		const progressSummary = contentEl.createDiv('omi-achievements-summary');
+		progressSummary.setText(`${unlockedCount} of ${totalCount} unlocked`);
 
-		// Render unlocked first
-		for (const achievement of unlocked) {
-			this.renderAchievementCard(grid, achievement);
-		}
+		// Group achievements by category
+		const grouped = this.groupByCategory();
 
-		// Render locked
-		for (const achievement of locked) {
-			this.renderAchievementCard(grid, achievement);
+		const container = contentEl.createDiv('omi-achievements-container');
+
+		// Render each category section
+		for (const category of ACHIEVEMENT_CATEGORY_ORDER) {
+			const achievements = grouped[category];
+			if (!achievements || achievements.length === 0) continue;
+
+			this.renderCategorySection(container, category, achievements);
 		}
 
 		// Close button
 		const btnContainer = contentEl.createDiv('modal-button-container');
 		const closeBtn = btnContainer.createEl('button', { text: 'Close', cls: 'mod-cta' });
 		closeBtn.addEventListener('click', () => this.close());
+	}
+
+	private groupByCategory(): Record<AchievementCategory, Achievement[]> {
+		const grouped: Record<AchievementCategory, Achievement[]> = {
+			conversations: [],
+			streaks: [],
+			time: [],
+			location: [],
+			memory: [],
+			task: [],
+			special: []
+		};
+
+		for (const achievement of this.achievements) {
+			if (grouped[achievement.category]) {
+				grouped[achievement.category].push(achievement);
+			}
+		}
+
+		return grouped;
+	}
+
+	private renderCategorySection(container: HTMLElement, category: AchievementCategory, achievements: Achievement[]): void {
+		const section = container.createDiv('omi-achievement-section');
+
+		// Category header
+		const header = section.createDiv('omi-achievement-category-header');
+		const categoryLabel = ACHIEVEMENT_CATEGORY_LABELS[category];
+		const unlockedInCategory = achievements.filter(a => a.unlocked).length;
+		header.createEl('span', { text: categoryLabel, cls: 'omi-achievement-category-title' });
+		header.createEl('span', { text: `${unlockedInCategory}/${achievements.length}`, cls: 'omi-achievement-category-count' });
+
+		// Achievement grid for this category
+		const grid = section.createDiv('omi-achievements-grid');
+
+		// Sort: unlocked first, then by progress percentage (highest first)
+		const sorted = [...achievements].sort((a, b) => {
+			if (a.unlocked && !b.unlocked) return -1;
+			if (!a.unlocked && b.unlocked) return 1;
+			// Both locked: sort by progress
+			const aProgress = a.threshold ? (a.current || 0) / a.threshold : 0;
+			const bProgress = b.threshold ? (b.current || 0) / b.threshold : 0;
+			return bProgress - aProgress;
+		});
+
+		for (const achievement of sorted) {
+			this.renderAchievementCard(grid, achievement);
+		}
 	}
 
 	private renderAchievementCard(container: HTMLElement, achievement: Achievement): void {
