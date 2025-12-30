@@ -1697,33 +1697,41 @@
     outline-offset: 2px;
 }
 
+/* Time row - top left for easy scanning */
+.omi-conversation-time-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+}
+
+.omi-conversation-time-row .omi-conversation-time {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.omi-conversation-time-row .omi-conversation-duration {
+    font-size: 12px;
+    color: var(--text-faint);
+}
+
+/* Title row */
 .omi-conversation-card-header {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
     margin-bottom: 8px;
 }
 
 .omi-conversation-card-header .omi-conversation-emoji {
-    font-size: 24px;
+    font-size: 22px;
 }
 
 .omi-conversation-card-header .omi-conversation-title {
     flex: 1;
     font-weight: 500;
     font-size: 15px;
-}
-
-.omi-conversation-card-header .omi-conversation-time {
-    font-size: 13px;
-}
-
-/* Duration Text */
-.omi-conversation-duration {
-    font-size: var(--font-smaller);
-    color: var(--text-muted);
-    margin-left: auto;
-    padding-left: 8px;
 }
 
 /* Meta Row */

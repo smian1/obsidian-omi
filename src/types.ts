@@ -155,3 +155,105 @@ export interface MemoryFromAPI {
 export interface MemoryWithUI extends MemoryFromAPI {
 	isEditing: boolean;
 }
+
+// Stats Dashboard Types
+export interface HeatmapCell {
+	day: number;        // 0-6 (Sun-Sat)
+	hour: number;       // 0-23
+	count: number;
+	duration: number;   // Minutes
+	intensity: number;  // 0-1 normalized
+}
+
+export interface CategoryStat {
+	category: string;
+	count: number;
+	duration: number;
+	percentage: number;
+	trend?: number;     // % change from previous period
+}
+
+export interface DurationBucket {
+	label: string;
+	min: number;
+	max: number;
+	count: number;
+	percentage: number;
+}
+
+export interface MemoryStats {
+	total: number;
+	byCategory: Record<string, number>;
+	topTags: { tag: string; count: number }[];
+	recentCount: number;  // Last 7 days
+}
+
+export interface TaskStats {
+	total: number;
+	completed: number;
+	pending: number;
+	overdue: number;
+	completionRate: number;
+	avgCompletionDays: number | null;
+}
+
+export interface Achievement {
+	id: string;
+	icon: string;
+	title: string;
+	description: string;
+	unlocked: boolean;
+	progress?: number;    // 0-1 for partial progress
+	threshold?: number;   // Target value
+	current?: number;     // Current value
+}
+
+export interface StatsData {
+	// Time range
+	timeRange: 'all' | '30days' | 'month' | 'week';
+	startDate: Date;
+	endDate: Date;
+
+	// Conversation stats
+	conversationCount: number;
+	totalDuration: number;
+	avgDuration: number;
+
+	// Trends (weekly data for sparklines)
+	weeklyConversations: number[];
+	weeklyDuration: number[];
+
+	// Period comparison
+	prevPeriodConversations: number;
+	prevPeriodDuration: number;
+	conversationTrend: number;  // % change
+	durationTrend: number;      // % change
+
+	// Patterns
+	heatmap: HeatmapCell[];
+	peakDay: string;
+	peakHour: string;
+	streak: number;
+
+	// Categories
+	categories: CategoryStat[];
+	topCategory: string;
+
+	// Duration distribution
+	durationBuckets: DurationBucket[];
+
+	// From other data sources
+	memoryStats: MemoryStats | null;
+	taskStats: TaskStats | null;
+
+	// Location stats
+	uniqueLocations: number;
+	topLocations: { address: string; count: number }[];
+
+	// Achievements
+	achievements: Achievement[];
+
+	// Time-based counts for achievements
+	lateNightCount: number;    // 10pm-4am
+	earlyMorningCount: number; // 5am-8am
+}

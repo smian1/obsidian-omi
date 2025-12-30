@@ -1,6 +1,6 @@
 import { ItemView, WorkspaceLeaf, Notice, debounce } from 'obsidian';
 import { VIEW_TYPE_OMI_HUB, MEMORY_CATEGORY_EMOJI } from './constants';
-import { TaskWithUI, SyncedConversationMeta, ConversationDetailData, ActionItem, CalendarEvent, TranscriptSegment, MemoryWithUI } from './types';
+import { TaskWithUI, SyncedConversationMeta, ConversationDetailData, ActionItem, CalendarEvent, TranscriptSegment, MemoryWithUI, StatsData, HeatmapCell, CategoryStat, DurationBucket, MemoryStats, TaskStats, Achievement, ActionItemFromAPI, MemoryFromAPI } from './types';
 import { AddTaskModal, DatePickerModal, EditTaskModal, CalendarDatePickerModal, AddMemoryModal, EditMemoryModal } from './modals';
 import type OmiConversationsPlugin from './main';
 
@@ -40,6 +40,13 @@ export class OmiHubView extends ItemView {
 	isLoadingDetail = false;
 	statsTimeRange: 'week' | 'month' | '30days' | 'all' = 'all';
 	dailyViewSelectedDate: string | null = null; // YYYY-MM-DD format for unified daily view
+
+	// Stats dashboard state
+	private statsData: StatsData | null = null;
+	private statsMemories: MemoryFromAPI[] = [];
+	private statsTasks: ActionItemFromAPI[] = [];
+	private isLoadingStats = false;
+	private statsDataLoaded = false;
 
 	// Memories state
 	memories: MemoryWithUI[] = [];
@@ -1368,26 +1375,28 @@ export class OmiHubView extends ItemView {
 	private renderConversationCard(container: HTMLElement, conv: SyncedConversationMeta, showDate = false): void {
 		const isSelected = this.selectedConversationId === conv.id;
 		const card = container.createDiv(`omi-conversation-card${isSelected ? ' selected' : ''}`);
+		card.setAttribute('data-conversation-id', conv.id);
 		card.setAttribute('role', 'button');
 		card.setAttribute('tabindex', '0');
 		card.setAttribute('aria-selected', String(isSelected));
 
-		// Header row: emoji, title, time
-		const header = card.createDiv('omi-conversation-card-header');
-		header.createEl('span', { text: conv.emoji || '💬', cls: 'omi-conversation-emoji' });
-		header.createEl('span', { text: conv.title || 'Untitled', cls: 'omi-conversation-title' });
+		// Time row (top-left for easy scanning)
+		const timeRow = card.createDiv('omi-conversation-time-row');
 		const timeText = showDate
 			? `${new Date(conv.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} ${conv.time}`
 			: conv.time;
-		header.createEl('span', { text: timeText, cls: 'omi-conversation-time' });
-
-		// Show duration text in header
+		timeRow.createEl('span', { text: timeText, cls: 'omi-conversation-time' });
 		if (conv.duration && conv.duration > 0) {
-			header.createEl('span', {
-				text: this.formatDuration(conv.duration),
+			timeRow.createEl('span', {
+				text: `· ${this.formatDuration(conv.duration)}`,
 				cls: 'omi-conversation-duration'
 			});
 		}
+
+		// Title row: emoji + title
+		const header = card.createDiv('omi-conversation-card-header');
+		header.createEl('span', { text: conv.emoji || '💬', cls: 'omi-conversation-emoji' });
+		header.createEl('span', { text: conv.title || 'Untitled', cls: 'omi-conversation-title' });
 
 		// Meta row: tasks count, events count
 		const meta = card.createDiv('omi-conversation-card-meta');
@@ -2040,6 +2049,11 @@ export class OmiHubView extends ItemView {
 			this.detailTab = 'summary';
 			await this.loadConversationDetails(conv.id);
 			this.render();
+			// Scroll the selected card into view
+			setTimeout(() => {
+				const selectedCard = this.containerEl.querySelector(`[data-conversation-id="${conv.id}"]`);
+				selectedCard?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+			}, 0);
 		};
 		block.addEventListener('click', handleClick);
 		block.addEventListener('keydown', (e) => {
