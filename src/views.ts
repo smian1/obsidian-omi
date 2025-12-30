@@ -1381,16 +1381,11 @@ export class OmiHubView extends ItemView {
 			: conv.time;
 		header.createEl('span', { text: timeText, cls: 'omi-conversation-time' });
 
-		// Duration bar (visual representation)
+		// Show duration text in header
 		if (conv.duration && conv.duration > 0) {
-			const durationBar = card.createDiv('omi-conversation-duration-bar');
-			// Max width at 60 min, min at 1 min
-			const barWidth = Math.min(100, Math.max(5, (conv.duration / 60) * 100));
-			const barFill = durationBar.createDiv('omi-conversation-duration-fill');
-			barFill.style.width = `${barWidth}%`;
-			durationBar.createEl('span', {
+			header.createEl('span', {
 				text: this.formatDuration(conv.duration),
-				cls: 'omi-conversation-duration-text'
+				cls: 'omi-conversation-duration'
 			});
 		}
 
@@ -1879,6 +1874,15 @@ export class OmiHubView extends ItemView {
 
 		const displayDate = dateIndex >= 0 ? currentDate : sortedDates[0];
 		const displayIndex = dateIndex >= 0 ? dateIndex : 0;
+
+		// Auto-select first conversation if none selected
+		if (!this.selectedConversationId) {
+			const dayConvs = this.getConversationsForDate(displayDate);
+			if (dayConvs.length > 0) {
+				this.selectedConversationId = dayConvs[0].id;
+				this.loadConversationDetails(dayConvs[0].id);
+			}
+		}
 
 		// 1. Date Navigation Header
 		this.renderDateNavigationHeader(dailyContainer, displayDate, sortedDates, displayIndex);

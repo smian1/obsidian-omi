@@ -1718,33 +1718,12 @@
     font-size: 13px;
 }
 
-/* Duration Bar */
-.omi-conversation-duration-bar {
-    height: 8px;
-    background: var(--background-modifier-border);
-    border-radius: var(--omi-radius-full);
-    margin-bottom: 10px;
-    position: relative;
-    overflow: hidden;
-}
-
-.omi-conversation-duration-fill {
-    height: 100%;
-    background: var(--interactive-accent);
-    border-radius: var(--omi-radius-full);
-    transition: width var(--omi-duration-medium) var(--omi-easing-standard);
-}
-
-.omi-conversation-duration-text {
-    position: absolute;
-    right: 8px;
-    top: 50%;
-    transform: translateY(-50%);
-    font-size: 10px;
+/* Duration Text */
+.omi-conversation-duration {
+    font-size: var(--font-smaller);
     color: var(--text-muted);
-    background: var(--background-secondary);
-    padding: 0 4px;
-    border-radius: 2px;
+    margin-left: auto;
+    padding-left: 8px;
 }
 
 /* Meta Row */
