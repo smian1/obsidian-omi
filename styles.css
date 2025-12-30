@@ -67,7 +67,9 @@
 .omi-tasks-container {
     padding: 16px;
     height: 100%;
-    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
 .omi-tasks-header h2 {
@@ -166,15 +168,21 @@
 .omi-task-row {
     display: flex;
     align-items: flex-start;
-    gap: 8px;
-    padding: 10px 8px;
-    border-radius: 6px;
-    margin-bottom: 4px;
-    transition: background-color 0.1s ease;
+    gap: 10px;
+    padding: 14px 16px;
+    border-radius: 10px;
+    margin-bottom: 10px;
+    background: var(--background-secondary);
+    border: 1px solid var(--background-modifier-border);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    transition: all var(--omi-duration-medium) var(--omi-easing-standard);
 }
 
 .omi-task-row:hover {
-    background: var(--background-secondary);
+    background: var(--background-primary);
+    border-color: rgba(139, 92, 246, 0.3);
+    box-shadow: 0 4px 12px rgba(139, 92, 246, 0.08);
+    transform: translateY(-1px);
 }
 
 .omi-task-row input[type="checkbox"] {
@@ -191,7 +199,7 @@
     flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 4px;
     min-width: 0;
 }
 
@@ -210,11 +218,11 @@
 
 /* Date subtitle under task */
 .omi-task-date-subtitle {
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-muted);
     cursor: pointer;
     padding: 0 6px;
-    transition: color 0.1s ease;
+    transition: color var(--omi-duration-short) ease;
 }
 
 .omi-task-date-subtitle:hover {
@@ -589,19 +597,20 @@
     display: flex;
     gap: 12px;
     overflow-x: auto;
-    padding-bottom: 16px;
-    min-height: 300px;
+    padding-bottom: 8px;
+    flex: 1;
+    min-height: 0;
 }
 
 .omi-kanban-column {
     flex: 1;
-    min-width: 180px;
-    max-width: 280px;
+    min-width: 200px;
     background: var(--background-secondary);
     border-radius: 8px;
     padding: 12px;
     display: flex;
     flex-direction: column;
+    overflow-y: auto;
 }
 
 .omi-kanban-column-header {
@@ -810,6 +819,10 @@
 /* Monthly Calendar */
 .omi-calendar-grid-monthly {
     width: 100%;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
 }
 
 .omi-calendar-header-row {
@@ -827,17 +840,21 @@
 .omi-calendar-body {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
+    grid-template-rows: repeat(6, 1fr);
     gap: 4px;
+    flex: 1;
+    min-height: 0;
 }
 
 .omi-calendar-day-cell {
-    min-height: 70px;
-    padding: 4px;
+    padding: 6px;
     background: var(--background-secondary);
-    border-radius: 4px;
+    border-radius: 6px;
     cursor: pointer;
     transition: background-color 0.15s ease;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
 }
 
 .omi-calendar-day-cell:hover {
@@ -898,6 +915,8 @@
     display: flex;
     gap: 8px;
     overflow-x: auto;
+    flex: 1;
+    min-height: 0;
 }
 
 .omi-calendar-week-day {
@@ -3848,21 +3867,27 @@ svg.leaflet-image-layer.leaflet-interactive path {
 
 /* Memory Card */
 .omi-memory-card {
-    background: transparent;
-    padding: 8px 10px;
-    border-bottom: 1px solid var(--background-modifier-border);
-    transition: background-color var(--omi-duration-short) ease;
+    background: var(--background-secondary);
+    padding: 14px 16px;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 10px;
+    margin-bottom: 10px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    transition: all var(--omi-duration-medium) var(--omi-easing-standard);
 }
 
 .omi-memory-card:hover {
-    background: var(--background-secondary);
+    background: var(--background-primary);
+    border-color: rgba(139, 92, 246, 0.3);
+    box-shadow: 0 4px 12px rgba(139, 92, 246, 0.08);
+    transform: translateY(-1px);
 }
 
 .omi-memory-card-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 2px;
+    margin-bottom: 6px;
 }
 
 .omi-memory-category {
@@ -3877,18 +3902,18 @@ svg.leaflet-image-layer.leaflet-interactive path {
 }
 
 .omi-memory-content {
-    margin-bottom: 4px;
+    margin-bottom: 8px;
 }
 
 .omi-memory-content-text {
-    line-height: 1.35;
+    line-height: 1.5;
     color: var(--text-normal);
     cursor: pointer;
     padding: 2px 4px;
     margin: -2px -4px;
     border-radius: var(--omi-radius-sm);
     transition: background-color var(--omi-duration-short) ease;
-    font-size: 13px;
+    font-size: 14px;
 }
 
 .omi-memory-content-text:hover {

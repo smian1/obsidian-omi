@@ -2855,16 +2855,6 @@ export class OmiHubView extends ItemView {
 			document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
 		});
 
-		// Status dot (TaskNotes inspired)
-		let statusClass = 'omi-task__status--pending';
-		if (task.completed) {
-			statusClass = 'omi-task__status--completed';
-		} else if (isOverdueTask) {
-			statusClass = 'omi-task__status--overdue';
-		}
-		const statusDot = card.createDiv(`omi-task__status ${statusClass}`);
-		statusDot.setAttribute('aria-hidden', 'true');
-
 		// Checkbox
 		const checkbox = card.createEl('input', { type: 'checkbox' });
 		checkbox.checked = task.completed;
