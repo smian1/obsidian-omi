@@ -302,9 +302,11 @@ export default class OmiConversationsPlugin extends Plugin {
 			let apiCalls = 0;
 
 			if (fullResync) {
-				// Full resync: fetch everything
-				this.updateSyncProgress('conversations', 'Fetching all conversations...', 10);
-				allConversations = await this.api.getAllConversations(startDate);
+				// Full resync: fetch everything with progress updates
+				allConversations = await this.api.getAllConversations(
+					startDate,
+					(step, progress) => this.updateSyncProgress('conversations', step, progress)
+				);
 				newConversations = allConversations;
 				apiCalls = Math.ceil((allConversations.length || 1) / 100);
 			} else {

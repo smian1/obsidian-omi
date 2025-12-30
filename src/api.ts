@@ -16,19 +16,30 @@ export class OmiAPI {
 		this.apiKey = apiKey;
 	}
 
-	async getAllConversations(startDate?: string): Promise<Conversation[]> {
+	async getAllConversations(
+		startDate?: string,
+		onProgress?: (step: string, progress: number) => void
+	): Promise<Conversation[]> {
 		const allConversations: Conversation[] = [];
 		let offset = 0;
-		const startDateTime = startDate ? new Date(startDate + 'T00:00:00Z').getTime() : 0;
+		let pageNum = 0;
 
 		try {
 			// Fetch conversations with pagination using new v1/dev endpoint
 			while (true) {
+				pageNum++;
+				onProgress?.(`Fetching page ${pageNum}...`, Math.min(80, pageNum * 8));
+
 				const params = new URLSearchParams({
 					limit: this.batchSize.toString(),
 					offset: offset.toString(),
 					include_transcript: 'true'
 				});
+
+				// Use server-side date filtering (API supports start_date param)
+				if (startDate) {
+					params.set('start_date', startDate);
+				}
 
 				const conversations = await this.makeRequest(
 					`${this.baseUrl}/v1/dev/user/conversations`,
@@ -37,22 +48,12 @@ export class OmiAPI {
 
 				if (!conversations || conversations.length === 0) break;
 
-				// Filter by start date if provided
-				const filteredConversations = startDate
-					? conversations.filter((c: Conversation) => new Date(c.created_at).getTime() >= startDateTime)
-					: conversations;
-
-				if (filteredConversations.length > 0) {
-					allConversations.push(...filteredConversations);
-				}
+				// Server handles date filtering, just add all returned conversations
+				allConversations.push(...conversations);
+				onProgress?.(`Found ${allConversations.length} conversations...`, Math.min(85, pageNum * 8 + 5));
 
 				// If we got less than the batch size, we've reached the end
 				if (conversations.length < this.batchSize) break;
-
-				// If all conversations in this batch are older than start date, we can stop
-				if (startDate && filteredConversations.length === 0) {
-					break;
-				}
 
 				offset += this.batchSize;
 
@@ -60,6 +61,7 @@ export class OmiAPI {
 				await new Promise(resolve => setTimeout(resolve, 500)); // 500ms delay
 			}
 
+			onProgress?.(`Fetched ${allConversations.length} conversations`, 90);
 			return allConversations;
 		} catch (error) {
 			console.error('Error fetching conversations:', error);
@@ -70,6 +72,7 @@ export class OmiAPI {
 	/**
 	 * Optimized incremental sync - fetches only new conversations
 	 * API returns newest-first, so we stop when we hit a known conversation
+	 * Uses server-side date filtering via start_date param for efficiency
 	 */
 	async getConversationsSince(
 		syncedIds: Set<string>,
@@ -82,7 +85,6 @@ export class OmiAPI {
 		let stoppedEarly = false;
 		let apiCalls = 0;
 		const lastSync = lastSyncTime ? new Date(lastSyncTime).getTime() : 0;
-		const startDateTime = startDate ? new Date(startDate + 'T00:00:00Z').getTime() : 0;
 
 		try {
 			while (true) {
@@ -93,6 +95,11 @@ export class OmiAPI {
 					offset: offset.toString(),
 					include_transcript: 'true'
 				});
+
+				// Use server-side date filtering (API supports start_date param)
+				if (startDate) {
+					params.set('start_date', startDate);
+				}
 
 				const batch = await this.makeRequest(
 					`${this.baseUrl}/v1/dev/user/conversations`,
@@ -105,12 +112,8 @@ export class OmiAPI {
 				onProgress?.(`Processing ${newConversations.length + batch.length} conversations...`, Math.min(95, apiCalls * 10));
 
 				for (const conv of batch) {
-					// Filter by start date if provided
-					if (startDate && new Date(conv.created_at).getTime() < startDateTime) {
-						// Reached conversations older than start date, stop
-						stoppedEarly = true;
-						break;
-					}
+					// Server handles date filtering via start_date param
+					// We just need to check for known conversations (stop when known)
 
 					// If we've seen this conversation before
 					if (syncedIds.has(conv.id)) {

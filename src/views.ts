@@ -2484,7 +2484,7 @@ export class OmiHubView extends ItemView {
 	// ==================== SYNC TAB ====================
 
 	private renderSyncTab(container: HTMLElement): void {
-		const tabContent = container.createDiv('omi-sync-container');
+		const tabContent = container.createDiv('omi-sync-dashboard');
 
 		// Subscribe to sync progress updates for live updates
 		if (this.unsubscribeSyncProgress) {
@@ -2499,63 +2499,56 @@ export class OmiHubView extends ItemView {
 
 		// Live Status Banner (only visible during sync)
 		if (this.plugin.syncProgress.isActive) {
-			this.renderSyncLiveStatus(tabContent);
+			this.renderSyncLiveBanner(tabContent);
 		}
 
-		// Status Cards
-		const cardsContainer = tabContent.createDiv('omi-sync-cards');
-		this.renderSyncCard(cardsContainer, 'conversations');
-		this.renderSyncCard(cardsContainer, 'tasks');
-		this.renderSyncCard(cardsContainer, 'memories');
+		// Status Cards Grid
+		const cardsGrid = tabContent.createDiv('omi-sync-cards');
+		this.renderSyncCardNew(cardsGrid, 'conversations');
+		this.renderSyncCardNew(cardsGrid, 'tasks');
+		this.renderSyncCardNew(cardsGrid, 'memories');
 
 		// Sync History Log
-		this.renderSyncHistory(tabContent);
+		this.renderSyncLogTimeline(tabContent);
 	}
 
-	private renderSyncLiveStatus(container: HTMLElement): void {
+	private renderSyncLiveBanner(container: HTMLElement): void {
 		const progress = this.plugin.syncProgress;
-		const liveStatus = container.createDiv('omi-sync-live');
+		const banner = container.createDiv('omi-sync-live-banner');
 
-		const header = liveStatus.createDiv('omi-sync-live-header');
-		header.createEl('span', { text: '●', cls: 'omi-sync-pulse' });
-		header.createEl('span', {
-			text: `Syncing ${progress.type}...`,
-			cls: 'omi-sync-live-title'
+		// Pulsing indicator
+		banner.createDiv('omi-sync-live-indicator');
+
+		// Content
+		const content = banner.createDiv('omi-sync-live-content');
+		content.createDiv({
+			cls: 'omi-sync-live-title',
+			text: `Syncing ${progress.type}...`
+		});
+		content.createDiv({
+			cls: 'omi-sync-live-step',
+			text: progress.step
 		});
 
-		const stepText = liveStatus.createEl('div', {
-			text: progress.step,
-			cls: 'omi-sync-live-step'
-		});
-
-		// Progress bar
-		const progressBar = liveStatus.createDiv('omi-sync-progress-bar');
-		const progressFill = progressBar.createDiv('omi-sync-progress-fill');
+		// Progress track
+		const progressTrack = banner.createDiv('omi-sync-progress-track');
+		const progressFill = progressTrack.createDiv('omi-sync-progress-fill');
 		progressFill.style.width = `${Math.min(100, progress.progress)}%`;
-
-		// Elapsed time
-		const elapsed = Date.now() - progress.startedAt;
-		const elapsedSec = Math.floor(elapsed / 1000);
-		liveStatus.createEl('div', {
-			text: `${elapsedSec}s elapsed`,
-			cls: 'omi-sync-live-elapsed'
-		});
 	}
 
-	private renderSyncCard(container: HTMLElement, type: 'conversations' | 'tasks' | 'memories'): void {
+	private renderSyncCardNew(container: HTMLElement, type: 'conversations' | 'tasks' | 'memories'): void {
 		const settings = this.plugin.settings;
-		const isActive = this.plugin.syncProgress.isActive && this.plugin.syncProgress.type === type;
+		const isSyncing = this.plugin.syncProgress.isActive && this.plugin.syncProgress.type === type;
 
-		// Get last sync time for this type
+		// Determine status
+		let status: 'synced' | 'syncing' | 'error' | 'never' = 'never';
 		let lastSync: string | null = null;
-		let statusClass = 'synced';
-		let statusIcon = '✅';
 
 		if (type === 'conversations') {
 			lastSync = settings.lastConversationSyncTimestamp;
 		} else if (type === 'tasks') {
 			lastSync = settings.lastTasksSyncTimestamp;
-		} else if (type === 'memories') {
+		} else {
 			lastSync = settings.lastMemoriesSyncTimestamp;
 		}
 
@@ -2563,96 +2556,153 @@ export class OmiHubView extends ItemView {
 		const recentErrors = settings.syncHistory
 			.filter(e => e.type === type && e.error)
 			.slice(0, 1);
-		if (recentErrors.length > 0) {
-			statusClass = 'error';
-			statusIcon = '⚠️';
-		} else if (isActive) {
-			statusClass = 'syncing';
-			statusIcon = '🔄';
+
+		if (isSyncing) {
+			status = 'syncing';
+		} else if (recentErrors.length > 0) {
+			status = 'error';
+		} else if (lastSync) {
+			status = 'synced';
 		}
 
-		const card = container.createDiv(`omi-sync-card omi-sync-card--${statusClass}`);
+		// Card element with type and status classes
+		const card = container.createDiv({
+			cls: `omi-sync-card omi-sync-card--${type} omi-sync-card--${status}`
+		});
 
 		// Header
-		const header = card.createDiv('omi-sync-card-header');
-		header.createEl('span', { text: statusIcon, cls: 'omi-sync-card-icon' });
-		header.createEl('h4', { text: this.capitalizeFirst(type), cls: 'omi-sync-card-title' });
+		const header = card.createDiv('omi-sync-card__header');
 
-		// Status row
-		const statusRow = card.createDiv('omi-sync-card-status');
-		if (lastSync) {
-			const lastSyncDate = new Date(lastSync);
-			const relativeTime = this.getRelativeTime(lastSyncDate);
-			statusRow.createEl('span', { text: `Last sync: ${relativeTime}`, cls: 'omi-sync-card-last' });
-		} else {
-			statusRow.createEl('span', { text: 'Never synced', cls: 'omi-sync-card-last omi-text-muted' });
-		}
+		// Icon
+		const icon = header.createDiv('omi-sync-card__icon');
+		const iconEmoji = type === 'conversations' ? '💬' : type === 'tasks' ? '✓' : '🧠';
+		icon.setText(iconEmoji);
 
-		// Stats row
-		const statsRow = card.createDiv('omi-sync-card-stats');
+		// Title group
+		const titleGroup = header.createDiv('omi-sync-card__title-group');
+		titleGroup.createDiv({
+			cls: 'omi-sync-card__title',
+			text: this.capitalizeFirst(type)
+		});
+		titleGroup.createDiv({
+			cls: 'omi-sync-card__subtitle',
+			text: lastSync ? `Last: ${this.getRelativeTime(new Date(lastSync))}` : 'Never synced'
+		});
+
+		// Status badge
+		const statusBadge = header.createDiv('omi-sync-card__status');
+		statusBadge.createDiv('omi-sync-card__status-dot');
+		const statusText = isSyncing ? 'Syncing' : (status === 'error' ? 'Error' : (lastSync ? 'Synced' : 'Ready'));
+		statusBadge.createSpan({ text: statusText });
+
+		// Stats
+		const stats = card.createDiv('omi-sync-card__stats');
+		this.renderSyncCardStats(stats, type);
+
+		// Settings row
+		const settingsRow = card.createDiv('omi-sync-card__settings');
+		this.renderSyncCardSettings(settingsRow, type);
+
+		// Actions
+		const actions = card.createDiv('omi-sync-card__actions');
+		this.renderSyncCardActions(actions, type, isSyncing);
+	}
+
+	private renderSyncCardStats(container: HTMLElement, type: string): void {
+		const settings = this.plugin.settings;
+
 		if (type === 'conversations') {
 			const count = Object.keys(settings.syncedConversations || {}).length;
-			statsRow.createEl('span', { text: `${count} conversations tracked` });
+			this.createSyncStatItem(container, count.toString(), 'tracked');
 		} else if (type === 'tasks') {
 			const pending = this.tasks.filter(t => !t.completed).length;
 			const total = this.tasks.length;
-			statsRow.createEl('span', { text: `${total} tasks (${pending} pending)` });
-		} else if (type === 'memories') {
-			statsRow.createEl('span', { text: `${this.memories.length} memories` });
+			this.createSyncStatItem(container, total.toString(), 'tasks');
+			this.createSyncStatItem(container, pending.toString(), 'pending');
+		} else {
+			const count = this.memories.length;
+			this.createSyncStatItem(container, count.toString(), 'memories');
 		}
+	}
 
-		// Settings row
-		const settingsRow = card.createDiv('omi-sync-settings-row');
+	private createSyncStatItem(container: HTMLElement, value: string, label: string): void {
+		const stat = container.createDiv('omi-sync-card__stat');
+		stat.createDiv({ cls: 'omi-sync-card__stat-value', text: value });
+		stat.createDiv({ cls: 'omi-sync-card__stat-label', text: label });
+	}
+
+	private renderSyncCardSettings(container: HTMLElement, type: string): void {
+		const settings = this.plugin.settings;
 
 		if (type === 'conversations') {
-			// Auto-sync toggle
+			// Row 1: Auto-sync toggle + interval
+			const autoSyncRow = container.createDiv('omi-sync-card__setting');
 			const autoSyncEnabled = settings.conversationAutoSync > 0;
-			const toggleLabel = settingsRow.createEl('label', { cls: 'omi-sync-toggle-label' });
-			toggleLabel.createEl('span', { text: 'Auto-sync: ' });
-			const toggle = toggleLabel.createEl('input', { type: 'checkbox' });
-			toggle.checked = autoSyncEnabled;
-			toggle.addEventListener('change', async () => {
-				if (toggle.checked) {
-					settings.conversationAutoSync = 30; // Default to 30 min
-				} else {
+			autoSyncRow.createSpan({ cls: 'omi-sync-card__setting-label', text: 'Auto-sync:' });
+
+			const toggle = autoSyncRow.createDiv({
+				cls: `omi-sync-toggle ${autoSyncEnabled ? 'omi-sync-toggle--active' : ''}`
+			});
+			toggle.createDiv('omi-sync-toggle__knob');
+			toggle.addEventListener('click', async () => {
+				if (autoSyncEnabled) {
 					settings.conversationAutoSync = 0;
+				} else {
+					settings.conversationAutoSync = 30;
 				}
 				await this.plugin.saveSettings();
 				this.plugin.setupConversationAutoSync();
 				this.render();
 			});
 
-			// Interval dropdown (only if enabled)
-			if (autoSyncEnabled) {
-				const select = settingsRow.createEl('select', { cls: 'omi-sync-interval-select' });
-				const intervals = [
-					{ value: '30', label: '30 min' },
-					{ value: '60', label: '1 hour' },
-					{ value: '120', label: '2 hours' },
-					{ value: '360', label: '6 hours' }
-				];
-				for (const opt of intervals) {
-					const option = select.createEl('option', { value: opt.value, text: opt.label });
-					if (settings.conversationAutoSync === parseInt(opt.value)) {
-						option.selected = true;
-					}
+			// Interval dropdown
+			const select = container.createEl('select', { cls: 'omi-sync-card__select' });
+			const intervals = [
+				{ value: '30', label: '30 min' },
+				{ value: '60', label: '1 hour' },
+				{ value: '120', label: '2 hours' },
+				{ value: '360', label: '6 hours' }
+			];
+			for (const opt of intervals) {
+				const option = select.createEl('option', { value: opt.value, text: opt.label });
+				if (settings.conversationAutoSync === parseInt(opt.value) ||
+					(settings.conversationAutoSync === 0 && opt.value === '30')) {
+					option.selected = true;
 				}
-				select.addEventListener('change', async () => {
-					settings.conversationAutoSync = parseInt(select.value);
-					await this.plugin.saveSettings();
-					this.plugin.setupConversationAutoSync();
-				});
 			}
-		} else if (type === 'tasks') {
-			// Tasks Hub enabled toggle
-			const toggleLabel = settingsRow.createEl('label', { cls: 'omi-sync-toggle-label' });
-			toggleLabel.createEl('span', { text: 'Tasks Hub: ' });
-			const toggle = toggleLabel.createEl('input', { type: 'checkbox' });
-			toggle.checked = settings.enableTasksHub;
-			toggle.addEventListener('change', async () => {
-				settings.enableTasksHub = toggle.checked;
+			select.addEventListener('change', async () => {
+				settings.conversationAutoSync = parseInt(select.value);
 				await this.plugin.saveSettings();
-				if (toggle.checked) {
+				this.plugin.setupConversationAutoSync();
+				this.render();
+			});
+
+			// Row 2: Start date setting
+			const startDateRow = container.createDiv('omi-sync-card__setting');
+			startDateRow.createSpan({ cls: 'omi-sync-card__setting-label', text: 'From:' });
+			const dateInput = startDateRow.createEl('input', {
+				cls: 'omi-sync-card__date-input',
+				type: 'date',
+				value: settings.startDate
+			});
+			dateInput.addEventListener('change', async () => {
+				settings.startDate = dateInput.value;
+				await this.plugin.saveSettings();
+				new Notice(`Start date set to ${dateInput.value}`);
+			});
+		} else if (type === 'tasks') {
+			// Tasks Hub toggle
+			const setting = container.createDiv('omi-sync-card__setting');
+			setting.createSpan({ cls: 'omi-sync-card__setting-label', text: 'Tasks Hub:' });
+
+			const toggle = setting.createDiv({
+				cls: `omi-sync-toggle ${settings.enableTasksHub ? 'omi-sync-toggle--active' : ''}`
+			});
+			toggle.createDiv('omi-sync-toggle__knob');
+			toggle.addEventListener('click', async () => {
+				settings.enableTasksHub = !settings.enableTasksHub;
+				await this.plugin.saveSettings();
+				if (settings.enableTasksHub) {
 					await this.plugin.initializeTasksHub();
 				} else {
 					this.plugin.stopTasksHubPeriodicSync();
@@ -2660,30 +2710,30 @@ export class OmiHubView extends ItemView {
 				this.render();
 			});
 
-			// Auto-refresh dropdown
-			if (settings.enableTasksHub) {
-				const select = settingsRow.createEl('select', { cls: 'omi-sync-interval-select' });
-				const intervals = [
-					{ value: '5', label: '5 min' },
-					{ value: '10', label: '10 min' },
-					{ value: '15', label: '15 min' },
-					{ value: '30', label: '30 min' }
-				];
-				for (const opt of intervals) {
-					const option = select.createEl('option', { value: opt.value, text: opt.label });
-					if (settings.tasksViewAutoRefresh === parseInt(opt.value)) {
-						option.selected = true;
-					}
+			// Interval dropdown
+			const select = container.createEl('select', { cls: 'omi-sync-card__select' });
+			const intervals = [
+				{ value: '5', label: '5 min' },
+				{ value: '10', label: '10 min' },
+				{ value: '15', label: '15 min' },
+				{ value: '30', label: '30 min' }
+			];
+			for (const opt of intervals) {
+				const option = select.createEl('option', { value: opt.value, text: opt.label });
+				if (settings.tasksViewAutoRefresh === parseInt(opt.value)) {
+					option.selected = true;
 				}
-				select.addEventListener('change', async () => {
-					settings.tasksViewAutoRefresh = parseInt(select.value);
-					await this.plugin.saveSettings();
-				});
 			}
+			select.addEventListener('change', async () => {
+				settings.tasksViewAutoRefresh = parseInt(select.value);
+				await this.plugin.saveSettings();
+			});
 		} else if (type === 'memories') {
-			// Auto-refresh dropdown
-			settingsRow.createEl('span', { text: 'Auto-refresh: ' });
-			const select = settingsRow.createEl('select', { cls: 'omi-sync-interval-select' });
+			// Auto-refresh
+			const setting = container.createDiv('omi-sync-card__setting');
+			setting.createSpan({ cls: 'omi-sync-card__setting-label', text: 'Auto-refresh:' });
+
+			const select = container.createEl('select', { cls: 'omi-sync-card__select' });
 			const intervals = [
 				{ value: '5', label: '5 min' },
 				{ value: '10', label: '10 min' },
@@ -2701,87 +2751,141 @@ export class OmiHubView extends ItemView {
 				await this.plugin.saveSettings();
 			});
 		}
+	}
 
-		// Action buttons
-		const actionsRow = card.createDiv('omi-sync-card-actions');
+	private renderSyncCardActions(container: HTMLElement, type: string, isSyncing: boolean): void {
+		const settings = this.plugin.settings;
 
 		if (type === 'conversations') {
-			const syncBtn = actionsRow.createEl('button', {
-				text: 'Sync New',
-				cls: 'omi-sync-btn'
+			// Sync New button
+			const syncBtn = container.createEl('button', {
+				cls: `omi-sync-card__btn omi-sync-card__btn--primary ${isSyncing ? 'omi-sync-card__btn--syncing' : ''}`
 			});
-			syncBtn.disabled = isActive;
-			syncBtn.addEventListener('click', () => this.plugin.syncConversations(false));
+			if (isSyncing) {
+				syncBtn.createDiv('omi-sync-card__btn-spinner');
+				syncBtn.createSpan({ text: 'Syncing...' });
+			} else {
+				syncBtn.setText('Sync New');
+				syncBtn.addEventListener('click', () => this.plugin.syncConversations(false));
+			}
 
-			const fullSyncBtn = actionsRow.createEl('button', {
+			// Full Resync button
+			const fullSyncBtn = container.createEl('button', {
 				text: 'Full Resync',
-				cls: 'omi-sync-btn omi-sync-btn--secondary'
+				cls: 'omi-sync-card__btn omi-sync-card__btn--secondary'
 			});
-			fullSyncBtn.disabled = isActive;
+			fullSyncBtn.disabled = isSyncing;
 			fullSyncBtn.addEventListener('click', () => {
 				if (confirm('This will re-fetch all conversations. Continue?')) {
 					this.plugin.syncConversations(true);
 				}
 			});
 		} else if (type === 'tasks') {
-			const refreshBtn = actionsRow.createEl('button', {
-				text: 'Refresh Now',
-				cls: 'omi-sync-btn'
+			const refreshBtn = container.createEl('button', {
+				cls: `omi-sync-card__btn omi-sync-card__btn--primary ${isSyncing ? 'omi-sync-card__btn--syncing' : ''}`
 			});
-			refreshBtn.disabled = !settings.enableTasksHub || isActive;
-			refreshBtn.addEventListener('click', async () => {
-				await this.loadTasks(true);
-				new Notice('Tasks refreshed');
-			});
+			if (isSyncing) {
+				refreshBtn.createDiv('omi-sync-card__btn-spinner');
+				refreshBtn.createSpan({ text: 'Refreshing...' });
+			} else {
+				refreshBtn.setText('Refresh Now');
+				refreshBtn.disabled = !settings.enableTasksHub;
+				refreshBtn.addEventListener('click', async () => {
+					await this.loadTasks(true);
+					// Log to sync history and update timestamp
+					this.plugin.settings.lastTasksSyncTimestamp = new Date().toISOString();
+					this.plugin.settings.syncHistory.unshift({
+						timestamp: new Date().toISOString(),
+						type: 'tasks',
+						action: 'sync',
+						count: this.tasks.length
+					});
+					// Prune old entries
+					const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+					this.plugin.settings.syncHistory = this.plugin.settings.syncHistory
+						.filter(e => new Date(e.timestamp).getTime() > cutoff)
+						.slice(0, 100);
+					await this.plugin.saveSettings();
+					this.render();
+					new Notice(`Tasks refreshed (${this.tasks.length} tasks)`);
+				});
+			}
 		} else if (type === 'memories') {
-			const refreshBtn = actionsRow.createEl('button', {
-				text: 'Refresh Now',
-				cls: 'omi-sync-btn'
+			const refreshBtn = container.createEl('button', {
+				cls: `omi-sync-card__btn omi-sync-card__btn--primary ${isSyncing ? 'omi-sync-card__btn--syncing' : ''}`
 			});
-			refreshBtn.disabled = isActive;
-			refreshBtn.addEventListener('click', async () => {
-				await this.loadMemories(true);
-				new Notice('Memories refreshed');
-			});
+			if (isSyncing) {
+				refreshBtn.createDiv('omi-sync-card__btn-spinner');
+				refreshBtn.createSpan({ text: 'Refreshing...' });
+			} else {
+				refreshBtn.setText('Refresh Now');
+				refreshBtn.addEventListener('click', async () => {
+					await this.loadMemories(true);
+					// Log to sync history and update timestamp
+					this.plugin.settings.lastMemoriesSyncTimestamp = new Date().toISOString();
+					this.plugin.settings.syncHistory.unshift({
+						timestamp: new Date().toISOString(),
+						type: 'memories',
+						action: 'sync',
+						count: this.memories.length
+					});
+					// Prune old entries
+					const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+					this.plugin.settings.syncHistory = this.plugin.settings.syncHistory
+						.filter(e => new Date(e.timestamp).getTime() > cutoff)
+						.slice(0, 100);
+					await this.plugin.saveSettings();
+					this.render();
+					new Notice(`Memories refreshed (${this.memories.length} memories)`);
+				});
+			}
 		}
 	}
 
-	private renderSyncHistory(container: HTMLElement): void {
-		const historyContainer = container.createDiv('omi-sync-history');
-		historyContainer.createEl('h4', { text: 'Sync Log (Last 24 hours)' });
+	private renderSyncLogTimeline(container: HTMLElement): void {
+		const log = container.createDiv('omi-sync-log');
+
+		// Header
+		const header = log.createDiv('omi-sync-log__header');
+		const title = header.createDiv('omi-sync-log__title');
+		title.createSpan({ cls: 'omi-sync-log__title-icon', text: '📋' });
+		title.createSpan({ text: 'Activity Log' });
 
 		const history = this.plugin.settings.syncHistory || [];
+		header.createDiv({ cls: 'omi-sync-log__badge', text: 'Last 24h' });
+
+		const list = log.createDiv('omi-sync-log__list');
 
 		if (history.length === 0) {
-			historyContainer.createEl('p', {
-				text: 'No sync activity yet',
-				cls: 'omi-text-muted'
-			});
+			const empty = list.createDiv('omi-sync-log__empty');
+			empty.createDiv({ cls: 'omi-sync-log__empty-icon', text: '📭' });
+			empty.createDiv({ cls: 'omi-sync-log__empty-text', text: 'No sync activity yet' });
 			return;
 		}
 
-		const logList = historyContainer.createDiv('omi-sync-log');
-
 		for (const entry of history.slice(0, 20)) {
-			const entryEl = logList.createDiv('omi-sync-log-entry');
-
-			// Time
-			const time = new Date(entry.timestamp);
-			const timeStr = time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-			entryEl.createEl('span', { text: timeStr, cls: 'omi-sync-log-time' });
-
-			// Status icon
-			const statusIcon = entry.error ? '⚠️' : '✅';
-			entryEl.createEl('span', { text: statusIcon, cls: 'omi-sync-log-icon' });
-
-			// Type
-			entryEl.createEl('span', {
-				text: this.capitalizeFirst(entry.type),
-				cls: 'omi-sync-log-type'
+			const entryEl = list.createDiv({
+				cls: `omi-sync-log__entry omi-sync-log__entry--${entry.error ? 'error' : 'success'}`
 			});
 
+			// Timeline connector with dot
+			const connector = entryEl.createDiv('omi-sync-log__connector');
+			connector.createDiv('omi-sync-log__dot');
+
+			// Content
+			const content = entryEl.createDiv('omi-sync-log__content');
+			const main = content.createDiv('omi-sync-log__main');
+			main.createSpan({ cls: 'omi-sync-log__type', text: this.capitalizeFirst(entry.type) });
+
+			// Action tag
+			if (entry.action === 'full-resync') {
+				main.createSpan({ cls: 'omi-sync-log__tag omi-sync-log__tag--full', text: 'Full' });
+			} else if (entry.action === 'auto-sync') {
+				main.createSpan({ cls: 'omi-sync-log__tag omi-sync-log__tag--auto', text: 'Auto' });
+			}
+
 			// Details
-			let details = '';
+			let details: string;
 			if (entry.error) {
 				details = entry.error;
 			} else if (entry.count === 0) {
@@ -2792,18 +2896,15 @@ export class OmiHubView extends ItemView {
 					details += ` (${entry.apiCalls} API call${entry.apiCalls > 1 ? 's' : ''})`;
 				}
 			}
-
-			// Action badge
-			const actionBadge = entry.action === 'full-resync' ? 'Full' :
-				entry.action === 'auto-sync' ? 'Auto' : '';
-			if (actionBadge) {
-				entryEl.createEl('span', { text: actionBadge, cls: 'omi-sync-log-badge' });
-			}
-
-			entryEl.createEl('span', {
-				text: details,
-				cls: `omi-sync-log-details ${entry.error ? 'omi-sync-log-error' : ''}`
+			content.createDiv({
+				cls: `omi-sync-log__details ${entry.error ? 'omi-sync-log__details--error' : ''}`,
+				text: details
 			});
+
+			// Time
+			const time = new Date(entry.timestamp);
+			const timeStr = time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+			entryEl.createDiv({ cls: 'omi-sync-log__time', text: timeStr });
 		}
 	}
 
@@ -2812,12 +2913,11 @@ export class OmiHubView extends ItemView {
 		const diff = now - date.getTime();
 		const minutes = Math.floor(diff / 60000);
 		const hours = Math.floor(diff / 3600000);
-		const days = Math.floor(diff / 86400000);
 
-		if (minutes < 1) return 'Just now';
+		if (minutes < 1) return 'just now';
 		if (minutes < 60) return `${minutes} min ago`;
-		if (hours < 24) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
-		return `${days} day${days > 1 ? 's' : ''} ago`;
+		if (hours < 24) return `${hours}h ago`;
+		return date.toLocaleDateString();
 	}
 
 	private capitalizeFirst(str: string): string {
