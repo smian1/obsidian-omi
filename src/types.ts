@@ -27,7 +27,6 @@ export interface OmiConversationsSettings {
 	syncedConversations: Record<string, SyncedConversationMeta>;
 	// Conversations view settings
 	conversationsViewMode: 'list' | 'timeline' | 'stats' | 'heatmap' | 'map';
-	conversationsTimeRange: 'daily' | 'weekly';
 }
 
 // Omi API response types

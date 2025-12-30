@@ -326,3 +326,154 @@ export class EditTaskModal extends Modal {
 		this.contentEl.empty();
 	}
 }
+
+export class CalendarDatePickerModal extends Modal {
+	currentMonth: Date;
+	selectedDate: string;
+	datesWithData: Set<string>;
+	onSelect: (date: string) => void;
+
+	constructor(
+		app: App,
+		datesWithData: string[],
+		selectedDate: string,
+		onSelect: (date: string) => void
+	) {
+		super(app);
+		this.datesWithData = new Set(datesWithData);
+		this.selectedDate = selectedDate;
+		this.currentMonth = new Date(selectedDate + 'T00:00:00');
+		this.onSelect = onSelect;
+	}
+
+	onOpen(): void {
+		const { contentEl } = this;
+		contentEl.addClass('omi-calendar-picker-modal');
+		this.renderCalendar();
+	}
+
+	private renderCalendar(): void {
+		const { contentEl } = this;
+		contentEl.empty();
+
+		// Month header with navigation
+		const header = contentEl.createDiv('omi-calendar-picker-header');
+
+		const prevBtn = header.createEl('button', { text: '◀', cls: 'omi-calendar-nav-btn' });
+		prevBtn.addEventListener('click', () => this.navigateMonth(-1));
+
+		header.createEl('span', {
+			text: this.currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+			cls: 'omi-calendar-month-label'
+		});
+
+		const nextBtn = header.createEl('button', { text: '▶', cls: 'omi-calendar-nav-btn' });
+		nextBtn.addEventListener('click', () => this.navigateMonth(1));
+
+		// Quick jump buttons
+		const quickNav = contentEl.createDiv('omi-calendar-quick-nav');
+
+		const todayBtn = quickNav.createEl('button', { text: 'Today', cls: 'omi-calendar-quick-btn' });
+		todayBtn.addEventListener('click', () => {
+			const today = new Date();
+			const todayStr = this.formatDate(today);
+			if (this.datesWithData.has(todayStr)) {
+				this.onSelect(todayStr);
+				this.close();
+			} else {
+				// Jump to today's month at least
+				this.currentMonth = today;
+				this.renderCalendar();
+			}
+		});
+
+		const recentBtn = quickNav.createEl('button', { text: 'Most Recent', cls: 'omi-calendar-quick-btn' });
+		recentBtn.addEventListener('click', () => {
+			// Find most recent date with data
+			const sortedDates = Array.from(this.datesWithData).sort((a, b) => b.localeCompare(a));
+			if (sortedDates.length > 0) {
+				this.onSelect(sortedDates[0]);
+				this.close();
+			}
+		});
+
+		// Day labels
+		const dayLabels = contentEl.createDiv('omi-calendar-day-labels');
+		const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+		for (const day of days) {
+			dayLabels.createEl('span', { text: day, cls: 'omi-calendar-day-label' });
+		}
+
+		// Calendar grid
+		const grid = contentEl.createDiv('omi-calendar-picker-grid');
+
+		const year = this.currentMonth.getFullYear();
+		const month = this.currentMonth.getMonth();
+
+		// First day of month
+		const firstDay = new Date(year, month, 1);
+		const startPadding = firstDay.getDay();
+
+		// Last day of month
+		const lastDay = new Date(year, month + 1, 0);
+		const daysInMonth = lastDay.getDate();
+
+		// Today for highlighting
+		const today = this.formatDate(new Date());
+
+		// Add padding days from previous month
+		for (let i = 0; i < startPadding; i++) {
+			const paddingDay = grid.createDiv('omi-calendar-day omi-calendar-day-padding');
+			const prevMonthDay = new Date(year, month, -startPadding + i + 1);
+			paddingDay.setText(String(prevMonthDay.getDate()));
+		}
+
+		// Add days of current month
+		for (let day = 1; day <= daysInMonth; day++) {
+			const dateStr = this.formatDate(new Date(year, month, day));
+			const hasData = this.datesWithData.has(dateStr);
+			const isSelected = dateStr === this.selectedDate;
+			const isToday = dateStr === today;
+
+			const classes = ['omi-calendar-day'];
+			if (hasData) classes.push('has-data');
+			if (isSelected) classes.push('selected');
+			if (isToday) classes.push('today');
+
+			const dayEl = grid.createDiv(classes.join(' '));
+			dayEl.setText(String(day));
+			dayEl.setAttribute('role', 'button');
+			dayEl.setAttribute('tabindex', '0');
+
+			if (hasData) {
+				dayEl.addEventListener('click', () => {
+					this.onSelect(dateStr);
+					this.close();
+				});
+				dayEl.addEventListener('keydown', (e) => {
+					if (e.key === 'Enter' || e.key === ' ') {
+						e.preventDefault();
+						this.onSelect(dateStr);
+						this.close();
+					}
+				});
+			}
+		}
+	}
+
+	private navigateMonth(delta: number): void {
+		this.currentMonth.setMonth(this.currentMonth.getMonth() + delta);
+		this.renderCalendar();
+	}
+
+	private formatDate(date: Date): string {
+		const year = date.getFullYear();
+		const month = String(date.getMonth() + 1).padStart(2, '0');
+		const day = String(date.getDate()).padStart(2, '0');
+		return `${year}-${month}-${day}`;
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
+}

@@ -1,7 +1,7 @@
 import { ItemView, WorkspaceLeaf, Notice, debounce } from 'obsidian';
 import { VIEW_TYPE_OMI_HUB } from './constants';
 import { TaskWithUI, SyncedConversationMeta, ConversationDetailData, ActionItem, CalendarEvent, TranscriptSegment } from './types';
-import { AddTaskModal, DatePickerModal, EditTaskModal } from './modals';
+import { AddTaskModal, DatePickerModal, EditTaskModal, CalendarDatePickerModal } from './modals';
 import type OmiConversationsPlugin from './main';
 
 export class OmiHubView extends ItemView {
@@ -32,8 +32,7 @@ export class OmiHubView extends ItemView {
 	selectedConversationData: ConversationDetailData | null = null;
 	isLoadingDetail = false;
 	statsTimeRange: 'week' | 'month' | '30days' | 'all' = 'all';
-	timelineDateIndex = 0; // For daily timeline navigation
-	timelineWeekOffset = 0; // For weekly timeline navigation (0 = current week)
+	dailyViewSelectedDate: string | null = null; // YYYY-MM-DD format for unified daily view
 
 	// Debounced backup sync
 	private requestBackupSync: () => void;
@@ -336,14 +335,10 @@ export class OmiHubView extends ItemView {
 	private renderConversationsTab(container: HTMLElement): void {
 		const tabContent = container.createDiv('omi-conversations-container');
 
-		// View Mode Tabs (List, Timeline, Stats, Heatmap)
+		// View Mode Tabs (Daily, Stats, Heatmap, Map)
 		this.renderConversationsViewModeTabs(tabContent);
 
-		// Time Range Toggle (for applicable views)
 		const currentViewMode = this.plugin.settings.conversationsViewMode || 'list';
-		if (currentViewMode === 'list' || currentViewMode === 'timeline') {
-			this.renderConversationsTimeRangeToggle(tabContent);
-		}
 
 		// Sync Controls Section
 		const syncControls = tabContent.createDiv('omi-conversations-sync-controls');
@@ -382,10 +377,9 @@ export class OmiHubView extends ItemView {
 		// Render the appropriate view based on mode
 		switch (currentViewMode) {
 			case 'list':
-				this.renderConversationsList(tabContent);
-				break;
 			case 'timeline':
-				this.renderConversationsTimeline(tabContent);
+				// Both list and timeline now use the unified daily view
+				this.renderConversationsDailyView(tabContent);
 				break;
 			case 'stats':
 				this.renderConversationsStats(tabContent);
@@ -397,7 +391,7 @@ export class OmiHubView extends ItemView {
 				this.renderConversationsMap(tabContent);
 				break;
 			default:
-				this.renderConversationsList(tabContent);
+				this.renderConversationsDailyView(tabContent);
 		}
 	}
 
@@ -407,9 +401,10 @@ export class OmiHubView extends ItemView {
 		tabs.setAttribute('aria-label', 'Conversation view modes');
 
 		const currentMode = this.plugin.settings.conversationsViewMode || 'list';
-		const modes: Array<{ id: 'list' | 'timeline' | 'stats' | 'heatmap' | 'map'; label: string; icon: string }> = [
-			{ id: 'list', label: 'Cards', icon: '📋' },
-			{ id: 'timeline', label: 'Timeline', icon: '⏱️' },
+		// Daily view combines timeline + cards, so we map both 'list' and 'timeline' to 'list'
+		const effectiveMode = currentMode === 'timeline' ? 'list' : currentMode;
+		const modes: Array<{ id: 'list' | 'stats' | 'heatmap' | 'map'; label: string; icon: string }> = [
+			{ id: 'list', label: 'Daily', icon: '📅' },
 			{ id: 'stats', label: 'Stats', icon: '📊' },
 			{ id: 'heatmap', label: 'Heatmap', icon: '🔥' },
 			{ id: 'map', label: 'Map', icon: '🗺️' }
@@ -418,10 +413,10 @@ export class OmiHubView extends ItemView {
 		for (const mode of modes) {
 			const tab = tabs.createEl('button', {
 				text: `${mode.icon} ${mode.label}`,
-				cls: `omi-conv-view-tab ${currentMode === mode.id ? 'active' : ''}`
+				cls: `omi-conv-view-tab ${effectiveMode === mode.id ? 'active' : ''}`
 			});
 			tab.setAttribute('role', 'tab');
-			tab.setAttribute('aria-selected', String(currentMode === mode.id));
+			tab.setAttribute('aria-selected', String(effectiveMode === mode.id));
 			tab.setAttribute('aria-label', `${mode.label} view`);
 			tab.addEventListener('click', async () => {
 				this.plugin.settings.conversationsViewMode = mode.id;
@@ -429,31 +424,6 @@ export class OmiHubView extends ItemView {
 				this.render();
 			});
 		}
-	}
-
-	private renderConversationsTimeRangeToggle(container: HTMLElement): void {
-		const toggle = container.createDiv('omi-conversations-time-toggle');
-		const currentRange = this.plugin.settings.conversationsTimeRange || 'daily';
-
-		const dailyBtn = toggle.createEl('button', {
-			text: 'Daily',
-			cls: `omi-time-toggle-btn ${currentRange === 'daily' ? 'active' : ''}`
-		});
-		const weeklyBtn = toggle.createEl('button', {
-			text: 'Weekly',
-			cls: `omi-time-toggle-btn ${currentRange === 'weekly' ? 'active' : ''}`
-		});
-
-		dailyBtn.addEventListener('click', async () => {
-			this.plugin.settings.conversationsTimeRange = 'daily';
-			await this.plugin.saveSettings();
-			this.render();
-		});
-		weeklyBtn.addEventListener('click', async () => {
-			this.plugin.settings.conversationsTimeRange = 'weekly';
-			await this.plugin.saveSettings();
-			this.render();
-		});
 	}
 
 	private async handleConversationSync(fullResync: boolean): Promise<void> {
@@ -465,146 +435,6 @@ export class OmiHubView extends ItemView {
 		} finally {
 			this.isSyncingConversations = false;
 			this.render();
-		}
-	}
-
-	private renderConversationsList(container: HTMLElement): void {
-		const conversations = this.plugin.settings.syncedConversations || {};
-		const conversationArray = Object.values(conversations) as SyncedConversationMeta[];
-
-		if (conversationArray.length === 0) {
-			const empty = container.createDiv('omi-conversations-empty');
-			empty.createEl('div', { text: '💬', cls: 'omi-empty-icon' });
-			empty.createEl('h3', { text: 'No conversations synced' });
-			empty.createEl('p', { text: 'Click "Sync New" to fetch your Omi conversations' });
-			return;
-		}
-
-		// Split layout container
-		const splitContainer = container.createDiv('omi-conversations-split');
-
-		// Left pane: scrollable list
-		const listPane = splitContainer.createDiv('omi-conversations-list-pane');
-		this.renderConversationsListContent(listPane, conversationArray);
-
-		// Right pane: detail panel (if conversation selected)
-		if (this.selectedConversationId) {
-			const detailPane = splitContainer.createDiv('omi-conversations-detail-pane');
-			this.renderConversationDetailPanel(detailPane);
-		}
-	}
-
-	private renderConversationsListContent(listPane: HTMLElement, conversationArray: SyncedConversationMeta[]): void {
-		// Group by date
-		const groupedByDate = new Map<string, SyncedConversationMeta[]>();
-		for (const conv of conversationArray) {
-			const dateKey = conv.date;
-			if (!groupedByDate.has(dateKey)) {
-				groupedByDate.set(dateKey, []);
-			}
-			groupedByDate.get(dateKey)!.push(conv);
-		}
-
-		// Sort dates descending (newest first)
-		const sortedDates = Array.from(groupedByDate.keys()).sort((a, b) => b.localeCompare(a));
-
-		// For weekly view, group by week
-		const timeRange = this.plugin.settings.conversationsTimeRange || 'daily';
-		if (timeRange === 'weekly') {
-			this.renderConversationsWeeklyList(listPane, groupedByDate, sortedDates);
-			return;
-		}
-
-		// Daily view (original behavior with enhanced cards)
-		for (const dateStr of sortedDates) {
-			const dateGroup = listPane.createDiv('omi-conversation-date-group');
-
-			// Format date nicely
-			const dateObj = new Date(dateStr + 'T00:00:00');
-			const formattedDate = dateObj.toLocaleDateString('en-US', {
-				weekday: 'long',
-				month: 'long',
-				day: 'numeric',
-				year: 'numeric'
-			});
-			dateGroup.createEl('div', { text: formattedDate, cls: 'omi-conversation-date-header' });
-
-			const convs = groupedByDate.get(dateStr)!;
-			// Sort by time descending within each day (latest first)
-			convs.sort((a, b) => {
-				const parseTime = (timeStr: string): number => {
-					const match = timeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
-					if (!match) return 0;
-					let hours = parseInt(match[1], 10);
-					const minutes = parseInt(match[2], 10);
-					const isPM = match[3].toUpperCase() === 'PM';
-					if (isPM && hours !== 12) hours += 12;
-					if (!isPM && hours === 12) hours = 0;
-					return hours * 60 + minutes;
-				};
-				return parseTime(b.time) - parseTime(a.time);
-			});
-
-			for (const conv of convs) {
-				this.renderConversationCard(dateGroup, conv);
-			}
-		}
-	}
-
-	private renderConversationsWeeklyList(
-		container: HTMLElement,
-		groupedByDate: Map<string, SyncedConversationMeta[]>,
-		sortedDates: string[]
-	): void {
-		// Group dates by week
-		const weekGroups = new Map<string, string[]>();
-		for (const dateStr of sortedDates) {
-			const date = new Date(dateStr + 'T00:00:00');
-			const weekStart = this.getWeekStartDate(date);
-			const weekKey = this.formatDateOnly(weekStart);
-			if (!weekGroups.has(weekKey)) {
-				weekGroups.set(weekKey, []);
-			}
-			weekGroups.get(weekKey)!.push(dateStr);
-		}
-
-		// Sort weeks descending
-		const sortedWeeks = Array.from(weekGroups.keys()).sort((a, b) => b.localeCompare(a));
-
-		for (const weekKey of sortedWeeks) {
-			const weekGroup = container.createDiv('omi-conversation-week-group');
-
-			const weekStart = new Date(weekKey + 'T00:00:00');
-			const weekEnd = new Date(weekStart);
-			weekEnd.setDate(weekEnd.getDate() + 6);
-
-			const headerText = `Week of ${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
-			weekGroup.createEl('div', { text: headerText, cls: 'omi-conversation-week-header' });
-
-			// Get all conversations for this week
-			const weekDates = weekGroups.get(weekKey)!;
-			const allConvs: SyncedConversationMeta[] = [];
-			for (const dateStr of weekDates) {
-				const convs = groupedByDate.get(dateStr) || [];
-				allConvs.push(...convs);
-			}
-
-			// Calculate weekly stats
-			const totalDuration = allConvs.reduce((sum, c) => sum + (c.duration || 0), 0);
-			const totalTasks = allConvs.reduce((sum, c) => sum + (c.actionItemCount || 0), 0);
-			const totalEvents = allConvs.reduce((sum, c) => sum + (c.eventCount || 0), 0);
-
-			const weekStats = weekGroup.createDiv('omi-conversation-week-stats');
-			weekStats.createEl('span', { text: `${allConvs.length} conversations` });
-			weekStats.createEl('span', { text: `${this.formatDuration(totalDuration)}` });
-			weekStats.createEl('span', { text: `${totalTasks} tasks` });
-			weekStats.createEl('span', { text: `${totalEvents} events` });
-
-			// Show cards for each conversation
-			const cardsContainer = weekGroup.createDiv('omi-conversation-week-cards');
-			for (const conv of allConvs.sort((a, b) => b.date.localeCompare(a.date) || this.compareTime(b.time, a.time))) {
-				this.renderConversationCard(cardsContainer, conv, true);
-			}
 		}
 	}
 
@@ -1089,203 +919,154 @@ export class OmiHubView extends ItemView {
 		return segments;
 	}
 
-	// ==================== TIMELINE VIEW ====================
+	private parseTimeToMinutes(timeStr: string): number {
+		const match = timeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+		if (!match) return -1;
+		let hours = parseInt(match[1], 10);
+		const minutes = parseInt(match[2], 10);
+		const isPM = match[3].toUpperCase() === 'PM';
+		if (isPM && hours !== 12) hours += 12;
+		if (!isPM && hours === 12) hours = 0;
+		return hours * 60 + minutes;
+	}
 
-	private renderConversationsTimeline(container: HTMLElement): void {
-		const timelineContainer = container.createDiv('omi-conversations-timeline');
+	// ==================== UNIFIED DAILY VIEW ====================
 
-		const conversations = this.plugin.settings.syncedConversations || {};
-		const conversationArray = Object.values(conversations) as SyncedConversationMeta[];
+	private renderConversationsDailyView(container: HTMLElement): void {
+		const dailyContainer = container.createDiv('omi-conversations-daily');
 
-		if (conversationArray.length === 0) {
-			const empty = timelineContainer.createDiv('omi-conversations-empty');
-			empty.createEl('div', { text: '⏱️', cls: 'omi-empty-icon' });
-			empty.createEl('h3', { text: 'No conversations to display' });
-			empty.createEl('p', { text: 'Sync conversations to see your timeline' });
+		const sortedDates = this.getSortedUniqueDates();
+		if (sortedDates.length === 0) {
+			this.renderEmptyConversationsState(dailyContainer);
 			return;
 		}
 
-		const timeRange = this.plugin.settings.conversationsTimeRange || 'daily';
+		// Resolve current date (use selected or default to most recent)
+		const currentDate = this.dailyViewSelectedDate || sortedDates[0];
+		const dateIndex = sortedDates.indexOf(currentDate);
 
-		if (timeRange === 'weekly') {
-			this.renderWeeklyTimeline(timelineContainer, conversationArray);
-		} else {
-			this.renderDailyTimeline(timelineContainer, conversationArray);
+		// If selected date not found, reset to most recent
+		if (dateIndex === -1) {
+			this.dailyViewSelectedDate = sortedDates[0];
 		}
+
+		const displayDate = dateIndex >= 0 ? currentDate : sortedDates[0];
+		const displayIndex = dateIndex >= 0 ? dateIndex : 0;
+
+		// 1. Date Navigation Header
+		this.renderDateNavigationHeader(dailyContainer, displayDate, sortedDates, displayIndex);
+
+		// 2. Timeline Section
+		this.renderDailyTimelineSection(dailyContainer, displayDate);
+
+		// 3. Split container for cards + detail
+		this.renderDailyCardsSection(dailyContainer, displayDate);
 	}
 
-	private renderDailyTimeline(container: HTMLElement, conversations: SyncedConversationMeta[]): void {
-		// Group by date, show today or most recent day with data
-		const groupedByDate = new Map<string, SyncedConversationMeta[]>();
-		for (const conv of conversations) {
-			if (!groupedByDate.has(conv.date)) {
-				groupedByDate.set(conv.date, []);
-			}
-			groupedByDate.get(conv.date)!.push(conv);
-		}
+	private renderEmptyConversationsState(container: HTMLElement): void {
+		const empty = container.createDiv('omi-conversations-empty');
+		empty.createEl('div', { text: '💬', cls: 'omi-empty-icon' });
+		empty.createEl('h3', { text: 'No conversations synced' });
+		empty.createEl('p', { text: 'Click "Sync New" above to fetch your Omi conversations' });
+	}
 
-		const sortedDates = Array.from(groupedByDate.keys()).sort((a, b) => b.localeCompare(a));
-		if (sortedDates.length === 0) return;
+	private renderDateNavigationHeader(
+		container: HTMLElement,
+		currentDate: string,
+		sortedDates: string[],
+		dateIndex: number
+	): void {
+		const nav = container.createDiv('omi-daily-nav');
 
-		// Initialize date index if needed (0 = most recent)
-		if (this.timelineDateIndex < 0) this.timelineDateIndex = 0;
-		if (this.timelineDateIndex >= sortedDates.length) this.timelineDateIndex = sortedDates.length - 1;
-
-		const displayDate = sortedDates[this.timelineDateIndex];
-		if (!displayDate) return;
-
-		// Date header with navigation
-		const nav = container.createDiv('omi-timeline-nav');
+		// Older button
 		const prevBtn = nav.createEl('button', { text: '◀ Older', cls: 'omi-timeline-nav-btn' });
+		prevBtn.disabled = dateIndex >= sortedDates.length - 1;
+		prevBtn.addEventListener('click', () => {
+			if (dateIndex < sortedDates.length - 1) {
+				this.dailyViewSelectedDate = sortedDates[dateIndex + 1];
+				this.selectedConversationId = null;
+				this.selectedConversationData = null;
+				this.render();
+			}
+		});
 
-		nav.createEl('span', {
-			text: new Date(displayDate + 'T00:00:00').toLocaleDateString('en-US', {
+		// Date label (clickable for calendar picker)
+		const dateLabel = nav.createEl('span', {
+			text: new Date(currentDate + 'T00:00:00').toLocaleDateString('en-US', {
 				weekday: 'long',
 				month: 'long',
 				day: 'numeric',
 				year: 'numeric'
 			}),
-			cls: 'omi-timeline-date-label'
+			cls: 'omi-timeline-date-label omi-clickable'
+		});
+		dateLabel.setAttribute('role', 'button');
+		dateLabel.setAttribute('tabindex', '0');
+		dateLabel.setAttribute('aria-label', 'Click to pick a date');
+		dateLabel.addEventListener('click', () => this.showConversationDatePicker(currentDate, sortedDates));
+		dateLabel.addEventListener('keydown', (e) => {
+			if (e.key === 'Enter' || e.key === ' ') {
+				e.preventDefault();
+				this.showConversationDatePicker(currentDate, sortedDates);
+			}
 		});
 
+		// Newer button
 		const nextBtn = nav.createEl('button', { text: 'Newer ▶', cls: 'omi-timeline-nav-btn' });
-
-		// Enable navigation through all dates
-		prevBtn.disabled = this.timelineDateIndex >= sortedDates.length - 1;
-		nextBtn.disabled = this.timelineDateIndex <= 0;
-
-		prevBtn.addEventListener('click', () => {
-			if (this.timelineDateIndex < sortedDates.length - 1) {
-				this.timelineDateIndex++;
-				this.render();
-			}
-		});
-
+		nextBtn.disabled = dateIndex <= 0;
 		nextBtn.addEventListener('click', () => {
-			if (this.timelineDateIndex > 0) {
-				this.timelineDateIndex--;
+			if (dateIndex > 0) {
+				this.dailyViewSelectedDate = sortedDates[dateIndex - 1];
+				this.selectedConversationId = null;
+				this.selectedConversationData = null;
 				this.render();
 			}
 		});
+	}
 
-		// Timeline hours (6 AM to 11 PM)
+	private showConversationDatePicker(currentDate: string, datesWithData: string[]): void {
+		new CalendarDatePickerModal(
+			this.app,
+			datesWithData,
+			currentDate,
+			(selectedDate) => {
+				this.dailyViewSelectedDate = selectedDate;
+				this.selectedConversationId = null;
+				this.selectedConversationData = null;
+				this.render();
+			}
+		).open();
+	}
+
+	private renderDailyTimelineSection(container: HTMLElement, dateStr: string): void {
+		const dayConvs = this.getConversationsForDate(dateStr);
+
+		// Timeline grid
 		const timeline = container.createDiv('omi-timeline-grid');
 
 		// Hour labels
 		const hoursRow = timeline.createDiv('omi-timeline-hours');
 		for (let hour = 6; hour <= 23; hour++) {
-			const hourLabel = hoursRow.createEl('span', {
+			hoursRow.createEl('span', {
 				text: hour <= 12 ? `${hour}${hour < 12 ? 'am' : 'pm'}` : `${hour - 12}pm`,
 				cls: 'omi-timeline-hour'
 			});
 		}
 
-		// Timeline track
+		// Timeline track with blocks
 		const track = timeline.createDiv('omi-timeline-track');
-		const dayConvs = groupedByDate.get(displayDate) || [];
-
-		// Place conversation blocks
 		for (const conv of dayConvs) {
-			this.renderTimelineBlock(track, conv);
+			this.renderTimelineBlockSelectable(track, conv);
 		}
 
 		// Legend
 		const legend = container.createDiv('omi-timeline-legend');
-		legend.createEl('span', { text: `${dayConvs.length} conversations on this day` });
+		legend.createEl('span', { text: `${dayConvs.length} conversation${dayConvs.length !== 1 ? 's' : ''}` });
 		const totalDuration = dayConvs.reduce((sum, c) => sum + (c.duration || 0), 0);
-		legend.createEl('span', { text: `Total time: ${this.formatDuration(totalDuration)}` });
+		legend.createEl('span', { text: `Total: ${this.formatDuration(totalDuration)}` });
 	}
 
-	private renderWeeklyTimeline(container: HTMLElement, conversations: SyncedConversationMeta[]): void {
-		// Group by date
-		const groupedByDate = new Map<string, SyncedConversationMeta[]>();
-		for (const conv of conversations) {
-			if (!groupedByDate.has(conv.date)) {
-				groupedByDate.set(conv.date, []);
-			}
-			groupedByDate.get(conv.date)!.push(conv);
-		}
-
-		// Find the most recent week with data
-		const sortedDates = Array.from(groupedByDate.keys()).sort((a, b) => b.localeCompare(a));
-		if (sortedDates.length === 0) return;
-
-		// Calculate current week based on offset (0 = most recent week)
-		const mostRecentDate = new Date(sortedDates[0] + 'T00:00:00');
-		const baseWeekStart = this.getWeekStartDate(mostRecentDate);
-
-		// Apply week offset
-		const weekStart = new Date(baseWeekStart);
-		weekStart.setDate(weekStart.getDate() - (this.timelineWeekOffset * 7));
-
-		// Find oldest date to limit navigation
-		const oldestDate = new Date(sortedDates[sortedDates.length - 1] + 'T00:00:00');
-		const oldestWeekStart = this.getWeekStartDate(oldestDate);
-
-		// Week header with navigation
-		const nav = container.createDiv('omi-timeline-nav');
-		const prevBtn = nav.createEl('button', { text: '◀ Older', cls: 'omi-timeline-nav-btn' });
-
-		const weekEnd = new Date(weekStart);
-		weekEnd.setDate(weekEnd.getDate() + 6);
-		nav.createEl('span', {
-			text: `${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`,
-			cls: 'omi-timeline-date-label'
-		});
-
-		const nextBtn = nav.createEl('button', { text: 'Newer ▶', cls: 'omi-timeline-nav-btn' });
-
-		// Enable navigation - can go back to oldest week, forward to most recent
-		prevBtn.disabled = weekStart <= oldestWeekStart;
-		nextBtn.disabled = this.timelineWeekOffset <= 0;
-
-		prevBtn.addEventListener('click', () => {
-			this.timelineWeekOffset++;
-			this.render();
-		});
-
-		nextBtn.addEventListener('click', () => {
-			if (this.timelineWeekOffset > 0) {
-				this.timelineWeekOffset--;
-				this.render();
-			}
-		});
-
-		// 7 rows (one per day)
-		const weekGrid = container.createDiv('omi-timeline-week-grid');
-		const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-		for (let i = 0; i < 7; i++) {
-			const dayDate = new Date(weekStart);
-			dayDate.setDate(weekStart.getDate() + i);
-			const dateStr = this.formatDateOnly(dayDate);
-
-			const dayRow = weekGrid.createDiv('omi-timeline-week-row');
-
-			// Day label
-			dayRow.createEl('span', { text: dayNames[i], cls: 'omi-timeline-day-label' });
-
-			// Timeline track for this day
-			const track = dayRow.createDiv('omi-timeline-track');
-			const dayConvs = groupedByDate.get(dateStr) || [];
-
-			for (const conv of dayConvs) {
-				this.renderTimelineBlock(track, conv);
-			}
-		}
-
-		// Hour markers at bottom
-		const hoursRow = weekGrid.createDiv('omi-timeline-hours-footer');
-		hoursRow.createEl('span', { text: '', cls: 'omi-timeline-spacer' }); // Spacer for day label column
-		for (let hour = 6; hour <= 22; hour += 4) {
-			hoursRow.createEl('span', {
-				text: hour <= 12 ? `${hour}${hour < 12 ? 'am' : 'pm'}` : `${hour - 12}pm`,
-				cls: 'omi-timeline-hour-marker'
-			});
-		}
-	}
-
-	private renderTimelineBlock(track: HTMLElement, conv: SyncedConversationMeta): void {
+	private renderTimelineBlockSelectable(track: HTMLElement, conv: SyncedConversationMeta): void {
 		// Parse start time
 		const startMinutes = this.parseTimeToMinutes(conv.time);
 		if (startMinutes < 0) return;
@@ -1296,13 +1077,16 @@ export class OmiHubView extends ItemView {
 		const totalRange = dayEndMinutes - dayStartMinutes;
 
 		const position = Math.max(0, Math.min(100, ((startMinutes - dayStartMinutes) / totalRange) * 100));
-		const duration = conv.duration || 15; // Default 15 min if not set
-		const width = Math.max(2, Math.min(30, (duration / totalRange) * 100)); // Min 2%, max 30%
+		const duration = conv.duration || 15;
+		const width = Math.max(2, Math.min(30, (duration / totalRange) * 100));
 
-		const block = track.createDiv('omi-timeline-block');
+		const isSelected = this.selectedConversationId === conv.id;
+		const block = track.createDiv(`omi-timeline-block${isSelected ? ' selected' : ''}`);
 		block.style.left = `${position}%`;
 		block.style.width = `${width}%`;
 		block.setAttribute('title', `${conv.emoji} ${conv.title}\n${conv.time} - ${this.formatDuration(duration)}`);
+		block.setAttribute('role', 'button');
+		block.setAttribute('tabindex', '0');
 
 		// Color by category
 		const categoryColors: Record<string, string> = {
@@ -1319,19 +1103,50 @@ export class OmiHubView extends ItemView {
 
 		block.createEl('span', { text: conv.emoji || '💬', cls: 'omi-timeline-block-emoji' });
 
-		// Click to open conversation
-		block.addEventListener('click', () => this.openConversationFile(conv));
+		// Click to select conversation and show in detail panel
+		const handleClick = async () => {
+			this.selectedConversationId = conv.id;
+			this.detailTab = 'summary';
+			await this.loadConversationDetails(conv.id);
+			this.render();
+		};
+		block.addEventListener('click', handleClick);
+		block.addEventListener('keydown', (e) => {
+			if (e.key === 'Enter' || e.key === ' ') {
+				e.preventDefault();
+				handleClick();
+			}
+		});
 	}
 
-	private parseTimeToMinutes(timeStr: string): number {
-		const match = timeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
-		if (!match) return -1;
-		let hours = parseInt(match[1], 10);
-		const minutes = parseInt(match[2], 10);
-		const isPM = match[3].toUpperCase() === 'PM';
-		if (isPM && hours !== 12) hours += 12;
-		if (!isPM && hours === 12) hours = 0;
-		return hours * 60 + minutes;
+	private renderDailyCardsSection(container: HTMLElement, dateStr: string): void {
+		const dayConvs = this.getConversationsForDate(dateStr);
+
+		// Split container (cards left, detail right)
+		const splitContainer = container.createDiv('omi-conversations-split');
+		if (this.selectedConversationId) {
+			splitContainer.addClass('has-selection');
+		}
+
+		// Left pane: cards
+		const cardsPane = splitContainer.createDiv('omi-conversations-list-pane');
+
+		if (dayConvs.length === 0) {
+			const empty = cardsPane.createDiv('omi-conversations-empty-day');
+			empty.createEl('div', { text: '📭', cls: 'omi-empty-icon' });
+			empty.createEl('h3', { text: 'No conversations on this day' });
+			empty.createEl('p', { text: 'Navigate to another date or sync more conversations' });
+		} else {
+			for (const conv of dayConvs) {
+				this.renderConversationCard(cardsPane, conv, false);
+			}
+		}
+
+		// Right pane: detail (if selected)
+		if (this.selectedConversationId) {
+			const detailPane = splitContainer.createDiv('omi-conversations-detail-pane');
+			this.renderConversationDetailPanel(detailPane);
+		}
 	}
 
 	// ==================== STATS DASHBOARD ====================
@@ -1635,13 +1450,13 @@ export class OmiHubView extends ItemView {
 				cell.addClass(`omi-heatmap-level-${level}`);
 				cell.setAttribute('title', `${cellDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}\n${count} conversations\n${this.formatDuration(duration)}`);
 
-				// Click to filter to that day
+				// Click to navigate to that day in daily view
 				if (count > 0) {
 					cell.addClass('clickable');
+					const clickDate = this.formatDateOnly(new Date(cellDate));
 					cell.addEventListener('click', () => {
-						// Switch to list view and could scroll to that date
 						this.plugin.settings.conversationsViewMode = 'list';
-						this.plugin.settings.conversationsTimeRange = 'daily';
+						this.dailyViewSelectedDate = clickDate;
 						this.plugin.saveSettings();
 						this.render();
 					});
@@ -2160,6 +1975,29 @@ export class OmiHubView extends ItemView {
 		const month = String(date.getMonth() + 1).padStart(2, '0');
 		const day = String(date.getDate()).padStart(2, '0');
 		return `${year}-${month}-${day}`;
+	}
+
+	// ==================== DAILY VIEW HELPERS ====================
+
+	private getSortedUniqueDates(): string[] {
+		const conversations = this.plugin.settings.syncedConversations || {};
+		const dates = new Set<string>();
+		for (const conv of Object.values(conversations)) {
+			dates.add((conv as SyncedConversationMeta).date);
+		}
+		return Array.from(dates).sort((a, b) => b.localeCompare(a)); // Newest first
+	}
+
+	private getConversationsForDate(dateStr: string): SyncedConversationMeta[] {
+		const conversations = this.plugin.settings.syncedConversations || {};
+		const result: SyncedConversationMeta[] = [];
+		for (const conv of Object.values(conversations)) {
+			if ((conv as SyncedConversationMeta).date === dateStr) {
+				result.push(conv as SyncedConversationMeta);
+			}
+		}
+		// Sort by time descending (latest first)
+		return result.sort((a, b) => this.compareTime(b.time, a.time));
 	}
 
 	// ==================== CALENDAR VIEW ====================

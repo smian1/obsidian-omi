@@ -2077,6 +2077,183 @@
     padding: 0 4px;
 }
 
+/* Unified Daily View */
+.omi-conversations-daily {
+    display: flex;
+    flex-direction: column;
+    gap: var(--omi-spacing-md);
+}
+
+.omi-daily-nav {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: var(--omi-spacing-md) 0;
+}
+
+.omi-timeline-date-label.omi-clickable {
+    cursor: pointer;
+    padding: 6px 16px;
+    border-radius: var(--omi-radius-md);
+    transition: background var(--omi-duration-short) ease;
+}
+
+.omi-timeline-date-label.omi-clickable:hover {
+    background: var(--background-modifier-hover);
+}
+
+.omi-timeline-date-label.omi-clickable:focus-visible {
+    outline: 2px solid var(--interactive-accent);
+    outline-offset: 2px;
+}
+
+.omi-timeline-block.selected {
+    outline: 3px solid var(--interactive-accent);
+    outline-offset: 2px;
+    z-index: 5;
+}
+
+.omi-conversations-empty-day {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+    text-align: center;
+}
+
+.omi-conversations-empty-day .omi-empty-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+    opacity: 0.7;
+}
+
+.omi-conversations-empty-day h3 {
+    margin: 0 0 8px 0;
+    color: var(--text-normal);
+}
+
+.omi-conversations-empty-day p {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 14px;
+}
+
+/* Calendar Date Picker Modal */
+.omi-calendar-picker-modal {
+    max-width: 340px;
+}
+
+.omi-calendar-picker-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+
+.omi-calendar-month-label {
+    font-weight: 600;
+    font-size: 16px;
+}
+
+.omi-calendar-nav-btn {
+    padding: 6px 12px;
+    border: none;
+    background: var(--background-modifier-hover);
+    border-radius: var(--omi-radius-sm);
+    cursor: pointer;
+    font-size: 14px;
+    transition: background var(--omi-duration-short) ease;
+}
+
+.omi-calendar-nav-btn:hover {
+    background: var(--background-modifier-border);
+}
+
+.omi-calendar-quick-nav {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.omi-calendar-quick-btn {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid var(--background-modifier-border);
+    background: var(--background-primary);
+    border-radius: var(--omi-radius-md);
+    cursor: pointer;
+    font-size: 13px;
+    transition: all var(--omi-duration-short) ease;
+}
+
+.omi-calendar-quick-btn:hover {
+    background: var(--background-modifier-hover);
+    border-color: var(--interactive-accent);
+}
+
+.omi-calendar-day-labels {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+    margin-bottom: 8px;
+}
+
+.omi-calendar-day-labels span {
+    text-align: center;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    padding: 4px;
+}
+
+.omi-calendar-picker-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+}
+
+.omi-calendar-day {
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--omi-radius-sm);
+    font-size: 13px;
+    transition: all var(--omi-duration-short) ease;
+}
+
+.omi-calendar-day-padding {
+    color: var(--text-faint);
+    opacity: 0.5;
+}
+
+.omi-calendar-day.has-data {
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+    cursor: pointer;
+    font-weight: 500;
+}
+
+.omi-calendar-day.has-data:hover {
+    transform: scale(1.1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.omi-calendar-day.selected {
+    outline: 2px solid var(--text-accent);
+    outline-offset: 2px;
+}
+
+.omi-calendar-day.today:not(.has-data) {
+    border: 2px solid var(--interactive-accent);
+}
+
+.omi-calendar-day.today.has-data {
+    box-shadow: 0 0 0 2px var(--background-primary), 0 0 0 4px var(--text-accent);
+}
+
 /* Weekly Timeline */
 .omi-timeline-week-header {
     font-weight: 600;
