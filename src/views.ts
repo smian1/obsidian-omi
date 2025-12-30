@@ -2288,7 +2288,7 @@ export class OmiHubView extends ItemView {
 		const taskStats = this.computeTaskStats();
 
 		// Location stats
-		const { uniqueLocations, topLocations } = this.computeLocationStats(filteredConvs);
+		const { uniqueLocations, topLocations, countries, states, cities } = this.computeLocationStats(filteredConvs);
 
 		// Time-based counts for achievements
 		const lateNightCount = filteredConvs.filter(c => {
@@ -2336,6 +2336,9 @@ export class OmiHubView extends ItemView {
 			taskStats,
 			uniqueLocations,
 			topLocations,
+			countries,
+			states,
+			cities,
 			achievements,
 			lateNightCount,
 			earlyMorningCount
@@ -2555,13 +2558,56 @@ export class OmiHubView extends ItemView {
 		};
 	}
 
-	private computeLocationStats(convs: SyncedConversationMeta[]): { uniqueLocations: number; topLocations: { address: string; count: number }[] } {
+	private computeLocationStats(convs: SyncedConversationMeta[]): {
+		uniqueLocations: number;
+		topLocations: { address: string; count: number }[];
+		countries: string[];
+		states: string[];
+		cities: string[];
+	} {
 		const locationCounts = new Map<string, number>();
+		const countriesSet = new Set<string>();
+		const statesSet = new Set<string>();
+		const citiesSet = new Set<string>();
 
 		for (const conv of convs) {
 			if (conv.geolocation?.address) {
 				const addr = conv.geolocation.address;
 				locationCounts.set(addr, (locationCounts.get(addr) || 0) + 1);
+
+				// Parse address components (format: "Street, City, State ZIP, Country")
+				const parts = addr.split(',').map(p => p.trim());
+				if (parts.length >= 2) {
+					// Country is usually last
+					const country = parts[parts.length - 1];
+					if (country && country.length > 1) {
+						countriesSet.add(country);
+					}
+
+					// State is second to last (may include ZIP)
+					if (parts.length >= 3) {
+						const stateZip = parts[parts.length - 2];
+						// Remove ZIP code if present (e.g., "OR 97124" -> "OR")
+						const state = stateZip.replace(/\d+/g, '').trim();
+						if (state && state.length > 0) {
+							statesSet.add(state);
+						}
+					}
+
+					// City is third to last (or second if no state)
+					if (parts.length >= 3) {
+						const city = parts[parts.length - 3];
+						if (city && city.length > 1 && !city.match(/^\d/)) {
+							citiesSet.add(city);
+						}
+					} else if (parts.length === 2) {
+						// Just "City, Country" format
+						const city = parts[0];
+						if (city && city.length > 1 && !city.match(/^\d/)) {
+							citiesSet.add(city);
+						}
+					}
+				}
 			}
 		}
 
@@ -2572,7 +2618,10 @@ export class OmiHubView extends ItemView {
 
 		return {
 			uniqueLocations: locationCounts.size,
-			topLocations
+			topLocations,
+			countries: Array.from(countriesSet),
+			states: Array.from(statesSet),
+			cities: Array.from(citiesSet)
 		};
 	}
 
@@ -3174,32 +3223,58 @@ export class OmiHubView extends ItemView {
 	}
 
 	private renderLocationsTile(container: HTMLElement, stats: StatsData): void {
-		const tile = container.createDiv('omi-stats-tile omi-stats-tile--full omi-stats-locations-tile');
+		const tile = container.createDiv('omi-stats-tile omi-stats-locations-tile');
 
 		const header = tile.createDiv('omi-stats-tile-header');
 		header.createEl('span', { text: '📍', cls: 'omi-stats-tile-icon' });
 		header.createEl('span', { text: 'Locations', cls: 'omi-stats-tile-title' });
-		header.createEl('span', {
-			text: `${stats.uniqueLocations} unique places`,
-			cls: 'omi-stats-location-count'
+
+		// Map icon button
+		const mapBtn = header.createEl('button', {
+			cls: 'omi-stats-view-btn clickable-icon',
+			attr: { 'aria-label': 'View on map' }
 		});
-
-		const list = tile.createDiv('omi-stats-location-list');
-
-		for (const loc of stats.topLocations) {
-			const item = list.createDiv('omi-stats-location-item');
-			item.createEl('span', { text: loc.address, cls: 'omi-location-address' });
-			item.createEl('span', { text: `${loc.count} conv`, cls: 'omi-location-count' });
-		}
-
-		// Link to map view
-		const mapBtn = tile.createEl('button', { text: '🗺️ View on Map', cls: 'omi-stats-link-btn' });
+		mapBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"></polygon><line x1="8" y1="2" x2="8" y2="18"></line><line x1="16" y1="6" x2="16" y2="22"></line></svg>`;
 		mapBtn.addEventListener('click', () => {
-			// Switch to map view
+			this.activeTab = 'conversations';
+			this.plugin.settings.activeHubTab = 'conversations';
 			this.plugin.settings.conversationsViewMode = 'map';
 			this.plugin.saveSettings();
 			this.render();
 		});
+
+		// Big number - unique places
+		const value = tile.createDiv('omi-stats-kpi-value');
+		value.createEl('span', { text: String(stats.uniqueLocations), cls: 'omi-stats-big-number' });
+		tile.createEl('span', { text: 'unique places', cls: 'omi-stats-unit' });
+
+		// Country and state counts
+		const breakdown = tile.createDiv('omi-stats-location-breakdown');
+		if (stats.countries.length > 0) {
+			breakdown.createEl('span', {
+				text: `${stats.countries.length} ${stats.countries.length === 1 ? 'country' : 'countries'}`,
+				cls: 'omi-stats-location-stat'
+			});
+		}
+		if (stats.states.length > 0) {
+			if (stats.countries.length > 0) {
+				breakdown.createEl('span', { text: '•', cls: 'omi-stats-separator' });
+			}
+			breakdown.createEl('span', {
+				text: `${stats.states.length} ${stats.states.length === 1 ? 'state' : 'states'}`,
+				cls: 'omi-stats-location-stat'
+			});
+		}
+
+		// Top cities preview
+		if (stats.cities.length > 0) {
+			const citiesPreview = tile.createDiv('omi-stats-cities-preview');
+			const displayCities = stats.cities.slice(0, 4);
+			citiesPreview.createEl('span', {
+				text: displayCities.join(', ') + (stats.cities.length > 4 ? '...' : ''),
+				cls: 'omi-stats-cities-list'
+			});
+		}
 	}
 
 	private renderSparkline(container: HTMLElement, data: number[], color: string): void {

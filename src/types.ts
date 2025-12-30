@@ -249,6 +249,9 @@ export interface StatsData {
 	// Location stats
 	uniqueLocations: number;
 	topLocations: { address: string; count: number }[];
+	countries: string[];
+	states: string[];
+	cities: string[];
 
 	// Achievements
 	achievements: Achievement[];
