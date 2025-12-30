@@ -23,10 +23,13 @@ export interface OmiConversationsSettings {
 	lastConversationSyncTimestamp: string | null;
 	syncedConversationIds: string[];
 	// Hub view settings
-	activeHubTab: 'tasks' | 'conversations';
+	activeHubTab: 'tasks' | 'conversations' | 'memories';
 	syncedConversations: Record<string, SyncedConversationMeta>;
 	// Conversations view settings
 	conversationsViewMode: 'list' | 'timeline' | 'stats' | 'heatmap' | 'map';
+	// Memories view settings
+	memoriesCategoryFilter: string | null;
+	memoriesViewAutoRefresh: number;  // Auto-refresh interval (minutes, 0 = disabled)
 }
 
 // Omi API response types
@@ -129,4 +132,25 @@ export interface ConversationDetailData {
 	actionItems: ActionItem[];
 	events: CalendarEvent[];
 	transcript: TranscriptSegment[];
+}
+
+// Memory API types (for Memories Hub)
+export interface MemoryFromAPI {
+	id: string;
+	content: string;
+	category: string;
+	visibility: 'public' | 'private';
+	tags: string[];
+	created_at: string;
+	updated_at: string;
+	manually_added: boolean;
+	scoring: string;
+	reviewed: boolean;
+	user_review: unknown | null;
+	edited: boolean;
+}
+
+// Extended Memory with UI state
+export interface MemoryWithUI extends MemoryFromAPI {
+	isEditing: boolean;
 }

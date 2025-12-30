@@ -4,6 +4,21 @@ export const VIEW_TYPE_OMI_HUB = 'omi-hub-view';
 // Keep old constant as alias for backward compatibility
 export const VIEW_TYPE_OMI_TASKS = VIEW_TYPE_OMI_HUB;
 
+// Memory category emoji mapping
+export const MEMORY_CATEGORY_EMOJI: Record<string, string> = {
+	work: '💼',
+	system: '🧠',
+	skills: '🎯',
+	interests: '💡',
+	interesting: '⭐',
+	lifestyle: '🏠',
+	hobbies: '🎮',
+	habits: '🔄',
+	core: '💎',
+	other: '📌',
+	manual: '✏️'
+};
+
 export const DEFAULT_SETTINGS: OmiConversationsSettings = {
 	apiKey: '',
 	folderPath: 'Omi Conversations',
@@ -29,5 +44,8 @@ export const DEFAULT_SETTINGS: OmiConversationsSettings = {
 	activeHubTab: 'tasks',
 	syncedConversations: {},
 	// Conversations view settings
-	conversationsViewMode: 'list'
+	conversationsViewMode: 'list',
+	// Memories view settings
+	memoriesCategoryFilter: null,
+	memoriesViewAutoRefresh: 10  // Auto-refresh every 10 minutes by default
 };

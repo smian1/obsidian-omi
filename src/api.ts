@@ -1,5 +1,5 @@
 import { requestUrl, Notice } from 'obsidian';
-import { Conversation, ActionItemFromAPI } from './types';
+import { Conversation, ActionItemFromAPI, MemoryFromAPI } from './types';
 
 export class OmiAPI {
 	private apiKey: string;
@@ -162,6 +162,35 @@ export class OmiAPI {
 
 	async deleteActionItem(id: string): Promise<void> {
 		const url = `${this.baseUrl}/v1/dev/user/action-items/${id}`;
+		await this.makeApiRequest<{ success: boolean }>(url, 'DELETE');
+	}
+
+	// Memories API methods
+	async getAllMemories(): Promise<MemoryFromAPI[]> {
+		const url = `${this.baseUrl}/v1/dev/user/memories`;
+		const params = new URLSearchParams({ limit: '500' });
+		return this.makeApiRequest<MemoryFromAPI[]>(url, 'GET', params);
+	}
+
+	async createMemory(content: string, category?: string, visibility?: 'public' | 'private'): Promise<MemoryFromAPI> {
+		const url = `${this.baseUrl}/v1/dev/user/memories`;
+		const body: { content: string; category?: string; visibility?: string } = { content };
+		if (category) body.category = category;
+		if (visibility) body.visibility = visibility;
+		return this.makeApiRequest<MemoryFromAPI>(url, 'POST', undefined, body);
+	}
+
+	async updateMemory(id: string, updates: {
+		content?: string;
+		category?: string;
+		visibility?: 'public' | 'private';
+	}): Promise<MemoryFromAPI> {
+		const url = `${this.baseUrl}/v1/dev/user/memories/${id}`;
+		return this.makeApiRequest<MemoryFromAPI>(url, 'PATCH', undefined, updates);
+	}
+
+	async deleteMemory(id: string): Promise<void> {
+		const url = `${this.baseUrl}/v1/dev/user/memories/${id}`;
 		await this.makeApiRequest<{ success: boolean }>(url, 'DELETE');
 	}
 

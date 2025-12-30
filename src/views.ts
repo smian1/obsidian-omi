@@ -1,14 +1,14 @@
 import { ItemView, WorkspaceLeaf, Notice, debounce } from 'obsidian';
-import { VIEW_TYPE_OMI_HUB } from './constants';
-import { TaskWithUI, SyncedConversationMeta, ConversationDetailData, ActionItem, CalendarEvent, TranscriptSegment } from './types';
-import { AddTaskModal, DatePickerModal, EditTaskModal, CalendarDatePickerModal } from './modals';
+import { VIEW_TYPE_OMI_HUB, MEMORY_CATEGORY_EMOJI } from './constants';
+import { TaskWithUI, SyncedConversationMeta, ConversationDetailData, ActionItem, CalendarEvent, TranscriptSegment, MemoryWithUI } from './types';
+import { AddTaskModal, DatePickerModal, EditTaskModal, CalendarDatePickerModal, AddMemoryModal, EditMemoryModal } from './modals';
 import type OmiConversationsPlugin from './main';
 
 export class OmiHubView extends ItemView {
 	plugin: OmiConversationsPlugin;
 
 	// Hub state
-	activeTab: 'tasks' | 'conversations' = 'tasks';
+	activeTab: 'tasks' | 'conversations' | 'memories' = 'tasks';
 
 	// Tasks state
 	tasks: TaskWithUI[] = [];
@@ -33,6 +33,13 @@ export class OmiHubView extends ItemView {
 	isLoadingDetail = false;
 	statsTimeRange: 'week' | 'month' | '30days' | 'all' = 'all';
 	dailyViewSelectedDate: string | null = null; // YYYY-MM-DD format for unified daily view
+
+	// Memories state
+	memories: MemoryWithUI[] = [];
+	memoriesSearchQuery = '';
+	memoriesCategoryFilter: string | null = null;
+	isLoadingMemories = false;
+	private memoriesAutoRefreshInterval: number | null = null;
 
 	// Debounced backup sync
 	private requestBackupSync: () => void;
@@ -67,10 +74,13 @@ export class OmiHubView extends ItemView {
 		this.viewMode = this.plugin.settings.tasksViewMode || 'list';
 		this.kanbanLayout = this.plugin.settings.tasksKanbanLayout || 'status';
 		this.calendarViewType = this.plugin.settings.tasksCalendarType || 'monthly';
+		this.memoriesCategoryFilter = this.plugin.settings.memoriesCategoryFilter || null;
 
-		// Load tasks if on tasks tab
+		// Load data based on active tab
 		if (this.activeTab === 'tasks') {
 			await this.loadTasks();
+		} else if (this.activeTab === 'memories') {
+			await this.loadMemories();
 		}
 		this.render();
 		this.startAutoRefresh();
@@ -81,6 +91,7 @@ export class OmiHubView extends ItemView {
 
 	async onClose(): Promise<void> {
 		this.stopAutoRefresh();
+		this.stopMemoriesAutoRefresh();
 	}
 
 	private handleKeyDown(e: KeyboardEvent): void {
@@ -122,6 +133,46 @@ export class OmiHubView extends ItemView {
 		if (this.autoRefreshInterval !== null) {
 			window.clearInterval(this.autoRefreshInterval);
 			this.autoRefreshInterval = null;
+		}
+	}
+
+	private startMemoriesAutoRefresh(): void {
+		this.stopMemoriesAutoRefresh();
+		const intervalMinutes = this.plugin.settings.memoriesViewAutoRefresh;
+		if (intervalMinutes > 0) {
+			const intervalMs = intervalMinutes * 60 * 1000;
+			this.memoriesAutoRefreshInterval = window.setInterval(async () => {
+				await this.loadMemories();
+				this.render();
+			}, intervalMs);
+		}
+	}
+
+	private stopMemoriesAutoRefresh(): void {
+		if (this.memoriesAutoRefreshInterval !== null) {
+			window.clearInterval(this.memoriesAutoRefreshInterval);
+			this.memoriesAutoRefreshInterval = null;
+		}
+	}
+
+	async loadMemories(showNotice = false): Promise<void> {
+		this.isLoadingMemories = true;
+		this.render();
+		try {
+			const items = await this.plugin.api.getAllMemories();
+			this.memories = items.map(item => ({
+				...item,
+				isEditing: false
+			}));
+			if (showNotice) {
+				new Notice(`Loaded ${this.memories.length} memories from Omi`);
+			}
+		} catch (error) {
+			console.error('Error loading memories from API:', error);
+			new Notice('Failed to load memories from Omi');
+			this.memories = [];
+		} finally {
+			this.isLoadingMemories = false;
 		}
 	}
 
@@ -214,8 +265,10 @@ export class OmiHubView extends ItemView {
 		// Tab Content
 		if (this.activeTab === 'tasks') {
 			this.renderTasksTab(container);
-		} else {
+		} else if (this.activeTab === 'conversations') {
 			this.renderConversationsTab(container);
+		} else if (this.activeTab === 'memories') {
+			this.renderMemoriesTab(container);
 		}
 	}
 
@@ -264,6 +317,26 @@ export class OmiHubView extends ItemView {
 			this.activeTab = 'conversations';
 			this.plugin.settings.activeHubTab = 'conversations';
 			await this.plugin.saveSettings();
+			this.render();
+		});
+
+		const memoriesTab = tabs.createEl('button', {
+			text: 'Memories',
+			cls: `omi-hub-tab ${this.activeTab === 'memories' ? 'active' : ''}`
+		});
+		memoriesTab.setAttribute('role', 'tab');
+		memoriesTab.setAttribute('aria-selected', String(this.activeTab === 'memories'));
+		if (this.memories.length > 0) {
+			memoriesTab.createEl('span', { text: String(this.memories.length), cls: 'omi-hub-tab-badge' });
+		}
+		memoriesTab.addEventListener('click', async () => {
+			this.activeTab = 'memories';
+			this.plugin.settings.activeHubTab = 'memories';
+			await this.plugin.saveSettings();
+			if (this.memories.length === 0) {
+				await this.loadMemories();
+			}
+			this.startMemoriesAutoRefresh();
 			this.render();
 		});
 	}
@@ -330,6 +403,264 @@ export class OmiHubView extends ItemView {
 		const addBtn = tabContent.createEl('button', { text: '+ Add Task', cls: 'omi-tasks-add-btn' });
 		addBtn.setAttribute('aria-label', 'Add new task');
 		addBtn.addEventListener('click', () => this.showAddTaskDialog());
+	}
+
+	private renderMemoriesTab(container: HTMLElement): void {
+		const tabContent = container.createDiv('omi-memories-container');
+
+		// Toolbar: Add button + Sync button
+		const toolbar = tabContent.createDiv('omi-memories-toolbar');
+
+		const addBtn = toolbar.createEl('button', { text: '+ Add Memory', cls: 'omi-memories-add-btn' });
+		addBtn.setAttribute('aria-label', 'Add new memory');
+		addBtn.addEventListener('click', () => this.showAddMemoryDialog());
+
+		const syncBtn = toolbar.createEl('button', { text: '🔄 Refresh', cls: 'omi-memories-sync-btn' });
+		syncBtn.setAttribute('aria-label', 'Refresh memories from Omi');
+		syncBtn.addEventListener('click', async () => {
+			await this.loadMemories(true);
+			this.render();
+		});
+
+		// Category filter pills
+		const categoryPills = tabContent.createDiv('omi-category-pills');
+
+		// Get category counts
+		const categoryCounts: Record<string, number> = {};
+		for (const memory of this.memories) {
+			const cat = memory.category || 'other';
+			categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
+		}
+
+		// "All" pill
+		const allPill = categoryPills.createEl('button', {
+			text: `All (${this.memories.length})`,
+			cls: `omi-category-pill ${this.memoriesCategoryFilter === null ? 'active' : ''}`
+		});
+		allPill.addEventListener('click', async () => {
+			this.memoriesCategoryFilter = null;
+			this.plugin.settings.memoriesCategoryFilter = null;
+			await this.plugin.saveSettings();
+			this.render();
+		});
+
+		// Category pills with counts
+		const sortedCategories = Object.entries(categoryCounts)
+			.sort((a, b) => b[1] - a[1]);  // Sort by count descending
+
+		for (const [cat, count] of sortedCategories) {
+			const emoji = MEMORY_CATEGORY_EMOJI[cat] || '📌';
+			const pill = categoryPills.createEl('button', {
+				text: `${emoji} ${cat} (${count})`,
+				cls: `omi-category-pill ${this.memoriesCategoryFilter === cat ? 'active' : ''}`
+			});
+			pill.addEventListener('click', async () => {
+				// Toggle: if already selected, clear filter; otherwise select
+				if (this.memoriesCategoryFilter === cat) {
+					this.memoriesCategoryFilter = null;
+					this.plugin.settings.memoriesCategoryFilter = null;
+				} else {
+					this.memoriesCategoryFilter = cat;
+					this.plugin.settings.memoriesCategoryFilter = cat;
+				}
+				await this.plugin.saveSettings();
+				this.render();
+			});
+		}
+
+		// Search input
+		const searchContainer = tabContent.createDiv('omi-memories-search-container');
+		const searchInput = searchContainer.createEl('input', {
+			type: 'text',
+			placeholder: '🔍 Search memories...',
+			cls: 'omi-memories-search'
+		});
+		searchInput.value = this.memoriesSearchQuery;
+		searchInput.addEventListener('input', (e) => {
+			this.memoriesSearchQuery = (e.target as HTMLInputElement).value;
+			this.render();
+		});
+
+		// Show loading skeleton
+		if (this.isLoadingMemories) {
+			const skeleton = tabContent.createDiv('omi-memories-loading');
+			skeleton.createEl('div', { cls: 'omi-loading-skeleton' });
+			skeleton.createEl('div', { cls: 'omi-loading-skeleton' });
+			skeleton.createEl('div', { cls: 'omi-loading-skeleton' });
+			return;
+		}
+
+		// Filter memories
+		let filteredMemories = this.memories;
+		if (this.memoriesCategoryFilter) {
+			filteredMemories = filteredMemories.filter(m => m.category === this.memoriesCategoryFilter);
+		}
+		if (this.memoriesSearchQuery) {
+			const query = this.memoriesSearchQuery.toLowerCase();
+			filteredMemories = filteredMemories.filter(m =>
+				m.content.toLowerCase().includes(query) ||
+				m.tags.some(t => t.toLowerCase().includes(query))
+			);
+		}
+
+		// Memory list
+		const memoryList = tabContent.createDiv('omi-memories-list');
+
+		if (filteredMemories.length === 0) {
+			const empty = memoryList.createDiv('omi-memories-empty');
+			if (this.memories.length === 0) {
+				empty.setText('No memories yet. Click "Refresh" to load from Omi.');
+			} else {
+				empty.setText('No memories match your filters.');
+			}
+			return;
+		}
+
+		// Render memory cards
+		for (const memory of filteredMemories) {
+			this.renderMemoryCard(memoryList, memory);
+		}
+	}
+
+	private renderMemoryCard(container: HTMLElement, memory: MemoryWithUI): void {
+		const card = container.createDiv('omi-memory-card');
+
+		// Header: category + date
+		const header = card.createDiv('omi-memory-card-header');
+		const emoji = MEMORY_CATEGORY_EMOJI[memory.category] || '📌';
+		header.createEl('span', { text: `${emoji} ${memory.category}`, cls: 'omi-memory-category' });
+
+		const date = new Date(memory.created_at);
+		const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+		header.createEl('span', { text: dateStr, cls: 'omi-memory-date' });
+
+		// Content (inline editable)
+		const contentDiv = card.createDiv('omi-memory-content');
+		if (memory.isEditing) {
+			const textarea = contentDiv.createEl('textarea', { cls: 'omi-memory-content-edit' });
+			textarea.value = memory.content;
+			textarea.rows = 3;
+			textarea.focus();
+			textarea.addEventListener('blur', async () => {
+				const newContent = textarea.value.trim();
+				if (newContent && newContent !== memory.content && newContent.length <= 500) {
+					await this.updateMemoryContent(memory, newContent);
+				}
+				memory.isEditing = false;
+				this.render();
+			});
+			textarea.addEventListener('keydown', (e) => {
+				if (e.key === 'Enter' && !e.shiftKey) {
+					e.preventDefault();
+					textarea.blur();
+				}
+				if (e.key === 'Escape') {
+					memory.isEditing = false;
+					this.render();
+				}
+			});
+		} else {
+			contentDiv.setText(memory.content);
+			contentDiv.addClass('omi-memory-content-text');
+			contentDiv.addEventListener('click', () => {
+				memory.isEditing = true;
+				this.render();
+			});
+		}
+
+		// Footer: Tags + Actions on same row
+		const footer = card.createDiv('omi-memory-footer');
+
+		// Tags
+		const tagsDiv = footer.createDiv('omi-memory-tags');
+		if (memory.tags && memory.tags.length > 0) {
+			for (const tag of memory.tags) {
+				tagsDiv.createEl('span', { text: tag, cls: 'omi-tag-pill' });
+			}
+		}
+
+		// Actions
+		const actions = footer.createDiv('omi-memory-actions');
+		const editBtn = actions.createEl('button', { text: '✏️', cls: 'omi-memory-action-btn' });
+		editBtn.setAttribute('aria-label', 'Edit memory');
+		editBtn.addEventListener('click', () => this.showEditMemoryDialog(memory));
+
+		const deleteBtn = actions.createEl('button', { text: '🗑️', cls: 'omi-memory-action-btn' });
+		deleteBtn.setAttribute('aria-label', 'Delete memory');
+		deleteBtn.addEventListener('click', () => this.deleteMemory(memory));
+	}
+
+	private showAddMemoryDialog(): void {
+		new AddMemoryModal(this.app, async (content, category) => {
+			await this.addNewMemory(content, category);
+		}).open();
+	}
+
+	private showEditMemoryDialog(memory: MemoryWithUI): void {
+		new EditMemoryModal(
+			this.app,
+			memory,
+			async (updates) => {
+				await this.updateMemory(memory, updates);
+			},
+			async () => {
+				await this.deleteMemory(memory);
+			}
+		).open();
+	}
+
+	private async addNewMemory(content: string, category: string): Promise<void> {
+		try {
+			const newMemory = await this.plugin.api.createMemory(content, category);
+			this.memories.unshift({
+				...newMemory,
+				isEditing: false
+			});
+			this.render();
+			new Notice('Memory added');
+		} catch (error) {
+			console.error('Error creating memory:', error);
+			new Notice('Failed to add memory');
+		}
+	}
+
+	private async updateMemoryContent(memory: MemoryWithUI, newContent: string): Promise<void> {
+		try {
+			await this.plugin.api.updateMemory(memory.id, { content: newContent });
+			memory.content = newContent;
+			new Notice('Memory updated');
+		} catch (error) {
+			console.error('Error updating memory:', error);
+			new Notice('Failed to update memory');
+		}
+	}
+
+	private async updateMemory(memory: MemoryWithUI, updates: { content?: string; category?: string; visibility?: 'public' | 'private' }): Promise<void> {
+		try {
+			const updatedMemory = await this.plugin.api.updateMemory(memory.id, updates);
+			// Update local state
+			Object.assign(memory, updatedMemory);
+			this.render();
+			new Notice('Memory updated');
+		} catch (error) {
+			console.error('Error updating memory:', error);
+			new Notice('Failed to update memory');
+		}
+	}
+
+	private async deleteMemory(memory: MemoryWithUI): Promise<void> {
+		if (!confirm('Delete this memory? This action cannot be undone.')) {
+			return;
+		}
+		try {
+			await this.plugin.api.deleteMemory(memory.id);
+			this.memories = this.memories.filter(m => m.id !== memory.id);
+			this.render();
+			new Notice('Memory deleted');
+		} catch (error) {
+			console.error('Error deleting memory:', error);
+			new Notice('Failed to delete memory');
+		}
 	}
 
 	private renderConversationsTab(container: HTMLElement): void {

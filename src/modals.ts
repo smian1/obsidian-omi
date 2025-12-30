@@ -1,5 +1,6 @@
 import { App, Modal, Notice } from 'obsidian';
-import { TaskWithUI } from './types';
+import { TaskWithUI, MemoryWithUI } from './types';
+import { MEMORY_CATEGORY_EMOJI } from './constants';
 
 export class ConfirmSyncModal extends Modal {
 	title: string;
@@ -320,6 +321,222 @@ export class EditTaskModal extends Modal {
 		// Focus description
 		descInput.focus();
 		descInput.setSelectionRange(descInput.value.length, descInput.value.length);
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
+}
+
+export class AddMemoryModal extends Modal {
+	onSubmit: (content: string, category: string) => void;
+
+	constructor(app: App, onSubmit: (content: string, category: string) => void) {
+		super(app);
+		this.onSubmit = onSubmit;
+	}
+
+	onOpen(): void {
+		const { contentEl } = this;
+		contentEl.addClass('omi-add-memory-modal');
+
+		contentEl.createEl('h3', { text: 'Add new memory' });
+
+		// Content textarea
+		const contentContainer = contentEl.createDiv('omi-modal-field');
+		contentContainer.createEl('label', { text: 'Memory content' });
+		const contentInput = contentContainer.createEl('textarea', {
+			placeholder: 'Enter memory content (1-500 characters)...'
+		});
+		contentInput.addClass('omi-modal-input', 'omi-modal-textarea');
+		contentInput.rows = 4;
+
+		// Character count
+		const charCount = contentContainer.createEl('span', { cls: 'omi-char-count' });
+		charCount.setText('0/500');
+		contentInput.addEventListener('input', () => {
+			const len = contentInput.value.length;
+			charCount.setText(`${len}/500`);
+			charCount.toggleClass('omi-char-count-warning', len > 450);
+			charCount.toggleClass('omi-char-count-error', len > 500);
+		});
+
+		// Category dropdown
+		const categoryContainer = contentEl.createDiv('omi-modal-field');
+		categoryContainer.createEl('label', { text: 'Category' });
+		const categorySelect = categoryContainer.createEl('select');
+		categorySelect.addClass('omi-modal-input');
+
+		const categories = Object.keys(MEMORY_CATEGORY_EMOJI);
+		for (const cat of categories) {
+			const emoji = MEMORY_CATEGORY_EMOJI[cat];
+			const option = categorySelect.createEl('option', {
+				value: cat,
+				text: `${emoji} ${cat}`
+			});
+			if (cat === 'manual') option.selected = true;
+		}
+
+		// Buttons
+		const btnContainer = contentEl.createDiv('modal-button-container');
+
+		const saveBtn = btnContainer.createEl('button', { text: 'Add Memory', cls: 'mod-cta' });
+		saveBtn.addEventListener('click', () => {
+			const content = contentInput.value.trim();
+			if (content.length < 1) {
+				new Notice('Memory content cannot be empty');
+				return;
+			}
+			if (content.length > 500) {
+				new Notice('Memory content must be 500 characters or less');
+				return;
+			}
+			this.onSubmit(content, categorySelect.value);
+			this.close();
+		});
+
+		const cancelBtn = btnContainer.createEl('button', { text: 'Cancel' });
+		cancelBtn.addEventListener('click', () => this.close());
+
+		// Focus content input
+		contentInput.focus();
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
+}
+
+export class EditMemoryModal extends Modal {
+	memory: MemoryWithUI;
+	onSave: (updates: { content?: string; category?: string; visibility?: 'public' | 'private' }) => void;
+	onDelete: () => void;
+
+	constructor(
+		app: App,
+		memory: MemoryWithUI,
+		onSave: (updates: { content?: string; category?: string; visibility?: 'public' | 'private' }) => void,
+		onDelete: () => void
+	) {
+		super(app);
+		this.memory = memory;
+		this.onSave = onSave;
+		this.onDelete = onDelete;
+	}
+
+	onOpen(): void {
+		const { contentEl } = this;
+		contentEl.addClass('omi-edit-memory-modal');
+
+		contentEl.createEl('h3', { text: 'Edit memory' });
+
+		// Content textarea
+		const contentContainer = contentEl.createDiv('omi-modal-field');
+		contentContainer.createEl('label', { text: 'Memory content' });
+		const contentInput = contentContainer.createEl('textarea', {
+			placeholder: 'Enter memory content...'
+		});
+		contentInput.addClass('omi-modal-input', 'omi-modal-textarea');
+		contentInput.value = this.memory.content;
+		contentInput.rows = 4;
+
+		// Character count
+		const charCount = contentContainer.createEl('span', { cls: 'omi-char-count' });
+		charCount.setText(`${this.memory.content.length}/500`);
+		contentInput.addEventListener('input', () => {
+			const len = contentInput.value.length;
+			charCount.setText(`${len}/500`);
+			charCount.toggleClass('omi-char-count-warning', len > 450);
+			charCount.toggleClass('omi-char-count-error', len > 500);
+		});
+
+		// Category dropdown
+		const categoryContainer = contentEl.createDiv('omi-modal-field');
+		categoryContainer.createEl('label', { text: 'Category' });
+		const categorySelect = categoryContainer.createEl('select');
+		categorySelect.addClass('omi-modal-input');
+
+		const categories = Object.keys(MEMORY_CATEGORY_EMOJI);
+		for (const cat of categories) {
+			const emoji = MEMORY_CATEGORY_EMOJI[cat];
+			const option = categorySelect.createEl('option', {
+				value: cat,
+				text: `${emoji} ${cat}`
+			});
+			if (cat === this.memory.category) option.selected = true;
+		}
+
+		// Visibility dropdown
+		const visibilityContainer = contentEl.createDiv('omi-modal-field');
+		visibilityContainer.createEl('label', { text: 'Visibility' });
+		const visibilitySelect = visibilityContainer.createEl('select');
+		visibilitySelect.addClass('omi-modal-input');
+
+		const privateOption = visibilitySelect.createEl('option', { value: 'private', text: '🔒 Private' });
+		const publicOption = visibilitySelect.createEl('option', { value: 'public', text: '🌐 Public' });
+		if (this.memory.visibility === 'public') {
+			publicOption.selected = true;
+		} else {
+			privateOption.selected = true;
+		}
+
+		// Tags display (read-only)
+		if (this.memory.tags && this.memory.tags.length > 0) {
+			const tagsContainer = contentEl.createDiv('omi-modal-field');
+			tagsContainer.createEl('label', { text: 'Tags (auto-generated)' });
+			const tagsDiv = tagsContainer.createDiv('omi-memory-tags-display');
+			for (const tag of this.memory.tags) {
+				tagsDiv.createEl('span', { text: tag, cls: 'omi-tag-pill' });
+			}
+		}
+
+		// Buttons
+		const btnContainer = contentEl.createDiv('modal-button-container');
+
+		const saveBtn = btnContainer.createEl('button', { text: 'Save', cls: 'mod-cta' });
+		saveBtn.addEventListener('click', () => {
+			const content = contentInput.value.trim();
+			if (content.length < 1) {
+				new Notice('Memory content cannot be empty');
+				return;
+			}
+			if (content.length > 500) {
+				new Notice('Memory content must be 500 characters or less');
+				return;
+			}
+
+			const updates: { content?: string; category?: string; visibility?: 'public' | 'private' } = {};
+
+			if (content !== this.memory.content) {
+				updates.content = content;
+			}
+			if (categorySelect.value !== this.memory.category) {
+				updates.category = categorySelect.value;
+			}
+			if (visibilitySelect.value !== this.memory.visibility) {
+				updates.visibility = visibilitySelect.value as 'public' | 'private';
+			}
+
+			if (Object.keys(updates).length > 0) {
+				this.onSave(updates);
+			}
+			this.close();
+		});
+
+		const deleteBtn = btnContainer.createEl('button', { text: 'Delete', cls: 'mod-warning' });
+		deleteBtn.addEventListener('click', () => {
+			if (confirm('Delete this memory? This action cannot be undone.')) {
+				this.onDelete();
+				this.close();
+			}
+		});
+
+		const cancelBtn = btnContainer.createEl('button', { text: 'Cancel' });
+		cancelBtn.addEventListener('click', () => this.close());
+
+		// Focus content
+		contentInput.focus();
+		contentInput.setSelectionRange(contentInput.value.length, contentInput.value.length);
 	}
 
 	onClose(): void {

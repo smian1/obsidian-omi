@@ -3582,3 +3582,277 @@ svg.leaflet-image-layer.leaflet-interactive path {
         min-width: 300px;
     }
 }
+
+/* ========================================
+   OMI MEMORIES TAB STYLING
+   ======================================== */
+.omi-memories-container {
+    padding: 16px;
+    height: 100%;
+    overflow-y: auto;
+    --interactive-accent: var(--omi-purple-primary);
+    --interactive-accent-hover: var(--omi-purple-accent);
+}
+
+.omi-memories-toolbar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.omi-memories-add-btn,
+.omi-memories-sync-btn {
+    padding: 8px 16px;
+    border-radius: var(--omi-radius-md);
+    border: none;
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background-color var(--omi-duration-short) ease;
+}
+
+.omi-memories-add-btn:hover,
+.omi-memories-sync-btn:hover {
+    background: var(--interactive-accent-hover);
+}
+
+.omi-memories-sync-btn {
+    background: var(--background-secondary);
+    color: var(--text-normal);
+    margin-left: auto;
+}
+
+.omi-memories-sync-btn:hover {
+    background: var(--background-modifier-hover);
+}
+
+/* Category Pills */
+.omi-category-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.omi-category-pill {
+    padding: 6px 12px;
+    border-radius: var(--omi-radius-full);
+    border: 1px solid var(--background-modifier-border);
+    background: var(--background-secondary);
+    color: var(--text-normal);
+    cursor: pointer;
+    font-size: 13px;
+    transition: all var(--omi-duration-short) ease;
+}
+
+.omi-category-pill:hover {
+    background: var(--background-modifier-hover);
+    border-color: var(--interactive-accent);
+}
+
+.omi-category-pill.active {
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+    border-color: var(--interactive-accent);
+}
+
+/* Search */
+.omi-memories-search-container {
+    margin-bottom: 16px;
+}
+
+.omi-memories-search {
+    width: 100%;
+    padding: 10px 14px;
+    border-radius: var(--omi-radius-md);
+    border: 1px solid var(--background-modifier-border);
+    background: var(--background-primary);
+    color: var(--text-normal);
+    font-size: 14px;
+}
+
+.omi-memories-search:focus {
+    outline: none;
+    border-color: var(--interactive-accent);
+    box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
+}
+
+/* Loading Skeleton */
+.omi-memories-loading {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* Memory List */
+.omi-memories-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.omi-memories-empty {
+    text-align: center;
+    padding: 16px;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+/* Memory Card */
+.omi-memory-card {
+    background: transparent;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--background-modifier-border);
+    transition: background-color var(--omi-duration-short) ease;
+}
+
+.omi-memory-card:hover {
+    background: var(--background-secondary);
+}
+
+.omi-memory-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2px;
+}
+
+.omi-memory-category {
+    font-weight: 500;
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.omi-memory-date {
+    font-size: 10px;
+    color: var(--text-faint);
+}
+
+.omi-memory-content {
+    margin-bottom: 4px;
+}
+
+.omi-memory-content-text {
+    line-height: 1.35;
+    color: var(--text-normal);
+    cursor: pointer;
+    padding: 2px 4px;
+    margin: -2px -4px;
+    border-radius: var(--omi-radius-sm);
+    transition: background-color var(--omi-duration-short) ease;
+    font-size: 13px;
+}
+
+.omi-memory-content-text:hover {
+    background: var(--background-modifier-hover);
+}
+
+.omi-memory-content-edit {
+    width: 100%;
+    padding: 8px;
+    border-radius: var(--omi-radius-sm);
+    border: 1px solid var(--interactive-accent);
+    background: var(--background-primary);
+    color: var(--text-normal);
+    font-size: 14px;
+    font-family: inherit;
+    line-height: 1.5;
+    resize: vertical;
+}
+
+.omi-memory-content-edit:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
+}
+
+/* Footer: Tags & Actions Row */
+.omi-memory-footer {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 18px;
+}
+
+.omi-memory-tags {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 3px;
+    flex: 1;
+}
+
+.omi-tag-pill {
+    padding: 1px 5px;
+    border-radius: var(--omi-radius-full);
+    background: var(--background-secondary);
+    color: var(--text-faint);
+    font-size: 10px;
+}
+
+.omi-memory-tags-display {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    margin-top: 4px;
+}
+
+/* Actions - inline with tags */
+.omi-memory-actions {
+    display: flex;
+    gap: 2px;
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
+.omi-memory-action-btn {
+    padding: 2px 6px;
+    border-radius: var(--omi-radius-sm);
+    border: none;
+    background: transparent;
+    color: var(--text-faint);
+    cursor: pointer;
+    font-size: 11px;
+    transition: all var(--omi-duration-short) ease;
+    opacity: 0;
+}
+
+.omi-memory-card:hover .omi-memory-action-btn {
+    opacity: 0.7;
+}
+
+.omi-memory-action-btn:hover {
+    opacity: 1 !important;
+    color: var(--text-normal);
+}
+
+.omi-memory-action-btn:hover {
+    background: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+
+/* Character count */
+.omi-char-count {
+    display: block;
+    text-align: right;
+    font-size: 11px;
+    color: var(--text-faint);
+    margin-top: 4px;
+}
+
+.omi-char-count-warning {
+    color: var(--omi-color-warning);
+}
+
+.omi-char-count-error {
+    color: var(--omi-color-error);
+}
+
+/* Add/Edit Memory Modal */
+.omi-add-memory-modal,
+.omi-edit-memory-modal {
+    max-width: 500px;
+}
