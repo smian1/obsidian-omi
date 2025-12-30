@@ -4894,55 +4894,60 @@ svg.leaflet-image-layer.leaflet-interactive path {
     font-style: italic;
 }
 
-/* Memory Card */
+/* Memory Card - Compact inline row */
 .omi-memory-card {
-    background: var(--background-secondary);
-    padding: 14px 16px;
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 10px;
-    margin-bottom: 10px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-    transition: all var(--omi-duration-medium) var(--omi-easing-standard);
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    margin-bottom: 2px;
+    background: transparent;
+    border: 1px solid transparent;
+    transition: all var(--omi-duration-short) ease;
 }
 
 .omi-memory-card:hover {
-    background: var(--background-primary);
-    border-color: rgba(139, 92, 246, 0.3);
-    box-shadow: 0 4px 12px rgba(139, 92, 246, 0.08);
-    transform: translateY(-1px);
+    background: var(--background-secondary);
+    border-color: var(--background-modifier-border);
 }
 
 .omi-memory-card-header {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    margin-bottom: 6px;
+    gap: 6px;
+    flex-shrink: 0;
 }
 
 .omi-memory-category {
     font-weight: 500;
     font-size: 11px;
     color: var(--text-muted);
+    padding: 2px 6px;
+    background: var(--background-modifier-hover);
+    border-radius: 4px;
 }
 
 .omi-memory-date {
     font-size: 10px;
     color: var(--text-faint);
+    display: none;
 }
 
 .omi-memory-content {
-    margin-bottom: 8px;
+    flex: 1;
+    min-width: 0;
 }
 
 .omi-memory-content-text {
-    line-height: 1.5;
+    line-height: 1.4;
     color: var(--text-normal);
     cursor: pointer;
     padding: 2px 4px;
     margin: -2px -4px;
     border-radius: var(--omi-radius-sm);
     transition: background-color var(--omi-duration-short) ease;
-    font-size: 14px;
+    font-size: 13px;
 }
 
 .omi-memory-content-text:hover {
@@ -4971,59 +4976,59 @@ svg.leaflet-image-layer.leaflet-interactive path {
 .omi-memory-footer {
     display: flex;
     align-items: center;
-    gap: 6px;
-    min-height: 18px;
+    gap: 4px;
+    flex-shrink: 0;
 }
 
 .omi-memory-tags {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     align-items: center;
-    gap: 3px;
-    flex: 1;
+    gap: 2px;
+    overflow: hidden;
 }
 
 .omi-tag-pill {
-    padding: 1px 5px;
-    border-radius: var(--omi-radius-full);
-    background: var(--background-secondary);
+    padding: 1px 4px;
+    border-radius: 3px;
+    background: var(--background-modifier-hover);
     color: var(--text-faint);
-    font-size: 10px;
+    font-size: 9px;
+    white-space: nowrap;
 }
 
 .omi-memory-tags-display {
     display: flex;
     flex-wrap: wrap;
-    gap: 3px;
-    margin-top: 4px;
+    gap: 2px;
 }
 
-/* Actions - inline with tags */
+/* Actions - inline with content */
 .omi-memory-actions {
     display: flex;
     gap: 2px;
-    margin-left: auto;
     flex-shrink: 0;
+    opacity: 0;
+    transition: opacity var(--omi-duration-short) ease;
+}
+
+.omi-memory-card:hover .omi-memory-actions {
+    opacity: 1;
 }
 
 .omi-memory-action-btn {
-    padding: 2px 6px;
-    border-radius: var(--omi-radius-sm);
+    padding: 2px 4px;
+    border-radius: 3px;
     border: none;
     background: transparent;
     color: var(--text-faint);
     cursor: pointer;
-    font-size: 11px;
+    font-size: 10px;
     transition: all var(--omi-duration-short) ease;
-    opacity: 0;
-}
-
-.omi-memory-card:hover .omi-memory-action-btn {
-    opacity: 0.7;
 }
 
 .omi-memory-action-btn:hover {
-    opacity: 1 !important;
+    background: var(--background-modifier-hover);
     color: var(--text-normal);
 }
 
