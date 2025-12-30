@@ -18,7 +18,9 @@ export class OmiAPI {
 
 	async getAllConversations(
 		startDate?: string,
-		onProgress?: (step: string, progress: number) => void
+		onProgress?: (step: string, progress: number) => void,
+		isCancelled?: () => boolean,
+		onBatch?: (conversations: Conversation[]) => Promise<void>
 	): Promise<Conversation[]> {
 		const allConversations: Conversation[] = [];
 		let offset = 0;
@@ -27,6 +29,11 @@ export class OmiAPI {
 		try {
 			// Fetch conversations with pagination using new v1/dev endpoint
 			while (true) {
+				// Check for cancellation before each API call
+				if (isCancelled?.()) {
+					throw new Error('Sync cancelled');
+				}
+
 				pageNum++;
 				onProgress?.(`Fetching page ${pageNum}...`, Math.min(80, pageNum * 8));
 
@@ -51,6 +58,11 @@ export class OmiAPI {
 				// Server handles date filtering, just add all returned conversations
 				allConversations.push(...conversations);
 				onProgress?.(`Found ${allConversations.length} conversations...`, Math.min(85, pageNum * 8 + 5));
+
+				// Write files for this batch immediately if callback provided
+				if (onBatch) {
+					await onBatch(conversations);
+				}
 
 				// If we got less than the batch size, we've reached the end
 				if (conversations.length < this.batchSize) break;
@@ -78,7 +90,9 @@ export class OmiAPI {
 		syncedIds: Set<string>,
 		lastSyncTime: string | null,
 		startDate?: string,
-		onProgress?: (step: string, progress: number) => void
+		onProgress?: (step: string, progress: number) => void,
+		isCancelled?: () => boolean,
+		onBatch?: (conversations: Conversation[]) => Promise<void>
 	): Promise<{ conversations: Conversation[]; stoppedEarly: boolean; apiCalls: number }> {
 		const newConversations: Conversation[] = [];
 		let offset = 0;
@@ -88,6 +102,11 @@ export class OmiAPI {
 
 		try {
 			while (true) {
+				// Check for cancellation before each API call
+				if (isCancelled?.()) {
+					throw new Error('Sync cancelled');
+				}
+
 				onProgress?.(`Fetching page ${apiCalls + 1}...`, apiCalls > 0 ? Math.min(90, apiCalls * 10) : 5);
 
 				const params = new URLSearchParams({
@@ -111,6 +130,7 @@ export class OmiAPI {
 
 				onProgress?.(`Processing ${newConversations.length + batch.length} conversations...`, Math.min(95, apiCalls * 10));
 
+				const batchNewConversations: Conversation[] = [];
 				for (const conv of batch) {
 					// Server handles date filtering via start_date param
 					// We just need to check for known conversations (stop when known)
@@ -126,7 +146,13 @@ export class OmiAPI {
 						}
 						// Conversation was updated, include it for re-sync
 					}
+					batchNewConversations.push(conv);
 					newConversations.push(conv);
+				}
+
+				// Write files for this batch immediately if callback provided
+				if (onBatch && batchNewConversations.length > 0) {
+					await onBatch(batchNewConversations);
 				}
 
 				if (stoppedEarly) break;

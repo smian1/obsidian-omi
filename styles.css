@@ -6793,6 +6793,29 @@ svg.leaflet-image-layer.leaflet-interactive path {
     100% { transform: translateX(100%); }
 }
 
+/* Cancel button in live banner */
+.omi-sync-cancel-btn {
+    padding: 6px 14px;
+    border-radius: 6px;
+    border: 1px solid rgba(239, 68, 68, 0.4);
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+}
+
+.omi-sync-cancel-btn:hover {
+    background: rgba(239, 68, 68, 0.2);
+    border-color: rgba(239, 68, 68, 0.6);
+}
+
+.omi-sync-cancel-btn:active {
+    transform: scale(0.97);
+}
+
 /* ============================================
    STATUS CARDS GRID
    ============================================ */

@@ -2491,9 +2491,10 @@ export class OmiHubView extends ItemView {
 			this.unsubscribeSyncProgress();
 		}
 		this.unsubscribeSyncProgress = this.plugin.onSyncProgress(() => {
-			// Only re-render if we're on the sync tab
+			// Only update if we're on the sync tab
 			if (this.activeTab === 'sync') {
-				this.render();
+				// Update live banner in-place instead of full re-render
+				this.updateSyncLiveBanner(tabContent);
 			}
 		});
 
@@ -2512,6 +2513,49 @@ export class OmiHubView extends ItemView {
 		this.renderSyncLogTimeline(tabContent);
 	}
 
+	// Update live banner in-place without re-rendering everything
+	private updateSyncLiveBanner(container: HTMLElement): void {
+		const progress = this.plugin.syncProgress;
+		const existingBanner = container.querySelector('.omi-sync-live-banner');
+
+		// If sync just finished, remove banner and do a full render to update cards/log
+		if (!progress.isActive) {
+			if (existingBanner) {
+				existingBanner.remove();
+			}
+			this.render();
+			return;
+		}
+
+		// If sync just started but no banner exists, do a full render to add it
+		if (!existingBanner) {
+			this.render();
+			return;
+		}
+
+		// Update existing banner elements in-place
+		const titleEl = existingBanner.querySelector('.omi-sync-live-title');
+		if (titleEl) {
+			titleEl.textContent = progress.isCancelled ? 'Cancelling...' : `Syncing ${progress.type}...`;
+		}
+
+		const stepEl = existingBanner.querySelector('.omi-sync-live-step');
+		if (stepEl) {
+			stepEl.textContent = progress.step;
+		}
+
+		const fillEl = existingBanner.querySelector('.omi-sync-progress-fill') as HTMLElement;
+		if (fillEl) {
+			fillEl.style.width = `${Math.min(100, progress.progress)}%`;
+		}
+
+		// Handle cancel button visibility
+		const cancelBtn = existingBanner.querySelector('.omi-sync-cancel-btn');
+		if (progress.isCancelled && cancelBtn) {
+			cancelBtn.remove();
+		}
+	}
+
 	private renderSyncLiveBanner(container: HTMLElement): void {
 		const progress = this.plugin.syncProgress;
 		const banner = container.createDiv('omi-sync-live-banner');
@@ -2523,12 +2567,23 @@ export class OmiHubView extends ItemView {
 		const content = banner.createDiv('omi-sync-live-content');
 		content.createDiv({
 			cls: 'omi-sync-live-title',
-			text: `Syncing ${progress.type}...`
+			text: progress.isCancelled ? 'Cancelling...' : `Syncing ${progress.type}...`
 		});
 		content.createDiv({
 			cls: 'omi-sync-live-step',
 			text: progress.step
 		});
+
+		// Cancel button (only if not already cancelled)
+		if (!progress.isCancelled) {
+			const cancelBtn = banner.createEl('button', {
+				cls: 'omi-sync-cancel-btn',
+				text: 'Cancel'
+			});
+			cancelBtn.addEventListener('click', () => {
+				this.plugin.cancelSync();
+			});
+		}
 
 		// Progress track
 		const progressTrack = banner.createDiv('omi-sync-progress-track');

@@ -307,4 +307,5 @@ export interface SyncProgress {
 	step: string;       // "Fetching page 2 of 10"
 	progress: number;   // 0-100
 	startedAt: number;  // timestamp
+	isCancelled: boolean;  // User requested cancellation
 }

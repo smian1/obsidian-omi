@@ -21,11 +21,21 @@ export default class OmiConversationsPlugin extends Plugin {
 		type: null,
 		step: '',
 		progress: 0,
-		startedAt: 0
+		startedAt: 0,
+		isCancelled: false
 	};
 
 	// Event emitter for sync progress updates
 	private syncEvents = new Events();
+
+	// Cancel an ongoing sync
+	cancelSync() {
+		if (this.syncProgress.isActive) {
+			this.syncProgress.isCancelled = true;
+			this.syncProgress.step = 'Cancelling...';
+			this.syncEvents.trigger('sync-progress');
+		}
+	}
 
 	async onload() {
 		await this.loadSettings();
@@ -228,7 +238,8 @@ export default class OmiConversationsPlugin extends Plugin {
 			type,
 			step,
 			progress,
-			startedAt: this.syncProgress.startedAt || Date.now()
+			startedAt: this.syncProgress.startedAt || Date.now(),
+			isCancelled: this.syncProgress.isCancelled  // Preserve cancelled state
 		};
 		this.syncEvents.trigger('sync-progress');
 	}
@@ -239,7 +250,8 @@ export default class OmiConversationsPlugin extends Plugin {
 			type: null,
 			step: '',
 			progress: 0,
-			startedAt: 0
+			startedAt: 0,
+			isCancelled: false
 		};
 		this.syncEvents.trigger('sync-progress');
 	}
@@ -301,11 +313,125 @@ export default class OmiConversationsPlugin extends Plugin {
 			let newConversations: Conversation[];
 			let apiCalls = 0;
 
+				// Cancellation check callback
+			const isCancelled = () => this.syncProgress.isCancelled;
+
+			// Track written conversations for incremental file writing
+			const writtenDates = new Set<string>();
+
+			// Incremental file writing callback - writes files as each batch arrives
+			const onBatch = async (batch: Conversation[]) => {
+				// Group batch by date
+				const batchByDate = new Map<string, Conversation[]>();
+				for (const conv of batch) {
+					const localDate = new Date(conv.created_at);
+					const dateStr = `${localDate.getFullYear()}-${String(localDate.getMonth() + 1).padStart(2, '0')}-${String(localDate.getDate()).padStart(2, '0')}`;
+					if (!batchByDate.has(dateStr)) {
+						batchByDate.set(dateStr, []);
+					}
+					batchByDate.get(dateStr)!.push(conv);
+				}
+
+				// Write files for each date in this batch
+				for (const [dateStr, convs] of batchByDate) {
+					const dateFolderPath = this.getDateFolderPath(folderPath, dateStr);
+					await this.ensureFolderExists(dateFolderPath);
+
+					// Get existing conversations for this date to merge
+					let allDateConversations = convs;
+					if (!fullResync && writtenDates.has(dateStr)) {
+						// Already written this date in this sync, skip to avoid duplicates
+						continue;
+					}
+
+					// Load existing conversations for incremental sync
+					if (!fullResync) {
+						const existingConvs = Object.values(this.settings.syncedConversations)
+							.filter(meta => meta.date === dateStr)
+							.map(meta => {
+								// Find full conversation data if available
+								const existingConv = allConversations.find(c => c.id === meta.id);
+								if (existingConv) return existingConv;
+								// Reconstruct minimal Conversation from metadata
+								return {
+									id: meta.id,
+									created_at: meta.startedAt,
+									started_at: meta.startedAt,
+									finished_at: meta.finishedAt,
+									structured: {
+										title: meta.title,
+										emoji: meta.emoji,
+										category: meta.category,
+										overview: meta.overview || ''
+									},
+									transcript_segments: [],
+									geolocation: meta.geolocation
+								} as Conversation;
+							});
+						allDateConversations = [...convs, ...existingConvs.filter(e => !convs.find(c => c.id === e.id))];
+					}
+
+					this.updateSyncProgress('conversations', `Writing ${dateStr}...`, this.syncProgress.progress);
+
+					// Write files
+					await this.createIndexFile(folderPath, dateStr, allDateConversations);
+					if (this.settings.includeOverview) {
+						await this.createOverviewFile(dateFolderPath, allDateConversations);
+					}
+					if (this.settings.includeActionItems) {
+						await this.createActionItemsFile(dateFolderPath, allDateConversations);
+					}
+					if (this.settings.includeEvents) {
+						await this.createEventsFile(dateFolderPath, allDateConversations);
+					}
+					if (this.settings.includeTranscript) {
+						await this.createTranscriptFile(dateFolderPath, allDateConversations);
+					}
+
+					writtenDates.add(dateStr);
+
+					// Save metadata for each conversation incrementally
+					for (const conv of convs) {
+						// Calculate time and duration
+						const startTime = new Date(conv.started_at);
+						const endTime = new Date(conv.finished_at);
+						const durationMs = endTime.getTime() - startTime.getTime();
+						const durationMinutes = Math.max(1, Math.round(durationMs / 60000));
+						const time = startTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+
+						// Get overview snippet
+						const overviewSnippet = conv.structured?.overview
+							? conv.structured.overview.substring(0, 150)
+							: undefined;
+
+						const meta: SyncedConversationMeta = {
+							id: conv.id,
+							date: dateStr,
+							title: conv.structured?.title || 'Untitled',
+							emoji: conv.structured?.emoji || getCategoryEmoji(conv.structured?.category || 'other'),
+							time: time,
+							category: conv.structured?.category,
+							startedAt: conv.started_at,
+							finishedAt: conv.finished_at,
+							duration: durationMinutes,
+							overview: overviewSnippet,
+							actionItemCount: conv.structured?.action_items?.length || 0,
+							eventCount: conv.structured?.events?.length || 0,
+							geolocation: conv.geolocation || undefined
+						};
+						this.settings.syncedConversations[conv.id] = meta;
+					}
+					await this.saveSettings();
+				}
+			};
+
 			if (fullResync) {
-				// Full resync: fetch everything with progress updates
+				// Full resync: fetch everything with progress updates and incremental writing
 				allConversations = await this.api.getAllConversations(
 					startDate,
-					(step, progress) => this.updateSyncProgress('conversations', step, progress)
+					(step, progress) => this.updateSyncProgress('conversations', step, progress),
+					isCancelled,
+					onBatch
 				);
 				newConversations = allConversations;
 				apiCalls = Math.ceil((allConversations.length || 1) / 100);
@@ -316,7 +442,9 @@ export default class OmiConversationsPlugin extends Plugin {
 					syncedIds,
 					lastSyncTime,
 					startDate,
-					(step, progress) => this.updateSyncProgress('conversations', step, progress)
+					(step, progress) => this.updateSyncProgress('conversations', step, progress),
+					isCancelled,
+					onBatch
 				);
 				newConversations = result.conversations;
 				allConversations = [...newConversations];
