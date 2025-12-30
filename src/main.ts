@@ -309,7 +309,7 @@ export default class OmiConversationsPlugin extends Plugin {
 			const syncedIds = new Set(Object.keys(this.settings.syncedConversations));
 			const lastSyncTime = this.settings.lastConversationSyncTimestamp;
 
-			let allConversations: Conversation[];
+			let allConversations: Conversation[] = [];  // Initialize to empty array to avoid undefined error in onBatch callback
 			let newConversations: Conversation[];
 			let apiCalls = 0;
 
