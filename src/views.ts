@@ -13,8 +13,14 @@ export class OmiHubView extends ItemView {
 	// Tasks state
 	tasks: TaskWithUI[] = [];
 	searchQuery = '';
-	pendingCollapsed = false;
-	completedCollapsed = false;
+	// Section collapse states (flexible for new sections)
+	sectionCollapsed: Record<string, boolean> = {
+		today: false,
+		tomorrow: false,
+		noDeadline: false,
+		later: false,
+		completed: true  // Completed collapsed by default
+	};
 	private autoRefreshInterval: number | null = null;
 	isLoading = false;
 
@@ -2007,11 +2013,20 @@ export class OmiHubView extends ItemView {
 			empty.createEl('div', { text: '🎯', cls: 'omi-empty-icon' });
 			empty.createEl('h3', { text: 'No tasks yet' });
 			empty.createEl('p', { text: 'Click "+ Add Task" to create your first task' });
-		} else if (context === 'pending') {
+		} else if (context === 'today') {
 			empty.createEl('div', { text: '🎉', cls: 'omi-empty-icon' });
-			empty.createEl('p', { text: 'All caught up!' });
-		} else if (context === 'completed') {
+			empty.createEl('p', { text: 'Nothing due today!' });
+		} else if (context === 'tomorrow') {
+			empty.createEl('div', { text: '📆', cls: 'omi-empty-icon' });
+			empty.createEl('p', { text: 'Nothing due tomorrow' });
+		} else if (context === 'noDeadline') {
 			empty.createEl('div', { text: '📋', cls: 'omi-empty-icon' });
+			empty.createEl('p', { text: 'No unscheduled tasks' });
+		} else if (context === 'later') {
+			empty.createEl('div', { text: '🗓️', cls: 'omi-empty-icon' });
+			empty.createEl('p', { text: 'No upcoming tasks' });
+		} else if (context === 'completed') {
+			empty.createEl('div', { text: '✅', cls: 'omi-empty-icon' });
 			empty.createEl('p', { text: 'No completed tasks yet' });
 		} else if (context === 'search') {
 			empty.createEl('div', { text: '🔍', cls: 'omi-empty-icon' });
@@ -2019,12 +2034,76 @@ export class OmiHubView extends ItemView {
 		}
 	}
 
+	// Parse date string to local date (handles timezone correctly)
+	private parseDateToLocal(dateStr: string): Date {
+		// Extract just the date part (YYYY-MM-DD)
+		const datePart = dateStr.split('T')[0];
+		const [year, month, day] = datePart.split('-').map(Number);
+		// Create date in local timezone (months are 0-indexed)
+		return new Date(year, month - 1, day, 0, 0, 0, 0);
+	}
+
 	private isOverdue(dueAt: string | null): boolean {
 		if (!dueAt) return false;
 		const today = new Date();
 		today.setHours(0, 0, 0, 0);
-		const dueDate = new Date(dueAt.split('T')[0]);
+		const dueDate = this.parseDateToLocal(dueAt);
 		return dueDate < today;
+	}
+
+	private isToday(dueAt: string | null): boolean {
+		if (!dueAt) return false;
+		const today = new Date();
+		today.setHours(0, 0, 0, 0);
+		const dueDate = this.parseDateToLocal(dueAt);
+		return dueDate.getTime() === today.getTime();
+	}
+
+	private isTomorrow(dueAt: string | null): boolean {
+		if (!dueAt) return false;
+		const tomorrow = new Date();
+		tomorrow.setHours(0, 0, 0, 0);
+		tomorrow.setDate(tomorrow.getDate() + 1);
+		const dueDate = this.parseDateToLocal(dueAt);
+		return dueDate.getTime() === tomorrow.getTime();
+	}
+
+	private groupTasksByTimeframe(tasks: TaskWithUI[]): {
+		today: TaskWithUI[];
+		tomorrow: TaskWithUI[];
+		noDeadline: TaskWithUI[];
+		later: TaskWithUI[];
+	} {
+		const result = {
+			today: [] as TaskWithUI[],
+			tomorrow: [] as TaskWithUI[],
+			noDeadline: [] as TaskWithUI[],
+			later: [] as TaskWithUI[]
+		};
+
+		for (const task of tasks) {
+			if (!task.dueAt) {
+				result.noDeadline.push(task);
+			} else if (this.isOverdue(task.dueAt)) {
+				// Overdue tasks go into Today section
+				result.today.push(task);
+			} else if (this.isToday(task.dueAt)) {
+				result.today.push(task);
+			} else if (this.isTomorrow(task.dueAt)) {
+				result.tomorrow.push(task);
+			} else {
+				result.later.push(task);
+			}
+		}
+
+		// Sort "later" by date ascending
+		result.later.sort((a, b) => {
+			const dateA = new Date(a.dueAt!).getTime();
+			const dateB = new Date(b.dueAt!).getTime();
+			return dateA - dateB;
+		});
+
+		return result;
 	}
 
 	private renderViewModeTabs(container: HTMLElement): void {
@@ -2062,11 +2141,15 @@ export class OmiHubView extends ItemView {
 		const pending = filtered.filter(t => !t.completed);
 		const completed = filtered.filter(t => t.completed);
 
-		// Pending Section
-		this.renderSection(container, 'Pending', pending, 'pending');
+		// Group pending tasks by timeframe
+		const grouped = this.groupTasksByTimeframe(pending);
 
-		// Completed Section
-		this.renderSection(container, 'Completed', completed, 'completed');
+		// Render sections in order: Today → Tomorrow → No Deadline → Later → Completed
+		this.renderSection(container, 'Today', grouped.today, 'today', '🌅');
+		this.renderSection(container, 'Tomorrow', grouped.tomorrow, 'tomorrow', '📆');
+		this.renderSection(container, 'No Deadline', grouped.noDeadline, 'noDeadline', '📋');
+		this.renderSection(container, 'Later', grouped.later, 'later', '🗓️');
+		this.renderSection(container, 'Completed', completed, 'completed', '✅');
 	}
 
 	private getFilteredTasks(): TaskWithUI[] {
@@ -2105,16 +2188,19 @@ export class OmiHubView extends ItemView {
 		const board = container.createDiv('omi-kanban-board');
 		const filtered = this.getFilteredTasks();
 
+		// Only show pending tasks by default in Kanban
+		const pendingTasks = filtered.filter(t => !t.completed);
+
 		if (this.kanbanLayout === 'status') {
-			this.renderKanbanColumn(board, '⏳ Pending', filtered.filter(t => !t.completed), 'pending');
+			this.renderKanbanColumn(board, '⏳ Pending', pendingTasks, 'pending');
 			this.renderKanbanColumn(board, '✅ Completed', filtered.filter(t => t.completed), 'completed');
 		} else {
-			const grouped = this.groupTasksByDateColumn(filtered);
-			this.renderKanbanColumn(board, '🔴 Overdue', grouped.overdue, 'overdue');
-			this.renderKanbanColumn(board, '📌 Today', grouped.today, 'today');
-			this.renderKanbanColumn(board, '📆 This Week', grouped.thisWeek, 'thisWeek');
-			this.renderKanbanColumn(board, '🔮 Later', grouped.later, 'later');
-			this.renderKanbanColumn(board, '❓ No Date', grouped.noDate, 'noDate');
+			// Date-based layout: Today, Tomorrow, No Deadline, Later
+			const grouped = this.groupTasksByDateColumn(pendingTasks);
+			this.renderKanbanColumn(board, '🌅 Today', grouped.today, 'today');
+			this.renderKanbanColumn(board, '📆 Tomorrow', grouped.tomorrow, 'tomorrow');
+			this.renderKanbanColumn(board, '📋 No Deadline', grouped.noDeadline, 'noDeadline');
+			this.renderKanbanColumn(board, '🗓️ Later', grouped.later, 'later');
 		}
 	}
 
@@ -2155,6 +2241,7 @@ export class OmiHubView extends ItemView {
 		const isOverdueTask = task.dueAt && this.isOverdue(task.dueAt) && !task.completed;
 		const cardClasses = ['omi-kanban-card'];
 		if (isOverdueTask) cardClasses.push('overdue');
+		if (task.completed) cardClasses.push('completed');
 
 		const card = container.createDiv(cardClasses.join(' '));
 		card.draggable = true;
@@ -2192,21 +2279,74 @@ export class OmiHubView extends ItemView {
 		const checkbox = card.createEl('input', { type: 'checkbox' });
 		checkbox.checked = task.completed;
 		checkbox.setAttribute('aria-label', `Mark as ${task.completed ? 'pending' : 'completed'}`);
+		checkbox.addEventListener('click', (e) => e.stopPropagation());
 		checkbox.addEventListener('change', () => this.toggleTaskCompletion(task));
 
-		// Description
-		const desc = card.createEl('div', { text: task.description, cls: 'omi-kanban-card-desc' });
-		desc.addEventListener('click', () => {
-			// Could open edit modal in future
+		// Content wrapper
+		const content = card.createDiv('omi-kanban-card-content');
+
+		// Description (clickable to edit)
+		const desc = content.createEl('div', { text: task.description, cls: 'omi-kanban-card-desc' });
+
+		// Due date subtitle (contextual)
+		if (task.dueAt) {
+			const dateSubtitle = content.createEl('span', { cls: 'omi-kanban-card-date' });
+			if (isOverdueTask) {
+				dateSubtitle.textContent = `Overdue: ${this.formatCompactDate(task.dueAt)}`;
+				dateSubtitle.classList.add('overdue');
+			} else {
+				dateSubtitle.textContent = this.formatCompactDate(task.dueAt);
+			}
+		}
+
+		// Click on card to edit (but not on checkbox)
+		card.addEventListener('click', (e) => {
+			// Don't open edit if clicking checkbox
+			if ((e.target as HTMLElement).tagName === 'INPUT') return;
+			this.openEditTaskModal(task);
 		});
 
-		// Due date pill
-		if (task.dueAt) {
-			card.createEl('span', {
-				text: `📅 ${this.formatDueDateTime(task.dueAt)}`,
-				cls: 'omi-kanban-card-due'
-			});
-		}
+		// Keyboard support
+		card.addEventListener('keydown', (e) => {
+			if (e.key === 'Enter' || e.key === ' ') {
+				e.preventDefault();
+				this.openEditTaskModal(task);
+			}
+		});
+	}
+
+	private openEditTaskModal(task: TaskWithUI): void {
+		const modal = new EditTaskModal(
+			this.app,
+			task,
+			async (updates) => {
+				if (!task.id) return;
+				try {
+					const updateData: { description?: string; due_at?: string | null } = {};
+					if (updates.description !== undefined && updates.description !== task.description) {
+						updateData.description = updates.description;
+					}
+					if (updates.dueAt !== undefined && updates.dueAt !== task.dueAt) {
+						updateData.due_at = updates.dueAt ? this.localToUTC(updates.dueAt) : null;
+					}
+					if (Object.keys(updateData).length > 0) {
+						await this.plugin.api.updateActionItem(task.id, updateData);
+						if (updates.description !== undefined) task.description = updates.description;
+						if (updates.dueAt !== undefined) task.dueAt = updates.dueAt;
+						this.render();
+						this.requestBackupSync();
+					}
+				} catch (error) {
+					console.error('Error updating task:', error);
+					new Notice('Failed to update task');
+				}
+			},
+			async () => {
+				// onDelete callback
+				await this.deleteTask(task);
+			}
+		);
+		modal.open();
 	}
 
 	private async handleKanbanDrop(columnId: string): Promise<void> {
@@ -2238,46 +2378,15 @@ export class OmiHubView extends ItemView {
 		}
 	}
 
+	// Kanban now uses the same grouping as list view (Today, Tomorrow, No Deadline, Later)
+	// This method is kept for backward compatibility but now just wraps groupTasksByTimeframe
 	private groupTasksByDateColumn(tasks: TaskWithUI[]): {
-		overdue: TaskWithUI[];
 		today: TaskWithUI[];
-		thisWeek: TaskWithUI[];
+		tomorrow: TaskWithUI[];
+		noDeadline: TaskWithUI[];
 		later: TaskWithUI[];
-		noDate: TaskWithUI[];
 	} {
-		const now = new Date();
-		now.setHours(0, 0, 0, 0);
-
-		const result = {
-			overdue: [] as TaskWithUI[],
-			today: [] as TaskWithUI[],
-			thisWeek: [] as TaskWithUI[],
-			later: [] as TaskWithUI[],
-			noDate: [] as TaskWithUI[]
-		};
-
-		for (const task of tasks) {
-			if (!task.dueAt) {
-				result.noDate.push(task);
-				continue;
-			}
-
-			const dueDate = new Date(task.dueAt.split('T')[0]);
-			dueDate.setHours(0, 0, 0, 0);
-			const diffDays = Math.floor((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-
-			if (diffDays < 0) {
-				result.overdue.push(task);
-			} else if (diffDays === 0) {
-				result.today.push(task);
-			} else if (diffDays <= 7) {
-				result.thisWeek.push(task);
-			} else {
-				result.later.push(task);
-			}
-		}
-
-		return result;
+		return this.groupTasksByTimeframe(tasks);
 	}
 
 	private getDateForColumn(columnId: string): string | null {
@@ -2285,17 +2394,14 @@ export class OmiHubView extends ItemView {
 		switch (columnId) {
 			case 'today':
 				return this.formatDateOnly(now);
-			case 'thisWeek':
-				now.setDate(now.getDate() + 3);
+			case 'tomorrow':
+				now.setDate(now.getDate() + 1);
 				return this.formatDateOnly(now);
 			case 'later':
-				now.setDate(now.getDate() + 14);
+				now.setDate(now.getDate() + 7);
 				return this.formatDateOnly(now);
-			case 'noDate':
+			case 'noDeadline':
 				return null;
-			case 'overdue':
-				// Keep existing date for overdue (don't change)
-				return this.draggedTask?.dueAt?.split('T')[0] || null;
 			default:
 				return null;
 		}
@@ -2306,6 +2412,107 @@ export class OmiHubView extends ItemView {
 		const month = String(date.getMonth() + 1).padStart(2, '0');
 		const day = String(date.getDate()).padStart(2, '0');
 		return `${year}-${month}-${day}`;
+	}
+
+	private formatCompactDate(dateStr: string): string {
+		const date = this.parseDateToLocal(dateStr);
+		return date.toLocaleDateString('en-US', {
+			weekday: 'short',
+			month: 'short',
+			day: 'numeric'
+		});
+	}
+
+	private formatTimeOnly(dateStr: string): string {
+		if (!dateStr.includes('T')) return '';
+		const date = new Date(dateStr);
+		return date.toLocaleTimeString('en-US', {
+			hour: 'numeric',
+			minute: '2-digit',
+			hour12: true
+		});
+	}
+
+	private setupSourceTooltip(element: HTMLElement, sourceLink: string): void {
+		// Parse conversation ID from sourceLink (format: "conversation:{id}")
+		const convId = sourceLink.replace('conversation:', '');
+		const conv = this.plugin.settings.syncedConversations[convId];
+
+		if (!conv) {
+			element.title = 'From conversation (not synced)';
+			return;
+		}
+
+		// Create tooltip element
+		let tooltip: HTMLElement | null = null;
+
+		const showTooltip = () => {
+			if (tooltip) return;
+
+			tooltip = document.createElement('div');
+			tooltip.className = 'omi-task-source-tooltip';
+
+			// Header with emoji and title
+			const header = tooltip.createDiv('omi-tooltip-header');
+			header.createEl('span', { text: conv.emoji || '💬', cls: 'omi-tooltip-emoji' });
+			header.createEl('span', { text: conv.title || 'Untitled', cls: 'omi-tooltip-title' });
+
+			// Meta info
+			const meta = tooltip.createDiv('omi-tooltip-meta');
+			const dateStr = new Date(conv.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+			meta.textContent = `${dateStr} • ${conv.duration || 0} min`;
+
+			// Overview snippet
+			if (conv.overview) {
+				const overview = tooltip.createDiv('omi-tooltip-overview');
+				overview.textContent = `"${conv.overview.substring(0, 100)}${conv.overview.length > 100 ? '...' : ''}"`;
+			}
+
+			// Click hint
+			const hint = tooltip.createDiv('omi-tooltip-hint');
+			hint.textContent = 'Click to view conversation';
+
+			// Position tooltip
+			document.body.appendChild(tooltip);
+			const rect = element.getBoundingClientRect();
+			tooltip.style.top = `${rect.bottom + 8}px`;
+			tooltip.style.left = `${rect.left - 100}px`;
+
+			// Adjust if off-screen
+			const tooltipRect = tooltip.getBoundingClientRect();
+			if (tooltipRect.right > window.innerWidth - 10) {
+				tooltip.style.left = `${window.innerWidth - tooltipRect.width - 10}px`;
+			}
+			if (tooltipRect.left < 10) {
+				tooltip.style.left = '10px';
+			}
+		};
+
+		const hideTooltip = () => {
+			if (tooltip) {
+				tooltip.remove();
+				tooltip = null;
+			}
+		};
+
+		element.addEventListener('mouseenter', showTooltip);
+		element.addEventListener('mouseleave', hideTooltip);
+
+		// Click to navigate to conversation
+		element.style.cursor = 'pointer';
+		element.addEventListener('click', async (e) => {
+			e.stopPropagation();
+			hideTooltip();
+
+			// Switch to conversations tab and select this conversation
+			this.activeTab = 'conversations';
+			this.plugin.settings.activeHubTab = 'conversations';
+			this.selectedConversationId = convId;
+			this.detailTab = 'summary';
+			await this.loadConversationDetails(convId);
+			await this.plugin.saveSettings();
+			this.render();
+		});
 	}
 
 	// ==================== DAILY VIEW HELPERS ====================
@@ -2555,11 +2762,10 @@ export class OmiHubView extends ItemView {
 		modal.open();
 	}
 
-	private renderSection(container: HTMLElement, title: string, tasks: TaskWithUI[], sectionId: string): void {
+	private renderSection(container: HTMLElement, title: string, tasks: TaskWithUI[], sectionId: string, emoji: string): void {
 		const section = container.createDiv(`omi-tasks-section omi-tasks-${sectionId}`);
 
-		const isCollapsed = sectionId === 'pending' ? this.pendingCollapsed : this.completedCollapsed;
-		const emoji = sectionId === 'pending' ? '⏳' : '✅';
+		const isCollapsed = this.sectionCollapsed[sectionId] ?? false;
 
 		const sectionHeader = section.createDiv('omi-tasks-section-header');
 		sectionHeader.setAttribute('role', 'button');
@@ -2575,11 +2781,7 @@ export class OmiHubView extends ItemView {
 		sectionHeader.createEl('span', { text: ` ${emoji} ${title} (${tasks.length})` });
 
 		const toggleSection = () => {
-			if (sectionId === 'pending') {
-				this.pendingCollapsed = !this.pendingCollapsed;
-			} else {
-				this.completedCollapsed = !this.completedCollapsed;
-			}
+			this.sectionCollapsed[sectionId] = !this.sectionCollapsed[sectionId];
 			this.render();
 		};
 
@@ -2597,7 +2799,7 @@ export class OmiHubView extends ItemView {
 			taskList.setAttribute('role', 'list');
 
 			for (const task of tasks) {
-				this.renderTaskRow(taskList, task);
+				this.renderTaskRow(taskList, task, sectionId);
 			}
 
 			if (tasks.length === 0) {
@@ -2606,7 +2808,7 @@ export class OmiHubView extends ItemView {
 		}
 	}
 
-	private renderTaskRow(container: HTMLElement, task: TaskWithUI): void {
+	private renderTaskRow(container: HTMLElement, task: TaskWithUI, sectionId: string = 'pending'): void {
 		const rowClasses = ['omi-task-row'];
 		if (task.completed) rowClasses.push('completed');
 		const row = container.createDiv(rowClasses.join(' '));
@@ -2634,8 +2836,11 @@ export class OmiHubView extends ItemView {
 			await this.toggleTaskCompletion(task);
 		});
 
+		// Content wrapper (description + date subtitle)
+		const contentWrapper = row.createDiv('omi-task-content');
+
 		// Description (editable)
-		const descEl = row.createEl('span', {
+		const descEl = contentWrapper.createEl('span', {
 			text: task.description,
 			cls: 'omi-task-description'
 		});
@@ -2662,29 +2867,46 @@ export class OmiHubView extends ItemView {
 			}
 		});
 
-		// Due date pill
+		// Date subtitle (contextual based on section)
+		const dateSubtitle = contentWrapper.createEl('span', { cls: 'omi-task-date-subtitle' });
+		dateSubtitle.addEventListener('click', (e) => {
+			e.stopPropagation();
+			this.showDatePicker(task);
+		});
+
 		if (task.dueAt) {
-			const isOverdueTask = this.isOverdue(task.dueAt) && !task.completed;
-			const duePill = row.createEl('span', {
-				text: `📅 ${this.formatDueDateTime(task.dueAt)}`,
-				cls: `omi-task-due-pill ${isOverdueTask ? 'overdue' : ''}`
-			});
-			duePill.setAttribute('aria-label', `Due date: ${task.dueAt}${isOverdueTask ? ' (overdue)' : ''}. Click to change`);
-			duePill.addEventListener('click', () => this.showDatePicker(task));
+			// Format date based on section context
+			if (sectionId === 'today' || sectionId === 'tomorrow') {
+				// Show time only if set, otherwise show "All day" or overdue indicator
+				const hasTime = task.dueAt.includes('T') && !task.dueAt.endsWith('T00:00:00');
+				if (isOverdueTask) {
+					dateSubtitle.textContent = `Overdue: ${this.formatCompactDate(task.dueAt)}`;
+					dateSubtitle.classList.add('overdue');
+				} else if (hasTime) {
+					dateSubtitle.textContent = this.formatTimeOnly(task.dueAt);
+				} else {
+					dateSubtitle.textContent = 'All day';
+				}
+			} else if (sectionId === 'later') {
+				// Show compact date like "Wed, Dec 25"
+				dateSubtitle.textContent = this.formatCompactDate(task.dueAt);
+			} else if (sectionId === 'completed') {
+				// Show full date for completed tasks
+				dateSubtitle.textContent = this.formatCompactDate(task.dueAt);
+			}
+			dateSubtitle.setAttribute('aria-label', `Due: ${task.dueAt}. Click to change`);
 		} else {
-			const addDateBtn = row.createEl('span', {
-				text: '+ Date',
-				cls: 'omi-task-add-date'
-			});
-			addDateBtn.setAttribute('aria-label', 'Add due date');
-			addDateBtn.addEventListener('click', () => this.showDatePicker(task));
+			// No deadline - show add date link
+			dateSubtitle.textContent = '+ Add date';
+			dateSubtitle.classList.add('add-date');
+			dateSubtitle.setAttribute('aria-label', 'Add due date');
 		}
 
 		// Source indicator (if from conversation)
 		if (task.sourceLink) {
 			const sourceEl = row.createEl('span', { text: '💬', cls: 'omi-task-source' });
-			sourceEl.title = 'From conversation';
 			sourceEl.setAttribute('aria-label', 'Task from conversation');
+			this.setupSourceTooltip(sourceEl, task.sourceLink);
 		}
 
 		// Delete button

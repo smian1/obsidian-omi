@@ -170,9 +170,9 @@
 
 .omi-task-row {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 8px;
-    padding: 8px;
+    padding: 10px 8px;
     border-radius: 6px;
     margin-bottom: 4px;
     transition: background-color 0.1s ease;
@@ -184,17 +184,25 @@
 
 .omi-task-row input[type="checkbox"] {
     margin: 0;
+    margin-top: 2px;
     cursor: pointer;
     width: 16px;
     height: 16px;
     flex-shrink: 0;
 }
 
-.omi-task-description {
+/* Task content wrapper for description + date subtitle */
+.omi-task-content {
     flex: 1;
-    padding: 4px 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.omi-task-description {
+    padding: 2px 6px;
     border-radius: 4px;
-    min-width: 100px;
     line-height: 1.4;
     cursor: text;
 }
@@ -203,6 +211,32 @@
     outline: none;
     background: var(--background-modifier-form-field);
     box-shadow: 0 0 0 2px var(--interactive-accent-hover);
+}
+
+/* Date subtitle under task */
+.omi-task-date-subtitle {
+    font-size: 11px;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0 6px;
+    transition: color 0.1s ease;
+}
+
+.omi-task-date-subtitle:hover {
+    color: var(--text-normal);
+}
+
+.omi-task-date-subtitle.overdue {
+    color: var(--omi-status-overdue, #dc3545);
+    font-weight: 500;
+}
+
+.omi-task-date-subtitle.add-date {
+    color: var(--text-faint);
+}
+
+.omi-task-date-subtitle.add-date:hover {
+    color: var(--interactive-accent);
 }
 
 .omi-task-due-pill {
@@ -235,18 +269,84 @@
 }
 
 .omi-task-source {
-    opacity: 0.5;
-    font-size: 12px;
+    opacity: 0.6;
+    font-size: 14px;
     flex-shrink: 0;
+    margin-top: 2px;
+    transition: opacity 0.1s ease;
+}
+
+.omi-task-source:hover {
+    opacity: 1;
+}
+
+/* Conversation source tooltip */
+.omi-task-source-tooltip {
+    position: fixed;
+    background: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+    z-index: 10000;
+    max-width: 280px;
+    min-width: 200px;
+    animation: tooltip-fade-in 0.15s ease;
+}
+
+@keyframes tooltip-fade-in {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.omi-tooltip-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.omi-tooltip-emoji {
+    font-size: 18px;
+}
+
+.omi-tooltip-title {
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text-normal);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.omi-tooltip-meta {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+}
+
+.omi-tooltip-overview {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-style: italic;
+    line-height: 1.4;
+    margin-bottom: 8px;
+}
+
+.omi-tooltip-hint {
+    font-size: 10px;
+    color: var(--text-faint);
+    text-align: right;
 }
 
 .omi-task-delete {
     opacity: 0.3;
     cursor: pointer;
     font-size: 14px;
-    padding: 4px 8px;
+    padding: 2px 6px;
     border-radius: 4px;
     flex-shrink: 0;
+    margin-top: 0;
     transition: all 0.1s ease;
 }
 
@@ -544,11 +644,10 @@
     padding: 10px;
     margin-bottom: 8px;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-    cursor: grab;
+    cursor: pointer;
     transition: transform var(--omi-duration-medium) var(--omi-easing-standard),
                 box-shadow var(--omi-duration-medium) var(--omi-easing-standard);
     display: flex;
-    flex-wrap: wrap;
     align-items: flex-start;
     gap: var(--omi-spacing-sm);
 }
@@ -564,17 +663,43 @@
     cursor: grabbing;
 }
 
+.omi-kanban-card.completed {
+    opacity: 0.6;
+}
+
+.omi-kanban-card.completed .omi-kanban-card-desc {
+    text-decoration: line-through;
+    color: var(--text-muted);
+}
+
 .omi-kanban-card input[type="checkbox"] {
-    margin: 0 8px 0 0;
+    margin: 0;
+    margin-top: 2px;
     cursor: pointer;
-    vertical-align: middle;
+    flex-shrink: 0;
+}
+
+.omi-kanban-card-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
 }
 
 .omi-kanban-card-desc {
-    flex: 1;
     font-size: 13px;
     line-height: 1.4;
-    min-width: 0;
+}
+
+.omi-kanban-card-date {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.omi-kanban-card-date.overdue {
+    color: var(--omi-status-overdue, #dc3545);
+    font-weight: 500;
 }
 
 .omi-kanban-card-due {
@@ -1049,6 +1174,7 @@
     height: 10px;
     border-radius: var(--omi-radius-full);
     flex-shrink: 0;
+    margin-top: 5px;
     transition: all var(--omi-duration-medium) var(--omi-easing-standard);
 }
 
