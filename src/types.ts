@@ -21,7 +21,7 @@ export interface OmiConversationsSettings {
 	// Incremental conversation sync tracking
 	lastConversationSyncTimestamp: string | null;
 	// Hub view settings
-	activeHubTab: 'tasks' | 'conversations' | 'memories' | 'stats' | 'heatmap' | 'map';
+	activeHubTab: 'tasks' | 'conversations' | 'memories' | 'stats' | 'heatmap' | 'map' | 'sync';
 	syncedConversations: Record<string, SyncedConversationMeta>;
 	// Memories view settings
 	memoriesCategoryFilter: string | null;
@@ -36,6 +36,10 @@ export interface OmiConversationsSettings {
 	taskCompletionStreak: number;  // Current streak of days with task completions
 	lastTaskCompletionDate: string | null;  // YYYY-MM-DD of last completion
 	enableTaskSounds: boolean;  // Optional sound effects
+	// Sync dashboard
+	syncHistory: SyncHistoryEntry[];  // Last 24 hours of sync activity
+	lastTasksSyncTimestamp: string | null;
+	lastMemoriesSyncTimestamp: string | null;
 }
 
 // Omi API response types
@@ -284,4 +288,23 @@ export interface StatsData {
 	// Time-based counts for achievements
 	lateNightCount: number;    // 10pm-4am
 	earlyMorningCount: number; // 5am-8am
+}
+
+// Sync Dashboard Types
+export interface SyncHistoryEntry {
+	timestamp: string;  // ISO timestamp
+	type: 'conversations' | 'tasks' | 'memories';
+	action: 'sync' | 'full-resync' | 'auto-sync';
+	count: number;      // Items synced
+	apiCalls?: number;  // For conversations
+	error?: string;     // If failed
+}
+
+// Live sync state (runtime only, not persisted)
+export interface SyncProgress {
+	isActive: boolean;
+	type: 'conversations' | 'tasks' | 'memories' | null;
+	step: string;       // "Fetching page 2 of 10"
+	progress: number;   // 0-100
+	startedAt: number;  // timestamp
 }

@@ -67,6 +67,80 @@ export class OmiAPI {
 		}
 	}
 
+	/**
+	 * Optimized incremental sync - fetches only new conversations
+	 * API returns newest-first, so we stop when we hit a known conversation
+	 */
+	async getConversationsSince(
+		syncedIds: Set<string>,
+		lastSyncTime: string | null,
+		startDate?: string,
+		onProgress?: (step: string, progress: number) => void
+	): Promise<{ conversations: Conversation[]; stoppedEarly: boolean; apiCalls: number }> {
+		const newConversations: Conversation[] = [];
+		let offset = 0;
+		let stoppedEarly = false;
+		let apiCalls = 0;
+		const lastSync = lastSyncTime ? new Date(lastSyncTime).getTime() : 0;
+		const startDateTime = startDate ? new Date(startDate + 'T00:00:00Z').getTime() : 0;
+
+		try {
+			while (true) {
+				onProgress?.(`Fetching page ${apiCalls + 1}...`, apiCalls > 0 ? Math.min(90, apiCalls * 10) : 5);
+
+				const params = new URLSearchParams({
+					limit: this.batchSize.toString(),
+					offset: offset.toString(),
+					include_transcript: 'true'
+				});
+
+				const batch = await this.makeRequest(
+					`${this.baseUrl}/v1/dev/user/conversations`,
+					params
+				);
+				apiCalls++;
+
+				if (!batch || batch.length === 0) break;
+
+				onProgress?.(`Processing ${newConversations.length + batch.length} conversations...`, Math.min(95, apiCalls * 10));
+
+				for (const conv of batch) {
+					// Filter by start date if provided
+					if (startDate && new Date(conv.created_at).getTime() < startDateTime) {
+						// Reached conversations older than start date, stop
+						stoppedEarly = true;
+						break;
+					}
+
+					// If we've seen this conversation before
+					if (syncedIds.has(conv.id)) {
+						// Check if it was updated since last sync
+						const convFinished = new Date(conv.finished_at || conv.created_at).getTime();
+						if (convFinished <= lastSync) {
+							// This conversation hasn't changed since our last sync, stop here
+							stoppedEarly = true;
+							break;
+						}
+						// Conversation was updated, include it for re-sync
+					}
+					newConversations.push(conv);
+				}
+
+				if (stoppedEarly) break;
+				if (batch.length < this.batchSize) break;
+
+				offset += this.batchSize;
+				await new Promise(resolve => setTimeout(resolve, 500));
+			}
+
+			onProgress?.('Finalizing...', 100);
+			return { conversations: newConversations, stoppedEarly, apiCalls };
+		} catch (error) {
+			console.error('Error fetching conversations incrementally:', error);
+			throw error;
+		}
+	}
+
 	private async makeRequest(url: string, params: URLSearchParams): Promise<Conversation[]> {
 		let retries = 0;
 		while (true) {

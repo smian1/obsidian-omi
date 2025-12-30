@@ -95,17 +95,19 @@ export class TasksHubSync {
 		return isoString;
 	}
 
-	async pullFromAPI(): Promise<void> {
+	async pullFromAPI(): Promise<{ count: number; error?: string }> {
 		if (!this.plugin.settings.enableTasksHub || !this.plugin.settings.apiKey) {
-			return;
+			return { count: 0 };
 		}
 
 		try {
 			const items = await this.plugin.api.getAllActionItems();
 			await this.writeToFile(items);
+			return { count: items.length };
 		} catch (error) {
 			console.error('Tasks Hub: Error pulling from API:', error);
 			new Notice('Failed to sync tasks backup from Omi');
+			return { count: 0, error: error instanceof Error ? error.message : 'Unknown error' };
 		}
 	}
 
@@ -206,17 +208,19 @@ export class MemoriesHubSync {
 		return str.charAt(0).toUpperCase() + str.slice(1);
 	}
 
-	async pullFromAPI(): Promise<void> {
+	async pullFromAPI(): Promise<{ count: number; error?: string }> {
 		if (!this.plugin.settings.apiKey) {
-			return;
+			return { count: 0 };
 		}
 
 		try {
 			const memories = await this.plugin.api.getAllMemories();
 			await this.writeToFile(memories);
+			return { count: memories.length };
 		} catch (error) {
 			console.error('Memories Hub: Error pulling from API:', error);
 			new Notice('Failed to sync memories backup from Omi');
+			return { count: 0, error: error instanceof Error ? error.message : 'Unknown error' };
 		}
 	}
 

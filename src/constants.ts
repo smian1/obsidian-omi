@@ -53,5 +53,9 @@ export const DEFAULT_SETTINGS: OmiConversationsSettings = {
 	// Gamification settings
 	taskCompletionStreak: 0,
 	lastTaskCompletionDate: null,
-	enableTaskSounds: false  // Disabled by default
+	enableTaskSounds: false,  // Disabled by default
+	// Sync dashboard
+	syncHistory: [],
+	lastTasksSyncTimestamp: null,
+	lastMemoriesSyncTimestamp: null
 };

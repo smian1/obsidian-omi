@@ -1,5 +1,5 @@
-import { Plugin, normalizePath, Notice } from 'obsidian';
-import { OmiConversationsSettings, Conversation, SyncedConversationMeta } from './types';
+import { Plugin, normalizePath, Notice, Events } from 'obsidian';
+import { OmiConversationsSettings, Conversation, SyncedConversationMeta, SyncProgress, SyncHistoryEntry } from './types';
 import { DEFAULT_SETTINGS, VIEW_TYPE_OMI_HUB } from './constants';
 import { getCategoryEmoji } from './utils';
 import { OmiAPI } from './api';
@@ -14,6 +14,18 @@ export default class OmiConversationsPlugin extends Plugin {
 	memoriesHubSync: MemoriesHubSync;
 	private tasksHubSyncInterval: number | null = null;
 	private conversationSyncInterval: number | null = null;
+
+	// Sync progress tracking (runtime only, not persisted)
+	syncProgress: SyncProgress = {
+		isActive: false,
+		type: null,
+		step: '',
+		progress: 0,
+		startedAt: 0
+	};
+
+	// Event emitter for sync progress updates
+	private syncEvents = new Events();
 
 	async onload() {
 		await this.loadSettings();
@@ -51,8 +63,15 @@ export default class OmiConversationsPlugin extends Plugin {
 			callback: async () => {
 				if (this.settings.enableTasksHub) {
 					new Notice('Syncing Tasks Hub...');
-					await this.tasksHubSync.pullFromAPI();
-					new Notice('Tasks Hub synced');
+					const result = await this.tasksHubSync.pullFromAPI();
+					this.logSyncHistory({
+						type: 'tasks',
+						action: 'sync',
+						count: result.count,
+						error: result.error
+					});
+					await this.saveSettings();
+					new Notice(result.error ? 'Tasks Hub sync failed' : 'Tasks Hub synced');
 				} else {
 					new Notice('Tasks Hub is not enabled. Enable it in settings.');
 				}
@@ -65,8 +84,15 @@ export default class OmiConversationsPlugin extends Plugin {
 			name: 'Sync Memories Hub',
 			callback: async () => {
 				new Notice('Syncing Memories Hub...');
-				await this.memoriesHubSync.pullFromAPI();
-				new Notice('Memories Hub synced');
+				const result = await this.memoriesHubSync.pullFromAPI();
+				this.logSyncHistory({
+					type: 'memories',
+					action: 'sync',
+					count: result.count,
+					error: result.error
+				});
+				await this.saveSettings();
+				new Notice(result.error ? 'Memories Hub sync failed' : 'Memories Hub synced');
 			}
 		});
 
@@ -160,7 +186,7 @@ export default class OmiConversationsPlugin extends Plugin {
 		if (this.settings.conversationAutoSync > 0) {
 			const intervalMs = this.settings.conversationAutoSync * 60 * 1000;
 			this.conversationSyncInterval = window.setInterval(() => {
-				this.syncConversations();
+				this.syncConversations(false, true); // isAutoSync = true
 			}, intervalMs);
 		}
 	}
@@ -190,11 +216,68 @@ export default class OmiConversationsPlugin extends Plugin {
 		}
 	}
 
-	async syncConversations(fullResync = false) {
+	// Sync progress event methods
+	onSyncProgress(callback: () => void): () => void {
+		this.syncEvents.on('sync-progress', callback);
+		return () => this.syncEvents.off('sync-progress', callback);
+	}
+
+	private updateSyncProgress(type: SyncProgress['type'], step: string, progress: number) {
+		this.syncProgress = {
+			isActive: type !== null,
+			type,
+			step,
+			progress,
+			startedAt: this.syncProgress.startedAt || Date.now()
+		};
+		this.syncEvents.trigger('sync-progress');
+	}
+
+	private clearSyncProgress() {
+		this.syncProgress = {
+			isActive: false,
+			type: null,
+			step: '',
+			progress: 0,
+			startedAt: 0
+		};
+		this.syncEvents.trigger('sync-progress');
+	}
+
+	// Sync history logging
+	private logSyncHistory(entry: Omit<SyncHistoryEntry, 'timestamp'>) {
+		const newEntry: SyncHistoryEntry = {
+			...entry,
+			timestamp: new Date().toISOString()
+		};
+
+		// Add to history
+		this.settings.syncHistory.unshift(newEntry);
+
+		// Prune entries older than 24 hours and keep max 100
+		const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+		this.settings.syncHistory = this.settings.syncHistory
+			.filter(e => new Date(e.timestamp).getTime() > cutoff)
+			.slice(0, 100);
+
+		// Update type-specific timestamp
+		if (entry.type === 'conversations') {
+			this.settings.lastConversationSyncTimestamp = newEntry.timestamp;
+		} else if (entry.type === 'tasks') {
+			this.settings.lastTasksSyncTimestamp = newEntry.timestamp;
+		} else if (entry.type === 'memories') {
+			this.settings.lastMemoriesSyncTimestamp = newEntry.timestamp;
+		}
+	}
+
+	async syncConversations(fullResync = false, isAutoSync = false) {
 		if (!this.settings.apiKey) {
 			new Notice('Please set your Omi API key in settings');
 			return;
 		}
+
+		// Start progress tracking
+		this.updateSyncProgress('conversations', 'Starting...', 0);
 
 		try {
 			// If full resync, clear tracking data
@@ -210,23 +293,46 @@ export default class OmiConversationsPlugin extends Plugin {
 
 			new Notice(fullResync ? 'Starting full Omi conversation sync...' : 'Syncing new Omi conversations...');
 
-			// Fetch conversations - use last sync date for incremental, or start date for full
 			const startDate = this.settings.startDate;
-			const allConversations = await this.api.getAllConversations(startDate);
+			const syncedIds = new Set(Object.keys(this.settings.syncedConversations));
+			const lastSyncTime = this.settings.lastConversationSyncTimestamp;
 
-			if (!allConversations || allConversations.length === 0) {
-				new Notice('No conversations found');
-				return;
+			let allConversations: Conversation[];
+			let newConversations: Conversation[];
+			let apiCalls = 0;
+
+			if (fullResync) {
+				// Full resync: fetch everything
+				this.updateSyncProgress('conversations', 'Fetching all conversations...', 10);
+				allConversations = await this.api.getAllConversations(startDate);
+				newConversations = allConversations;
+				apiCalls = Math.ceil((allConversations.length || 1) / 100);
+			} else {
+				// Incremental sync: use optimized "stop when known" approach
+				// API returns newest-first, so we stop when we hit a known conversation
+				const result = await this.api.getConversationsSince(
+					syncedIds,
+					lastSyncTime,
+					startDate,
+					(step, progress) => this.updateSyncProgress('conversations', step, progress)
+				);
+				newConversations = result.conversations;
+				allConversations = [...newConversations];
+				apiCalls = result.apiCalls;
 			}
 
-			// Filter to only new conversations (skip already synced)
-			const syncedIds = new Set(Object.keys(this.settings.syncedConversations));
-			const newConversations = fullResync
-				? allConversations
-				: allConversations.filter(conv => !syncedIds.has(conv.id));
-
-			if (newConversations.length === 0) {
-				new Notice('No new conversations to sync');
+			if (!newConversations || newConversations.length === 0) {
+				const apiCallInfo = apiCalls === 1 ? '1 API call' : `${apiCalls} API calls`;
+				new Notice(`No new conversations to sync (${apiCallInfo})`);
+				this.clearSyncProgress();
+				// Log even when no new conversations (shows sync ran)
+				this.logSyncHistory({
+					type: 'conversations',
+					action: isAutoSync ? 'auto-sync' : 'sync',
+					count: 0,
+					apiCalls
+				});
+				await this.saveSettings();
 				return;
 			}
 
@@ -249,8 +355,17 @@ export default class OmiConversationsPlugin extends Plugin {
 			// For incremental sync, we need to merge with existing conversations for each date
 			// Track dates that need navigation updates
 			const newDates: string[] = [];
+			const totalDates = conversationsByDate.size;
+			let processedDates = 0;
 
 			for (const [dateStr, conversations] of conversationsByDate) {
+				processedDates++;
+				this.updateSyncProgress(
+					'conversations',
+					`Writing files for ${dateStr}...`,
+					50 + (processedDates / totalDates) * 40
+				);
+
 				const dateFolderPath = this.getDateFolderPath(folderPath, dateStr);
 				await this.ensureFolderExists(dateFolderPath);
 				newDates.push(dateStr);
@@ -348,17 +463,42 @@ export default class OmiConversationsPlugin extends Plugin {
 			await this.saveSettings();
 
 			// Also sync memories backup and regenerate master index
+			this.updateSyncProgress('conversations', 'Syncing memories...', 92);
 			await this.memoriesHubSync.pullFromAPI();
+			this.updateSyncProgress('conversations', 'Generating index...', 96);
 			await this.generateMasterIndex();
 
 			// Update daily notes with links to Omi conversations
 			const syncedDates = Array.from(conversationsByDate.keys());
 			await this.updateDailyNotes(syncedDates);
 
+			// Log successful sync
+			this.logSyncHistory({
+				type: 'conversations',
+				action: fullResync ? 'full-resync' : (isAutoSync ? 'auto-sync' : 'sync'),
+				count: newConversations.length,
+				apiCalls
+			});
+			await this.saveSettings();
+
+			this.clearSyncProgress();
+
 			const syncType = fullResync ? '' : 'new ';
-			new Notice(`Synced ${newConversations.length} ${syncType}conversations across ${conversationsByDate.size} days`);
+			const apiCallInfo = apiCalls === 1 ? '1 API call' : `${apiCalls} API calls`;
+			new Notice(`Synced ${newConversations.length} ${syncType}conversations across ${conversationsByDate.size} days (${apiCallInfo})`);
 		} catch (error) {
 			console.error('Error syncing conversations:', error);
+
+			// Log failed sync
+			this.logSyncHistory({
+				type: 'conversations',
+				action: fullResync ? 'full-resync' : (isAutoSync ? 'auto-sync' : 'sync'),
+				count: 0,
+				error: error instanceof Error ? error.message : 'Unknown error'
+			});
+			await this.saveSettings();
+
+			this.clearSyncProgress();
 			new Notice('Error syncing Omi conversations. Check console for details.');
 		}
 	}

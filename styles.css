@@ -6659,3 +6659,273 @@ svg.leaflet-image-layer.leaflet-interactive path {
         min-width: 100%;
     }
 }
+
+/* ========================================
+   SYNC DASHBOARD TAB
+   ======================================== */
+
+.omi-sync-container {
+    padding: var(--omi-spacing-lg);
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+/* Live Status Banner */
+.omi-sync-live {
+    background: var(--background-secondary);
+    border-left: 3px solid var(--interactive-accent);
+    border-radius: var(--omi-radius-md);
+    padding: var(--omi-spacing-md) var(--omi-spacing-lg);
+    margin-bottom: var(--omi-spacing-lg);
+}
+
+.omi-sync-live-header {
+    display: flex;
+    align-items: center;
+    gap: var(--omi-spacing-sm);
+    margin-bottom: var(--omi-spacing-sm);
+}
+
+.omi-sync-pulse {
+    color: var(--interactive-accent);
+    animation: omi-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes omi-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
+
+.omi-sync-live-title {
+    font-weight: 600;
+    color: var(--text-normal);
+}
+
+.omi-sync-live-step {
+    font-size: 0.9em;
+    color: var(--text-muted);
+    margin-bottom: var(--omi-spacing-sm);
+}
+
+.omi-sync-progress-bar {
+    height: 4px;
+    background: var(--background-modifier-border);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-bottom: var(--omi-spacing-xs);
+}
+
+.omi-sync-progress-fill {
+    height: 100%;
+    background: var(--interactive-accent);
+    transition: width 0.3s ease;
+}
+
+.omi-sync-live-elapsed {
+    font-size: 0.8em;
+    color: var(--text-faint);
+}
+
+/* Sync Cards Container */
+.omi-sync-cards {
+    display: grid;
+    gap: var(--omi-spacing-md);
+    margin-bottom: var(--omi-spacing-lg);
+}
+
+/* Sync Card */
+.omi-sync-card {
+    background: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--omi-radius-md);
+    padding: var(--omi-spacing-md);
+    border-left: 3px solid var(--omi-color-success);
+}
+
+.omi-sync-card--synced {
+    border-left-color: var(--omi-color-success);
+}
+
+.omi-sync-card--syncing {
+    border-left-color: var(--interactive-accent);
+}
+
+.omi-sync-card--error {
+    border-left-color: var(--omi-color-error);
+}
+
+.omi-sync-card-header {
+    display: flex;
+    align-items: center;
+    gap: var(--omi-spacing-sm);
+    margin-bottom: var(--omi-spacing-sm);
+}
+
+.omi-sync-card-icon {
+    font-size: 1.2em;
+}
+
+.omi-sync-card-title {
+    margin: 0;
+    font-size: 1.1em;
+    font-weight: 600;
+}
+
+.omi-sync-card-status {
+    margin-bottom: var(--omi-spacing-xs);
+}
+
+.omi-sync-card-last {
+    font-size: 0.9em;
+    color: var(--text-muted);
+}
+
+.omi-sync-card-stats {
+    font-size: 0.9em;
+    color: var(--text-normal);
+    margin-bottom: var(--omi-spacing-md);
+}
+
+/* Settings Row */
+.omi-sync-settings-row {
+    display: flex;
+    align-items: center;
+    gap: var(--omi-spacing-md);
+    margin-bottom: var(--omi-spacing-md);
+    padding: var(--omi-spacing-sm) 0;
+    border-top: 1px solid var(--background-modifier-border);
+    border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.omi-sync-toggle-label {
+    display: flex;
+    align-items: center;
+    gap: var(--omi-spacing-xs);
+    font-size: 0.9em;
+    cursor: pointer;
+}
+
+.omi-sync-toggle-label input[type="checkbox"] {
+    cursor: pointer;
+}
+
+.omi-sync-interval-select {
+    font-size: 0.85em;
+    padding: var(--omi-spacing-xs) var(--omi-spacing-sm);
+    border-radius: var(--omi-radius-sm);
+    border: 1px solid var(--background-modifier-border);
+    background: var(--background-primary);
+    color: var(--text-normal);
+}
+
+/* Action Buttons */
+.omi-sync-card-actions {
+    display: flex;
+    gap: var(--omi-spacing-sm);
+}
+
+.omi-sync-btn {
+    padding: var(--omi-spacing-xs) var(--omi-spacing-md);
+    font-size: 0.9em;
+    border-radius: var(--omi-radius-sm);
+    border: none;
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+    cursor: pointer;
+    transition: opacity var(--omi-duration-short) ease;
+}
+
+.omi-sync-btn:hover:not(:disabled) {
+    opacity: 0.9;
+}
+
+.omi-sync-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.omi-sync-btn--secondary {
+    background: var(--background-modifier-border);
+    color: var(--text-normal);
+}
+
+/* Sync Tab Badge */
+.omi-sync-active {
+    color: var(--interactive-accent);
+    animation: omi-pulse 1.5s ease-in-out infinite;
+}
+
+/* Sync History */
+.omi-sync-history {
+    background: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--omi-radius-md);
+    padding: var(--omi-spacing-md);
+}
+
+.omi-sync-history h4 {
+    margin: 0 0 var(--omi-spacing-md) 0;
+    font-size: 1em;
+    color: var(--text-normal);
+}
+
+.omi-sync-log {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.omi-sync-log-entry {
+    display: flex;
+    align-items: center;
+    gap: var(--omi-spacing-sm);
+    padding: var(--omi-spacing-xs) 0;
+    border-bottom: 1px solid var(--background-modifier-border);
+    font-size: 0.85em;
+}
+
+.omi-sync-log-entry:last-child {
+    border-bottom: none;
+}
+
+.omi-sync-log-time {
+    color: var(--text-faint);
+    font-family: var(--font-monospace);
+    min-width: 70px;
+}
+
+.omi-sync-log-icon {
+    font-size: 0.9em;
+}
+
+.omi-sync-log-type {
+    font-weight: 500;
+    min-width: 100px;
+}
+
+.omi-sync-log-badge {
+    font-size: 0.75em;
+    padding: 1px 6px;
+    border-radius: var(--omi-radius-full);
+    background: var(--background-modifier-border);
+    color: var(--text-muted);
+}
+
+.omi-sync-log-details {
+    color: var(--text-muted);
+    flex: 1;
+}
+
+.omi-sync-log-error {
+    color: var(--omi-color-error);
+}
+
+.omi-text-muted {
+    color: var(--text-muted);
+}
+
+/* Responsive - Sync Cards Grid */
+@media (min-width: 768px) {
+    .omi-sync-cards {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
