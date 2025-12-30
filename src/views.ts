@@ -29,6 +29,7 @@ export class OmiHubView extends ItemView {
 	kanbanLayout: 'status' | 'date' = 'status';
 	calendarViewType: 'monthly' | 'weekly' = 'monthly';
 	calendarCurrentDate: Date = new Date();
+	calendarShowCompleted = false;  // Hide completed tasks in calendar by default
 	private draggedTask: TaskWithUI | null = null;
 
 	// Conversations state
@@ -50,9 +51,30 @@ export class OmiHubView extends ItemView {
 	// Debounced backup sync
 	private requestBackupSync: () => void;
 
+	// Search focus state (to restore after render)
+	private activeSearchId: string | null = null;
+	private searchCursorPosition: number = 0;
+
+	// Debounced search render
+	private debouncedSearchRender: () => void;
+
 	constructor(leaf: WorkspaceLeaf, plugin: OmiConversationsPlugin) {
 		super(leaf);
 		this.plugin = plugin;
+
+		// Debounce search render to avoid losing focus on every keystroke
+		this.debouncedSearchRender = debounce(() => {
+			this.render();
+			// Restore focus after render
+			if (this.activeSearchId) {
+				const input = this.containerEl.querySelector(`#${this.activeSearchId}`) as HTMLInputElement;
+				if (input) {
+					input.focus();
+					input.setSelectionRange(this.searchCursorPosition, this.searchCursorPosition);
+				}
+			}
+		}, 150, true);
+
 		// Debounce sync requests to avoid API spam (wait 2 seconds after last change)
 		this.requestBackupSync = debounce(async () => {
 			if (this.plugin.settings.enableTasksHub) {
@@ -353,20 +375,28 @@ export class OmiHubView extends ItemView {
 		// View Mode Tabs
 		this.renderViewModeTabs(tabContent);
 
-		// Toolbar: Search + Sync button
+		// Toolbar: Add Task + Search + Sync button
 		const toolbar = tabContent.createDiv('omi-tasks-toolbar');
 		toolbar.setAttribute('role', 'toolbar');
+
+		const addBtn = toolbar.createEl('button', { text: '+ Add Task', cls: 'omi-tasks-add-btn' });
+		addBtn.setAttribute('aria-label', 'Add new task');
+		addBtn.addEventListener('click', () => this.showAddTaskDialog());
 
 		const searchInput = toolbar.createEl('input', {
 			type: 'text',
 			placeholder: 'Search tasks...',
 			cls: 'omi-tasks-search'
 		});
+		searchInput.id = 'omi-tasks-search';
 		searchInput.value = this.searchQuery;
 		searchInput.setAttribute('aria-label', 'Search tasks');
 		searchInput.addEventListener('input', (e) => {
-			this.searchQuery = (e.target as HTMLInputElement).value;
-			this.render();
+			const input = e.target as HTMLInputElement;
+			this.searchQuery = input.value;
+			this.activeSearchId = 'omi-tasks-search';
+			this.searchCursorPosition = input.selectionStart || 0;
+			this.debouncedSearchRender();
 		});
 
 		const syncBtn = toolbar.createEl('button', { text: 'Sync', cls: 'omi-tasks-sync-btn' });
@@ -385,10 +415,6 @@ export class OmiHubView extends ItemView {
 		// Show empty state if no tasks
 		if (this.tasks.length === 0) {
 			this.renderEmptyState(tabContent, 'all');
-			// Still show add button
-			const addBtn = tabContent.createEl('button', { text: '+ Add Task', cls: 'omi-tasks-add-btn' });
-			addBtn.setAttribute('aria-label', 'Add new task');
-			addBtn.addEventListener('click', () => this.showAddTaskDialog());
 			return;
 		}
 
@@ -404,11 +430,6 @@ export class OmiHubView extends ItemView {
 				this.renderCalendarView(tabContent);
 				break;
 		}
-
-		// Add new task button
-		const addBtn = tabContent.createEl('button', { text: '+ Add Task', cls: 'omi-tasks-add-btn' });
-		addBtn.setAttribute('aria-label', 'Add new task');
-		addBtn.addEventListener('click', () => this.showAddTaskDialog());
 	}
 
 	private renderMemoriesTab(container: HTMLElement): void {
@@ -481,10 +502,14 @@ export class OmiHubView extends ItemView {
 			placeholder: '🔍 Search memories...',
 			cls: 'omi-memories-search'
 		});
+		searchInput.id = 'omi-memories-search';
 		searchInput.value = this.memoriesSearchQuery;
 		searchInput.addEventListener('input', (e) => {
-			this.memoriesSearchQuery = (e.target as HTMLInputElement).value;
-			this.render();
+			const input = e.target as HTMLInputElement;
+			this.memoriesSearchQuery = input.value;
+			this.activeSearchId = 'omi-memories-search';
+			this.searchCursorPosition = input.selectionStart || 0;
+			this.debouncedSearchRender();
 		});
 
 		// Show loading skeleton
@@ -2541,8 +2566,11 @@ export class OmiHubView extends ItemView {
 	// ==================== CALENDAR VIEW ====================
 
 	private renderCalendarView(container: HTMLElement): void {
+		// Controls row (view type + show completed toggle)
+		const controls = container.createDiv('omi-calendar-controls');
+
 		// View type toggle (Monthly vs Weekly)
-		const viewToggle = container.createDiv('omi-calendar-view-toggle');
+		const viewToggle = controls.createDiv('omi-calendar-view-toggle');
 		const monthlyBtn = viewToggle.createEl('button', {
 			text: 'Monthly',
 			cls: `omi-calendar-toggle-btn ${this.calendarViewType === 'monthly' ? 'active' : ''}`
@@ -2562,6 +2590,18 @@ export class OmiHubView extends ItemView {
 			this.calendarViewType = 'weekly';
 			this.plugin.settings.tasksCalendarType = 'weekly';
 			await this.plugin.saveSettings();
+			this.render();
+		});
+
+		// Show completed toggle
+		const completedToggle = controls.createDiv('omi-calendar-completed-toggle');
+		const completedCheckbox = completedToggle.createEl('input', { type: 'checkbox' });
+		completedCheckbox.checked = this.calendarShowCompleted;
+		completedCheckbox.id = 'calendar-show-completed';
+		const completedLabel = completedToggle.createEl('label', { text: 'Show completed' });
+		completedLabel.setAttribute('for', 'calendar-show-completed');
+		completedCheckbox.addEventListener('change', () => {
+			this.calendarShowCompleted = completedCheckbox.checked;
 			this.render();
 		});
 
@@ -2741,8 +2781,11 @@ export class OmiHubView extends ItemView {
 
 	private getTasksForDate(date: Date): TaskWithUI[] {
 		return this.getFilteredTasks().filter(task => {
+			// Filter out completed tasks if toggle is off
+			if (!this.calendarShowCompleted && task.completed) return false;
 			if (!task.dueAt) return false;
-			const taskDate = new Date(task.dueAt.split('T')[0]);
+			// Use timezone-aware date parsing
+			const taskDate = this.parseDateToLocal(task.dueAt);
 			return this.isSameDay(taskDate, date);
 		});
 	}
@@ -2815,16 +2858,8 @@ export class OmiHubView extends ItemView {
 		row.setAttribute('role', 'listitem');
 		row.setAttribute('tabindex', '0');
 
-		// Status dot (TaskNotes inspired)
+		// Check if task is overdue (for date display)
 		const isOverdueTask = task.dueAt && this.isOverdue(task.dueAt) && !task.completed;
-		let statusClass = 'omi-task__status--pending';
-		if (task.completed) {
-			statusClass = 'omi-task__status--completed';
-		} else if (isOverdueTask) {
-			statusClass = 'omi-task__status--overdue';
-		}
-		const statusDot = row.createDiv(`omi-task__status ${statusClass}`);
-		statusDot.setAttribute('aria-hidden', 'true'); // Decorative element
 
 		// Checkbox
 		const checkbox = row.createEl('input', { type: 'checkbox' });

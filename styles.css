@@ -116,11 +116,6 @@
     background: var(--interactive-accent-hover);
 }
 
-.omi-tasks-add-btn {
-    margin-top: 16px;
-    width: 100%;
-}
-
 .omi-tasks-section {
     margin-bottom: 24px;
 }
@@ -716,10 +711,33 @@
 /* ========================================
    CALENDAR VIEW
    ======================================== */
+.omi-calendar-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
 .omi-calendar-view-toggle {
     display: flex;
     gap: 4px;
-    margin-bottom: 12px;
+}
+
+.omi-calendar-completed-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.omi-calendar-completed-toggle input[type="checkbox"] {
+    margin: 0;
+    cursor: pointer;
+}
+
+.omi-calendar-completed-toggle label {
+    cursor: pointer;
 }
 
 .omi-calendar-toggle-btn {
