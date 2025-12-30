@@ -1,14 +1,14 @@
 import { ItemView, WorkspaceLeaf, Notice, debounce } from 'obsidian';
 import { VIEW_TYPE_OMI_HUB, MEMORY_CATEGORY_EMOJI } from './constants';
 import { TaskWithUI, SyncedConversationMeta, ConversationDetailData, ActionItem, CalendarEvent, TranscriptSegment, MemoryWithUI, StatsData, HeatmapCell, CategoryStat, DurationBucket, MemoryStats, TaskStats, Achievement, ActionItemFromAPI, MemoryFromAPI } from './types';
-import { AddTaskModal, DatePickerModal, EditTaskModal, CalendarDatePickerModal, AddMemoryModal, EditMemoryModal } from './modals';
+import { AddTaskModal, DatePickerModal, EditTaskModal, CalendarDatePickerModal, AddMemoryModal, EditMemoryModal, AchievementsModal } from './modals';
 import type OmiConversationsPlugin from './main';
 
 export class OmiHubView extends ItemView {
 	plugin: OmiConversationsPlugin;
 
 	// Hub state
-	activeTab: 'tasks' | 'conversations' | 'memories' = 'tasks';
+	activeTab: 'tasks' | 'conversations' | 'memories' | 'stats' = 'tasks';
 
 	// Tasks state
 	tasks: TaskWithUI[] = [];
@@ -316,6 +316,8 @@ export class OmiHubView extends ItemView {
 			this.renderConversationsTab(container);
 		} else if (this.activeTab === 'memories') {
 			this.renderMemoriesTab(container);
+		} else if (this.activeTab === 'stats') {
+			this.renderStatsTab(container);
 		}
 	}
 
@@ -384,6 +386,19 @@ export class OmiHubView extends ItemView {
 				await this.loadMemories();
 			}
 			this.startMemoriesAutoRefresh();
+			this.render();
+		});
+
+		const statsTab = tabs.createEl('button', {
+			text: 'Stats',
+			cls: `omi-hub-tab ${this.activeTab === 'stats' ? 'active' : ''}`
+		});
+		statsTab.setAttribute('role', 'tab');
+		statsTab.setAttribute('aria-selected', String(this.activeTab === 'stats'));
+		statsTab.addEventListener('click', async () => {
+			this.activeTab = 'stats';
+			this.plugin.settings.activeHubTab = 'stats';
+			await this.plugin.saveSettings();
 			this.render();
 		});
 	}
@@ -1315,9 +1330,6 @@ export class OmiHubView extends ItemView {
 				// Both list and timeline now use the unified daily view
 				this.renderConversationsDailyView(tabContent);
 				break;
-			case 'stats':
-				this.renderConversationsStats(tabContent);
-				break;
 			case 'heatmap':
 				this.renderConversationsHeatmap(tabContent);
 				break;
@@ -1337,9 +1349,8 @@ export class OmiHubView extends ItemView {
 		const currentMode = this.plugin.settings.conversationsViewMode || 'list';
 		// Daily view combines timeline + cards, so we map both 'list' and 'timeline' to 'list'
 		const effectiveMode = currentMode === 'timeline' ? 'list' : currentMode;
-		const modes: Array<{ id: 'list' | 'stats' | 'heatmap' | 'map'; label: string; icon: string }> = [
+		const modes: Array<{ id: 'list' | 'timeline' | 'heatmap' | 'map'; label: string; icon: string }> = [
 			{ id: 'list', label: 'Daily', icon: '📅' },
-			{ id: 'stats', label: 'Stats', icon: '📊' },
 			{ id: 'heatmap', label: 'Heatmap', icon: '🔥' },
 			{ id: 'map', label: 'Map', icon: '🗺️' }
 		];
@@ -2094,10 +2105,11 @@ export class OmiHubView extends ItemView {
 		}
 	}
 
-	// ==================== STATS DASHBOARD ====================
+	// ==================== STATS TAB ====================
 
-	private renderConversationsStats(container: HTMLElement): void {
-		const statsContainer = container.createDiv('omi-conversations-stats omi-stats-dashboard');
+	private renderStatsTab(container: HTMLElement): void {
+		const tabContent = container.createDiv('omi-stats-container');
+		const statsContainer = tabContent.createDiv('omi-conversations-stats omi-stats-dashboard');
 
 		const conversations = this.plugin.settings.syncedConversations || {};
 		const conversationArray = Object.values(conversations) as SyncedConversationMeta[];
@@ -2808,6 +2820,16 @@ export class OmiHubView extends ItemView {
 		header.createEl('span', { text: '🏆', cls: 'omi-stats-tile-icon' });
 		header.createEl('span', { text: 'Achievements', cls: 'omi-stats-tile-title' });
 
+		// Eye icon to view all achievements
+		const viewBtn = header.createEl('button', {
+			cls: 'omi-stats-view-btn clickable-icon',
+			attr: { 'aria-label': 'View all achievements' }
+		});
+		viewBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`;
+		viewBtn.addEventListener('click', () => {
+			new AchievementsModal(this.app, stats.achievements).open();
+		});
+
 		const unlocked = stats.achievements.filter(a => a.unlocked).length;
 		const total = stats.achievements.length;
 
@@ -2852,9 +2874,9 @@ export class OmiHubView extends ItemView {
 
 		// Day labels (column headers)
 		const dayNames = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-		const dayRow = heatmapGrid.createDiv('omi-heatmap-row omi-heatmap-header');
+		const dayRow = heatmapGrid.createDiv('omi-stats-hm-row omi-stats-hm-header');
 		for (const day of dayNames) {
-			dayRow.createEl('span', { text: day, cls: 'omi-heatmap-label' });
+			dayRow.createEl('span', { text: day, cls: 'omi-stats-hm-label' });
 		}
 
 		// Hour rows (6am to 11pm, grouped by 3 hours)
@@ -2862,8 +2884,8 @@ export class OmiHubView extends ItemView {
 		const hourRanges = [[6, 7, 8], [9, 10, 11], [12, 13, 14], [15, 16, 17], [18, 19, 20], [21, 22, 23]];
 
 		for (let i = 0; i < hourLabels.length; i++) {
-			const row = heatmapGrid.createDiv('omi-heatmap-row');
-			row.createEl('span', { text: hourLabels[i], cls: 'omi-heatmap-label' });
+			const row = heatmapGrid.createDiv('omi-stats-hm-row');
+			row.createEl('span', { text: hourLabels[i], cls: 'omi-stats-hm-label' });
 
 			// Days 1-7 (Mon-Sun, reordered from Sun=0)
 			const dayOrder = [1, 2, 3, 4, 5, 6, 0]; // Mon to Sun
@@ -2882,7 +2904,7 @@ export class OmiHubView extends ItemView {
 					}
 				}
 
-				const cellEl = row.createDiv('omi-heatmap-cell');
+				const cellEl = row.createDiv('omi-stats-hm-cell');
 
 				// Set intensity level (0-4)
 				const level = maxIntensity === 0 ? 0 :
@@ -2890,14 +2912,13 @@ export class OmiHubView extends ItemView {
 						maxIntensity < 0.5 ? 2 :
 							maxIntensity < 0.75 ? 3 : 4;
 
-				cellEl.addClass(`omi-heatmap-level-${level}`);
+				cellEl.addClass(`omi-stats-hm-level-${level}`);
 				cellEl.setAttribute('title', `${count} conversations\n${this.formatDuration(duration)}`);
 
 				// Click to filter by this time slot
 				if (count > 0) {
 					cellEl.addClass('clickable');
 					const dayName = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][dayIdx];
-					const hours = hourRanges[i];
 					cellEl.addEventListener('click', () => {
 						new Notice(`${count} conversations on ${dayName}s ${hourLabels[i]}-${i < hourLabels.length - 1 ? hourLabels[i + 1] : '12am'}`);
 					});

@@ -54,11 +54,21 @@
    ======================================== */
 .omi-hub-container,
 .omi-tasks-container,
-.omi-conversations-container {
+.omi-conversations-container,
+.omi-stats-container {
     --interactive-accent: var(--omi-purple-primary);
     --interactive-accent-hover: var(--omi-purple-accent);
     --interactive-accent-rgb: 139, 92, 246;
     --text-accent: var(--omi-purple-primary);
+}
+
+.omi-stats-container {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    padding: var(--omi-spacing-md);
 }
 
 /* ========================================
@@ -4570,30 +4580,30 @@ svg.leaflet-image-layer.leaflet-interactive path {
     margin-top: 12px;
 }
 
-.omi-heatmap-row {
+.omi-stats-hour-day-heatmap .omi-stats-hm-row {
     display: grid;
     grid-template-columns: 40px repeat(7, 1fr);
     gap: 4px;
     align-items: center;
 }
 
-.omi-heatmap-row.omi-heatmap-header {
+.omi-stats-hour-day-heatmap .omi-stats-hm-row.omi-stats-hm-header {
     margin-bottom: 4px;
 }
 
-.omi-heatmap-row.omi-heatmap-header .omi-heatmap-label {
+.omi-stats-hour-day-heatmap .omi-stats-hm-row.omi-stats-hm-header .omi-stats-hm-label {
     font-weight: 600;
     text-align: center;
 }
 
-.omi-heatmap-label {
+.omi-stats-hm-label {
     font-size: 11px;
     color: var(--text-muted);
     text-align: right;
     padding-right: 8px;
 }
 
-.omi-heatmap-cell {
+.omi-stats-hm-cell {
     aspect-ratio: 1;
     border-radius: var(--omi-radius-sm);
     background: var(--background-modifier-border);
@@ -4601,32 +4611,32 @@ svg.leaflet-image-layer.leaflet-interactive path {
     min-height: 24px;
 }
 
-.omi-heatmap-cell.clickable {
+.omi-stats-hm-cell.clickable {
     cursor: pointer;
 }
 
-.omi-heatmap-cell.clickable:hover {
+.omi-stats-hm-cell.clickable:hover {
     transform: scale(1.1);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
-.omi-heatmap-cell.omi-heatmap-level-0 {
+.omi-stats-hm-cell.omi-stats-hm-level-0 {
     background: var(--background-modifier-border);
 }
 
-.omi-heatmap-cell.omi-heatmap-level-1 {
+.omi-stats-hm-cell.omi-stats-hm-level-1 {
     background: rgba(139, 92, 246, 0.25);
 }
 
-.omi-heatmap-cell.omi-heatmap-level-2 {
+.omi-stats-hm-cell.omi-stats-hm-level-2 {
     background: rgba(139, 92, 246, 0.45);
 }
 
-.omi-heatmap-cell.omi-heatmap-level-3 {
+.omi-stats-hm-cell.omi-stats-hm-level-3 {
     background: rgba(139, 92, 246, 0.7);
 }
 
-.omi-heatmap-cell.omi-heatmap-level-4 {
+.omi-stats-hm-cell.omi-stats-hm-level-4 {
     background: var(--interactive-accent);
 }
 
@@ -4991,6 +5001,146 @@ svg.leaflet-image-layer.leaflet-interactive path {
     color: var(--text-muted);
     text-align: center;
     padding: 16px;
+}
+
+/* View Button (Eye Icon) */
+.omi-stats-view-btn {
+    margin-left: auto;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: var(--omi-radius-sm);
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--omi-duration-short) ease;
+}
+
+.omi-stats-view-btn:hover {
+    background: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+
+.omi-stats-view-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+/* Achievements Modal */
+.omi-achievements-modal {
+    max-width: 600px;
+}
+
+.omi-achievements-modal h3 {
+    margin-bottom: 8px;
+}
+
+.omi-achievements-desc {
+    color: var(--text-muted);
+    font-size: 13px;
+    margin-bottom: 20px;
+}
+
+.omi-achievements-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-height: 400px;
+    overflow-y: auto;
+    margin-bottom: 20px;
+}
+
+.omi-achievement-card {
+    display: flex;
+    gap: 12px;
+    padding: 12px 16px;
+    border-radius: var(--omi-radius-md);
+    background: var(--background-secondary);
+    border: 1px solid var(--background-modifier-border);
+    position: relative;
+    transition: all var(--omi-duration-short) ease;
+}
+
+.omi-achievement-card.unlocked {
+    background: var(--background-primary);
+    border-color: var(--interactive-accent);
+}
+
+.omi-achievement-card.locked {
+    opacity: 0.7;
+}
+
+.omi-achievement-icon {
+    font-size: 28px;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.omi-achievement-card.locked .omi-achievement-icon {
+    filter: grayscale(80%);
+}
+
+.omi-achievement-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+    min-width: 0;
+}
+
+.omi-achievement-title {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--text-normal);
+}
+
+.omi-achievement-description {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.4;
+}
+
+.omi-achievement-progress-container {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 8px;
+}
+
+.omi-achievement-progress-bar {
+    height: 6px;
+    background: var(--background-modifier-border);
+    border-radius: var(--omi-radius-full);
+    overflow: hidden;
+}
+
+.omi-achievement-progress-fill {
+    height: 100%;
+    background: var(--interactive-accent);
+    border-radius: var(--omi-radius-full);
+    transition: width var(--omi-duration-long) ease;
+}
+
+.omi-achievement-progress-text {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.omi-achievement-unlocked-badge {
+    position: absolute;
+    top: 8px;
+    right: 12px;
+    font-size: 10px;
+    color: var(--omi-status-completed);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
 /* Mobile Responsive - Stats Dashboard v2 */

@@ -23,10 +23,10 @@ export interface OmiConversationsSettings {
 	lastConversationSyncTimestamp: string | null;
 	syncedConversationIds: string[];
 	// Hub view settings
-	activeHubTab: 'tasks' | 'conversations' | 'memories';
+	activeHubTab: 'tasks' | 'conversations' | 'memories' | 'stats';
 	syncedConversations: Record<string, SyncedConversationMeta>;
 	// Conversations view settings
-	conversationsViewMode: 'list' | 'timeline' | 'stats' | 'heatmap' | 'map';
+	conversationsViewMode: 'list' | 'timeline' | 'heatmap' | 'map';
 	// Memories view settings
 	memoriesCategoryFilter: string | null;
 	memoriesViewAutoRefresh: number;  // Auto-refresh interval (minutes, 0 = disabled)

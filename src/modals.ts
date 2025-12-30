@@ -1,5 +1,5 @@
 import { App, Modal, Notice } from 'obsidian';
-import { TaskWithUI, MemoryWithUI } from './types';
+import { TaskWithUI, MemoryWithUI, Achievement } from './types';
 import { MEMORY_CATEGORY_EMOJI } from './constants';
 
 export class ConfirmSyncModal extends Modal {
@@ -796,6 +796,81 @@ export class CalendarDatePickerModal extends Modal {
 		const month = String(date.getMonth() + 1).padStart(2, '0');
 		const day = String(date.getDate()).padStart(2, '0');
 		return `${year}-${month}-${day}`;
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
+}
+
+export class AchievementsModal extends Modal {
+	achievements: Achievement[];
+
+	constructor(app: App, achievements: Achievement[]) {
+		super(app);
+		this.achievements = achievements;
+	}
+
+	onOpen(): void {
+		const { contentEl } = this;
+		contentEl.addClass('omi-achievements-modal');
+
+		contentEl.createEl('h3', { text: '🏆 Achievements' });
+
+		const desc = contentEl.createEl('p', { cls: 'omi-achievements-desc' });
+		desc.setText('Track your Omi journey with these milestones. Keep using Omi to unlock more!');
+
+		const grid = contentEl.createDiv('omi-achievements-grid');
+
+		// Separate unlocked and locked
+		const unlocked = this.achievements.filter(a => a.unlocked);
+		const locked = this.achievements.filter(a => !a.unlocked);
+
+		// Render unlocked first
+		for (const achievement of unlocked) {
+			this.renderAchievementCard(grid, achievement);
+		}
+
+		// Render locked
+		for (const achievement of locked) {
+			this.renderAchievementCard(grid, achievement);
+		}
+
+		// Close button
+		const btnContainer = contentEl.createDiv('modal-button-container');
+		const closeBtn = btnContainer.createEl('button', { text: 'Close', cls: 'mod-cta' });
+		closeBtn.addEventListener('click', () => this.close());
+	}
+
+	private renderAchievementCard(container: HTMLElement, achievement: Achievement): void {
+		const card = container.createDiv(`omi-achievement-card ${achievement.unlocked ? 'unlocked' : 'locked'}`);
+
+		const iconEl = card.createDiv('omi-achievement-icon');
+		iconEl.setText(achievement.icon);
+
+		const info = card.createDiv('omi-achievement-info');
+		info.createEl('span', { text: achievement.title, cls: 'omi-achievement-title' });
+		info.createEl('span', { text: achievement.description, cls: 'omi-achievement-description' });
+
+		// Progress bar for locked achievements
+		if (!achievement.unlocked && achievement.threshold && achievement.current !== undefined) {
+			const progressContainer = card.createDiv('omi-achievement-progress-container');
+			const progressBar = progressContainer.createDiv('omi-achievement-progress-bar');
+			const progressFill = progressBar.createDiv('omi-achievement-progress-fill');
+			const progressPct = Math.min((achievement.current / achievement.threshold) * 100, 100);
+			progressFill.style.width = `${progressPct}%`;
+
+			progressContainer.createEl('span', {
+				text: `${achievement.current} / ${achievement.threshold}`,
+				cls: 'omi-achievement-progress-text'
+			});
+		}
+
+		// Unlocked badge
+		if (achievement.unlocked) {
+			const badge = card.createDiv('omi-achievement-unlocked-badge');
+			badge.setText('✓ Unlocked');
+		}
 	}
 
 	onClose(): void {
