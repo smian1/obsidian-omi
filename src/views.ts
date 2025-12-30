@@ -1890,6 +1890,36 @@ export class OmiHubView extends ItemView {
 			return;
 		}
 
+		// Location section with mini map
+		if (conv.geolocation?.latitude && conv.geolocation?.longitude) {
+			const locationSection = container.createDiv('omi-detail-section omi-detail-location');
+			locationSection.createEl('h4', { text: '📍 Location' });
+
+			// Address text
+			if (conv.geolocation.address) {
+				locationSection.createEl('p', {
+					text: conv.geolocation.address,
+					cls: 'omi-detail-location-address'
+				});
+			}
+
+			// Mini map using OpenStreetMap embed (free, no API key)
+			const lat = conv.geolocation.latitude;
+			const lon = conv.geolocation.longitude;
+			const mapUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${lon - 0.005},${lat - 0.005},${lon + 0.005},${lat + 0.005}&layer=mapnik&marker=${lat},${lon}`;
+
+			locationSection.createEl('iframe', {
+				cls: 'omi-detail-map',
+				attr: {
+					src: mapUrl,
+					width: '100%',
+					height: '150',
+					frameborder: '0',
+					scrolling: 'no'
+				}
+			});
+		}
+
 		// Overview section
 		if (this.selectedConversationData.overview) {
 			const overviewSection = container.createDiv('omi-detail-section');
@@ -2027,6 +2057,8 @@ export class OmiHubView extends ItemView {
 			const line = lines[i];
 			// Skip the ID comment line
 			if (line.startsWith('<!-- conv_id:')) continue;
+			// Skip location line (displayed separately in detail panel)
+			if (line.startsWith('📍')) continue;
 			// Skip internal Obsidian link lines like "*([[transcript#...|Transcript]])*" or "*([[overview#...|Overview]])*"
 			if (line.trim().startsWith('*([[') && line.trim().endsWith(']])*')) continue;
 			// Stop at next section header (starts with ####)
@@ -2182,7 +2214,8 @@ export class OmiHubView extends ItemView {
 			const dayConvs = this.getConversationsForDate(displayDate);
 			if (dayConvs.length > 0) {
 				this.selectedConversationId = dayConvs[0].id;
-				this.loadConversationDetails(dayConvs[0].id);
+				// Load details and re-render when done
+				this.loadConversationDetails(dayConvs[0].id).then(() => this.render());
 			}
 		}
 

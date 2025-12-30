@@ -3005,6 +3005,24 @@
     margin: 0;
 }
 
+/* Detail Location Section */
+.omi-detail-location {
+    margin-bottom: var(--omi-spacing-lg);
+}
+
+.omi-detail-location-address {
+    color: var(--text-muted);
+    font-size: 13px;
+    margin: 0 0 var(--omi-spacing-sm) 0;
+}
+
+.omi-detail-map {
+    border-radius: var(--omi-radius-md);
+    border: 1px solid var(--background-modifier-border);
+    width: 100%;
+    height: 150px;
+}
+
 /* Detail Tasks List */
 .omi-detail-tasks {
     list-style: none;
