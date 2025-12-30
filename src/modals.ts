@@ -329,10 +329,13 @@ export class EditTaskModal extends Modal {
 }
 
 export class AddMemoryModal extends Modal {
-	onSubmit: (content: string, category: string) => void;
+	onSubmit: (content: string, category: string, tags: string[]) => void;
+	availableTags: string[];
+	selectedTags: string[] = [];
 
-	constructor(app: App, onSubmit: (content: string, category: string) => void) {
+	constructor(app: App, availableTags: string[], onSubmit: (content: string, category: string, tags: string[]) => void) {
 		super(app);
+		this.availableTags = availableTags;
 		this.onSubmit = onSubmit;
 	}
 
@@ -377,6 +380,111 @@ export class AddMemoryModal extends Modal {
 			if (cat === 'manual') option.selected = true;
 		}
 
+		// Tags input
+		const tagsContainer = contentEl.createDiv('omi-modal-field');
+		tagsContainer.createEl('label', { text: 'Tags (optional)' });
+
+		const tagsInputWrapper = tagsContainer.createDiv('omi-tags-input-wrapper');
+		const selectedTagsDiv = tagsInputWrapper.createDiv('omi-selected-tags');
+
+		const tagInputRow = tagsInputWrapper.createDiv('omi-tag-input-row');
+		const tagInput = tagInputRow.createEl('input', {
+			type: 'text',
+			placeholder: 'Type to add tags...'
+		});
+		tagInput.addClass('omi-tag-input');
+
+		const suggestionsDiv = tagsContainer.createDiv('omi-tag-suggestions');
+		suggestionsDiv.style.display = 'none';
+
+		const renderSelectedTags = () => {
+			selectedTagsDiv.empty();
+			for (const tag of this.selectedTags) {
+				const pill = selectedTagsDiv.createDiv('omi-tag-pill-removable');
+				pill.createSpan({ text: tag });
+				const removeBtn = pill.createSpan({ text: '×', cls: 'omi-tag-remove' });
+				removeBtn.addEventListener('click', () => {
+					this.selectedTags = this.selectedTags.filter(t => t !== tag);
+					renderSelectedTags();
+				});
+			}
+		};
+
+		const addTag = (tag: string) => {
+			const normalizedTag = tag.trim().toLowerCase();
+			if (normalizedTag && !this.selectedTags.includes(normalizedTag)) {
+				this.selectedTags.push(normalizedTag);
+				renderSelectedTags();
+			}
+			tagInput.value = '';
+			suggestionsDiv.style.display = 'none';
+		};
+
+		const showSuggestions = (filter: string) => {
+			suggestionsDiv.empty();
+			const lowerFilter = filter.toLowerCase().trim();
+
+			// Get available tags that haven't been selected yet
+			const availableUnselected = this.availableTags
+				.filter(t => !this.selectedTags.includes(t.toLowerCase()));
+
+			// Filter by search term if provided
+			const matches = lowerFilter
+				? availableUnselected.filter(t => t.toLowerCase().includes(lowerFilter))
+				: availableUnselected;
+
+			// Limit display to 10 tags
+			const displayTags = matches.slice(0, 10);
+
+			if (displayTags.length > 0) {
+				for (const tag of displayTags) {
+					const option = suggestionsDiv.createDiv('omi-tag-suggestion');
+					option.setText(tag);
+					option.addEventListener('click', () => addTag(tag));
+				}
+				suggestionsDiv.style.display = 'block';
+			} else if (lowerFilter) {
+				// No matches but user typed something - show create option
+				const createOption = suggestionsDiv.createDiv('omi-tag-suggestion omi-tag-suggestion-new');
+				createOption.setText(`Create "${filter.trim()}"`);
+				createOption.addEventListener('click', () => addTag(filter.trim()));
+				suggestionsDiv.style.display = 'block';
+			} else {
+				// No tags available at all
+				suggestionsDiv.style.display = 'none';
+			}
+		};
+
+		tagInput.addEventListener('input', () => {
+			showSuggestions(tagInput.value);
+		});
+
+		tagInput.addEventListener('keydown', (e) => {
+			if (e.key === 'Enter') {
+				e.preventDefault();
+				if (tagInput.value.trim()) {
+					addTag(tagInput.value.trim());
+				}
+			} else if (e.key === 'Backspace' && tagInput.value === '' && this.selectedTags.length > 0) {
+				this.selectedTags.pop();
+				renderSelectedTags();
+			} else if (e.key === 'Escape') {
+				suggestionsDiv.style.display = 'none';
+			}
+		});
+
+		// Hide suggestions when clicking outside
+		tagInput.addEventListener('blur', () => {
+			setTimeout(() => {
+				suggestionsDiv.style.display = 'none';
+			}, 200);
+		});
+
+		// Show all tags when focusing (even with empty input)
+		tagInput.addEventListener('focus', () => {
+			showSuggestions(tagInput.value);
+		});
+
 		// Buttons
 		const btnContainer = contentEl.createDiv('modal-button-container');
 
@@ -391,7 +499,7 @@ export class AddMemoryModal extends Modal {
 				new Notice('Memory content must be 500 characters or less');
 				return;
 			}
-			this.onSubmit(content, categorySelect.value);
+			this.onSubmit(content, categorySelect.value, this.selectedTags);
 			this.close();
 		});
 

@@ -172,11 +172,12 @@ export class OmiAPI {
 		return this.makeApiRequest<MemoryFromAPI[]>(url, 'GET', params);
 	}
 
-	async createMemory(content: string, category?: string, visibility?: 'public' | 'private'): Promise<MemoryFromAPI> {
+	async createMemory(content: string, category?: string, visibility?: 'public' | 'private', tags?: string[]): Promise<MemoryFromAPI> {
 		const url = `${this.baseUrl}/v1/dev/user/memories`;
-		const body: { content: string; category?: string; visibility?: string } = { content };
+		const body: { content: string; category?: string; visibility?: string; tags?: string[] } = { content };
 		if (category) body.category = category;
 		if (visibility) body.visibility = visibility;
+		if (tags && tags.length > 0) body.tags = tags;
 		return this.makeApiRequest<MemoryFromAPI>(url, 'POST', undefined, body);
 	}
 

@@ -4000,3 +4000,84 @@ svg.leaflet-image-layer.leaflet-interactive path {
 .omi-edit-memory-modal {
     max-width: 500px;
 }
+
+/* Tags Input Component */
+.omi-tags-input-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.omi-selected-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.omi-tag-pill-removable {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 6px 2px 8px;
+    border-radius: var(--omi-radius-full);
+    background: var(--interactive-accent);
+    color: white;
+    font-size: 12px;
+}
+
+.omi-tag-remove {
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: bold;
+    opacity: 0.7;
+    padding: 0 2px;
+}
+
+.omi-tag-remove:hover {
+    opacity: 1;
+}
+
+.omi-tag-input-row {
+    display: flex;
+    gap: 6px;
+}
+
+.omi-tag-input {
+    flex: 1;
+    padding: 6px 10px;
+    border-radius: var(--omi-radius-sm);
+    border: 1px solid var(--background-modifier-border);
+    background: var(--background-primary);
+    color: var(--text-normal);
+    font-size: 13px;
+}
+
+.omi-tag-input:focus {
+    outline: none;
+    border-color: var(--interactive-accent);
+    box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
+}
+
+.omi-tag-suggestions {
+    background: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--omi-radius-sm);
+    max-height: 150px;
+    overflow-y: auto;
+    margin-top: 2px;
+}
+
+.omi-tag-suggestion {
+    padding: 6px 10px;
+    cursor: pointer;
+    font-size: 13px;
+}
+
+.omi-tag-suggestion:hover {
+    background: var(--background-modifier-hover);
+}
+
+.omi-tag-suggestion-new {
+    color: var(--interactive-accent);
+    font-style: italic;
+}

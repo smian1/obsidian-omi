@@ -622,9 +622,23 @@ export class OmiHubView extends ItemView {
 	}
 
 	private showAddMemoryDialog(): void {
-		new AddMemoryModal(this.app, async (content, category) => {
-			await this.addNewMemory(content, category);
+		// Collect unique tags from all memories for autocomplete
+		const availableTags = this.getAvailableTags();
+		new AddMemoryModal(this.app, availableTags, async (content, category, tags) => {
+			await this.addNewMemory(content, category, tags);
 		}).open();
+	}
+
+	private getAvailableTags(): string[] {
+		const tagSet = new Set<string>();
+		for (const memory of this.memories) {
+			if (memory.tags) {
+				for (const tag of memory.tags) {
+					tagSet.add(tag.toLowerCase());
+				}
+			}
+		}
+		return Array.from(tagSet).sort();
 	}
 
 	private showEditMemoryDialog(memory: MemoryWithUI): void {
@@ -640,9 +654,9 @@ export class OmiHubView extends ItemView {
 		).open();
 	}
 
-	private async addNewMemory(content: string, category: string): Promise<void> {
+	private async addNewMemory(content: string, category: string, tags?: string[]): Promise<void> {
 		try {
-			const newMemory = await this.plugin.api.createMemory(content, category);
+			const newMemory = await this.plugin.api.createMemory(content, category, undefined, tags);
 			this.memories.unshift({
 				...newMemory,
 				isEditing: false
