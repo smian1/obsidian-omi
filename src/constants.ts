@@ -43,8 +43,6 @@ export const DEFAULT_SETTINGS: OmiConversationsSettings = {
 	// Hub view settings
 	activeHubTab: 'tasks',
 	syncedConversations: {},
-	// Conversations view settings
-	conversationsViewMode: 'list',
 	// Memories view settings
 	memoriesCategoryFilter: null,
 	memoriesViewAutoRefresh: 10,  // Auto-refresh every 10 minutes by default

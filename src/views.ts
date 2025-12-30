@@ -8,7 +8,7 @@ export class OmiHubView extends ItemView {
 	plugin: OmiConversationsPlugin;
 
 	// Hub state
-	activeTab: 'tasks' | 'conversations' | 'memories' | 'stats' = 'tasks';
+	activeTab: 'tasks' | 'conversations' | 'memories' | 'stats' | 'heatmap' | 'map' = 'tasks';
 
 	// Tasks state
 	tasks: TaskWithUI[] = [];
@@ -318,6 +318,10 @@ export class OmiHubView extends ItemView {
 			this.renderMemoriesTab(container);
 		} else if (this.activeTab === 'stats') {
 			this.renderStatsTab(container);
+		} else if (this.activeTab === 'heatmap') {
+			this.renderHeatmapTab(container);
+		} else if (this.activeTab === 'map') {
+			this.renderMapTab(container);
 		}
 	}
 
@@ -398,6 +402,32 @@ export class OmiHubView extends ItemView {
 		statsTab.addEventListener('click', async () => {
 			this.activeTab = 'stats';
 			this.plugin.settings.activeHubTab = 'stats';
+			await this.plugin.saveSettings();
+			this.render();
+		});
+
+		const heatmapTab = tabs.createEl('button', {
+			text: 'Heatmap',
+			cls: `omi-hub-tab ${this.activeTab === 'heatmap' ? 'active' : ''}`
+		});
+		heatmapTab.setAttribute('role', 'tab');
+		heatmapTab.setAttribute('aria-selected', String(this.activeTab === 'heatmap'));
+		heatmapTab.addEventListener('click', async () => {
+			this.activeTab = 'heatmap';
+			this.plugin.settings.activeHubTab = 'heatmap';
+			await this.plugin.saveSettings();
+			this.render();
+		});
+
+		const mapTab = tabs.createEl('button', {
+			text: 'Map',
+			cls: `omi-hub-tab ${this.activeTab === 'map' ? 'active' : ''}`
+		});
+		mapTab.setAttribute('role', 'tab');
+		mapTab.setAttribute('aria-selected', String(this.activeTab === 'map'));
+		mapTab.addEventListener('click', async () => {
+			this.activeTab = 'map';
+			this.plugin.settings.activeHubTab = 'map';
 			await this.plugin.saveSettings();
 			this.render();
 		});
@@ -1284,11 +1314,6 @@ export class OmiHubView extends ItemView {
 	private renderConversationsTab(container: HTMLElement): void {
 		const tabContent = container.createDiv('omi-conversations-container');
 
-		// View Mode Tabs (Daily, Stats, Heatmap, Map)
-		this.renderConversationsViewModeTabs(tabContent);
-
-		const currentViewMode = this.plugin.settings.conversationsViewMode || 'list';
-
 		// Sync Controls Section
 		const syncControls = tabContent.createDiv('omi-conversations-sync-controls');
 
@@ -1323,52 +1348,8 @@ export class OmiHubView extends ItemView {
 		fullResyncBtn.disabled = this.isSyncingConversations;
 		fullResyncBtn.addEventListener('click', () => this.handleConversationSync(true));
 
-		// Render the appropriate view based on mode
-		switch (currentViewMode) {
-			case 'list':
-			case 'timeline':
-				// Both list and timeline now use the unified daily view
-				this.renderConversationsDailyView(tabContent);
-				break;
-			case 'heatmap':
-				this.renderConversationsHeatmap(tabContent);
-				break;
-			case 'map':
-				this.renderConversationsMap(tabContent);
-				break;
-			default:
-				this.renderConversationsDailyView(tabContent);
-		}
-	}
-
-	private renderConversationsViewModeTabs(container: HTMLElement): void {
-		const tabs = container.createDiv('omi-conversations-view-tabs');
-		tabs.setAttribute('role', 'tablist');
-		tabs.setAttribute('aria-label', 'Conversation view modes');
-
-		const currentMode = this.plugin.settings.conversationsViewMode || 'list';
-		// Daily view combines timeline + cards, so we map both 'list' and 'timeline' to 'list'
-		const effectiveMode = currentMode === 'timeline' ? 'list' : currentMode;
-		const modes: Array<{ id: 'list' | 'timeline' | 'heatmap' | 'map'; label: string; icon: string }> = [
-			{ id: 'list', label: 'Daily', icon: '📅' },
-			{ id: 'heatmap', label: 'Heatmap', icon: '🔥' },
-			{ id: 'map', label: 'Map', icon: '🗺️' }
-		];
-
-		for (const mode of modes) {
-			const tab = tabs.createEl('button', {
-				text: `${mode.icon} ${mode.label}`,
-				cls: `omi-conv-view-tab ${effectiveMode === mode.id ? 'active' : ''}`
-			});
-			tab.setAttribute('role', 'tab');
-			tab.setAttribute('aria-selected', String(effectiveMode === mode.id));
-			tab.setAttribute('aria-label', `${mode.label} view`);
-			tab.addEventListener('click', async () => {
-				this.plugin.settings.conversationsViewMode = mode.id;
-				await this.plugin.saveSettings();
-				this.render();
-			});
-		}
+		// Always render Daily view
+		this.renderConversationsDailyView(tabContent);
 	}
 
 	private async handleConversationSync(fullResync: boolean): Promise<void> {
@@ -2103,6 +2084,45 @@ export class OmiHubView extends ItemView {
 			const detailPane = splitContainer.createDiv('omi-conversations-detail-pane');
 			this.renderConversationDetailPanel(detailPane);
 		}
+	}
+
+	// ==================== HEATMAP TAB ====================
+
+	private renderHeatmapTab(container: HTMLElement): void {
+		const tabContent = container.createDiv('omi-heatmap-container');
+
+		const conversations = this.plugin.settings.syncedConversations || {};
+		const conversationArray = Object.values(conversations) as SyncedConversationMeta[];
+
+		if (conversationArray.length === 0) {
+			const empty = tabContent.createDiv('omi-conversations-empty');
+			empty.createEl('div', { text: '📅', cls: 'omi-empty-icon' });
+			empty.createEl('h3', { text: 'No heatmap data available' });
+			empty.createEl('p', { text: 'Sync conversations to see your activity heatmap' });
+			return;
+		}
+
+		this.renderConversationsHeatmap(tabContent);
+	}
+
+	// ==================== MAP TAB ====================
+
+	private renderMapTab(container: HTMLElement): void {
+		const tabContent = container.createDiv('omi-map-container');
+
+		const conversations = this.plugin.settings.syncedConversations || {};
+		const conversationArray = Object.values(conversations) as SyncedConversationMeta[];
+		const withLocation = conversationArray.filter(c => c.geolocation?.latitude && c.geolocation?.longitude);
+
+		if (withLocation.length === 0) {
+			const empty = tabContent.createDiv('omi-conversations-empty');
+			empty.createEl('div', { text: '🗺️', cls: 'omi-empty-icon' });
+			empty.createEl('h3', { text: 'No location data available' });
+			empty.createEl('p', { text: 'Sync conversations with geolocation to see your map' });
+			return;
+		}
+
+		this.renderConversationsMap(tabContent);
 	}
 
 	// ==================== STATS TAB ====================
@@ -3236,9 +3256,8 @@ export class OmiHubView extends ItemView {
 		});
 		mapBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"></polygon><line x1="8" y1="2" x2="8" y2="18"></line><line x1="16" y1="6" x2="16" y2="22"></line></svg>`;
 		mapBtn.addEventListener('click', () => {
-			this.activeTab = 'conversations';
-			this.plugin.settings.activeHubTab = 'conversations';
-			this.plugin.settings.conversationsViewMode = 'map';
+			this.activeTab = 'map';
+			this.plugin.settings.activeHubTab = 'map';
 			this.plugin.saveSettings();
 			this.render();
 		});
@@ -3448,12 +3467,13 @@ export class OmiHubView extends ItemView {
 				cell.addClass(`omi-heatmap-level-${level}`);
 				cell.setAttribute('title', `${cellDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}\n${count} conversations\n${this.formatDuration(duration)}`);
 
-				// Click to navigate to that day in daily view
+				// Click to navigate to that day in conversations view
 				if (count > 0) {
 					cell.addClass('clickable');
 					const clickDate = this.formatDateOnly(new Date(cellDate));
 					cell.addEventListener('click', () => {
-						this.plugin.settings.conversationsViewMode = 'list';
+						this.activeTab = 'conversations';
+						this.plugin.settings.activeHubTab = 'conversations';
 						this.dailyViewSelectedDate = clickDate;
 						this.plugin.saveSettings();
 						this.render();
