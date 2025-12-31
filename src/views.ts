@@ -53,6 +53,9 @@ export class OmiHubView extends ItemView {
 	private statsTasks: ActionItemFromAPI[] = [];
 	private isLoadingStats = false;
 	private statsDataLoaded = false;
+	// Stats memoization cache
+	private statsCacheKey: string | null = null;
+	private cachedStatsData: StatsData | null = null;
 
 	// Memories state
 	memories: MemoryWithUI[] = [];
@@ -1701,10 +1704,18 @@ export class OmiHubView extends ItemView {
 
 		try {
 			await this.plugin.syncConversations(fullResync);
+			// Invalidate stats cache after sync since data may have changed
+			this.invalidateStatsCache();
 		} finally {
 			this.isSyncingConversations = false;
 			this.render();
 		}
+	}
+
+	/** Invalidate the stats cache to force recomputation on next render */
+	invalidateStatsCache(): void {
+		this.statsCacheKey = null;
+		this.cachedStatsData = null;
 	}
 
 	private renderConversationCard(container: HTMLElement, conv: SyncedConversationMeta, showDate = false): void {
@@ -3247,6 +3258,14 @@ export class OmiHubView extends ItemView {
 	}
 
 	private computeStatsData(conversationArray: SyncedConversationMeta[]): StatsData {
+		// Generate cache key based on time range and conversation count
+		const cacheKey = `${this.statsTimeRange}-${conversationArray.length}`;
+
+		// Return cached data if cache key matches
+		if (this.statsCacheKey === cacheKey && this.cachedStatsData) {
+			return this.cachedStatsData;
+		}
+
 		const now = new Date();
 		let startDate: Date;
 		let endDate = now;
@@ -3364,7 +3383,7 @@ export class OmiHubView extends ItemView {
 		};
 		const achievements = this.computeAchievements(achievementData);
 
-		return {
+		const result: StatsData = {
 			timeRange: this.statsTimeRange,
 			startDate,
 			endDate,
@@ -3395,6 +3414,12 @@ export class OmiHubView extends ItemView {
 			lateNightCount,
 			earlyMorningCount
 		};
+
+		// Cache the result
+		this.statsCacheKey = cacheKey;
+		this.cachedStatsData = result;
+
+		return result;
 	}
 
 	private computeHourDayHeatmap(convs: SyncedConversationMeta[]): HeatmapCell[] {
