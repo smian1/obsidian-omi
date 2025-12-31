@@ -6192,14 +6192,21 @@ svg.leaflet-image-layer.leaflet-interactive path {
 
 /* Category Tiles */
 .omi-stats-categories-tile {
-    min-height: 200px;
+    display: flex;
+    flex-direction: column;
+}
+
+.omi-stats-categories-tile .omi-stats-tile-header {
+    flex-shrink: 0;
 }
 
 .omi-stats-category-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: 1fr 1fr;
     gap: 8px;
     margin-top: 8px;
+    flex: 1;
 }
 
 .omi-stats-category-tile {
@@ -6209,6 +6216,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
     display: flex;
     flex-direction: column;
     align-items: center;
+    justify-content: center;
     gap: 4px;
     text-align: center;
     transition: all var(--omi-duration-short) ease;
@@ -6242,19 +6250,24 @@ svg.leaflet-image-layer.leaflet-interactive path {
     color: var(--text-muted);
 }
 
-.omi-category-bar {
-    width: 100%;
-    height: 4px;
-    background: var(--background-modifier-border);
-    border-radius: var(--omi-radius-full);
+.omi-category-trends {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
     margin-top: 4px;
 }
 
-.omi-category-bar-fill {
-    height: 100%;
-    background: var(--interactive-accent);
-    border-radius: var(--omi-radius-full);
-    transition: width var(--omi-duration-long) ease;
+.omi-category-trend {
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.omi-category-trend.positive {
+    color: #10b981;
+}
+
+.omi-category-trend.negative {
+    color: #ef4444;
 }
 
 /* Duration Distribution */

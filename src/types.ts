@@ -180,7 +180,8 @@ export interface CategoryStat {
 	count: number;
 	duration: number;
 	percentage: number;
-	trend?: number;     // % change from previous period
+	durationTrend?: number;  // % change in duration from previous period
+	countTrend?: number;     // % change in count from previous period
 }
 
 export interface DurationBucket {

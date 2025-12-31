@@ -1801,13 +1801,18 @@ export class OmiHubView extends ItemView {
 		return parseTime(timeA) - parseTime(timeB);
 	}
 
-	private formatDuration(minutes: number): string {
+	private formatDuration(minutes: number, detailed: boolean = false): string {
 		if (minutes < 60) {
-			return `${minutes} min`;
+			return `${minutes}m`;
 		}
 		const hours = Math.floor(minutes / 60);
 		const mins = minutes % 60;
-		return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+		if (detailed) {
+			return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+		}
+		// Clean rounding: round to nearest hour
+		const roundedHours = Math.round(minutes / 60);
+		return `${roundedHours}h`;
 	}
 
 	private getWeekStartDate(date?: Date): Date {
@@ -2417,7 +2422,7 @@ export class OmiHubView extends ItemView {
 		const block = track.createDiv(`omi-timeline-block${isSelected ? ' selected' : ''}`);
 		block.style.left = `${position}%`;
 		block.style.width = `${width}%`;
-		block.setAttribute('title', `${conv.emoji} ${conv.title}\n${conv.time} - ${this.formatDuration(duration)}`);
+		block.setAttribute('title', `${conv.emoji} ${conv.title}\n${conv.time} - ${this.formatDuration(duration, true)}`);
 		block.setAttribute('role', 'button');
 		block.setAttribute('tabindex', '0');
 
@@ -3346,8 +3351,8 @@ export class OmiHubView extends ItemView {
 		// Streak calculation
 		const streak = this.computeStreak(conversationArray);
 
-		// Categories
-		const categories = this.computeCategoryStats(filteredConvs, totalDuration);
+		// Categories (with previous period comparison)
+		const categories = this.computeCategoryStats(filteredConvs, totalDuration, prevConvs);
 		const topCategory = categories.length > 0 ? categories[0].category : 'N/A';
 
 		// Duration distribution
@@ -3519,7 +3524,7 @@ export class OmiHubView extends ItemView {
 		return streak;
 	}
 
-	private computeCategoryStats(convs: SyncedConversationMeta[], totalDuration: number): CategoryStat[] {
+	private computeCategoryStats(convs: SyncedConversationMeta[], totalDuration: number, prevConvs: SyncedConversationMeta[] = []): CategoryStat[] {
 		const categoryData = new Map<string, { count: number; duration: number }>();
 
 		for (const conv of convs) {
@@ -3530,13 +3535,35 @@ export class OmiHubView extends ItemView {
 			categoryData.set(cat, data);
 		}
 
+		// Compute previous period category data for trends
+		const prevCategoryData = new Map<string, { count: number; duration: number }>();
+		for (const conv of prevConvs) {
+			const cat = conv.category || 'other';
+			const data = prevCategoryData.get(cat) || { count: 0, duration: 0 };
+			data.count++;
+			data.duration += conv.duration || 0;
+			prevCategoryData.set(cat, data);
+		}
+
 		return Array.from(categoryData.entries())
-			.map(([category, data]) => ({
-				category,
-				count: data.count,
-				duration: data.duration,
-				percentage: totalDuration > 0 ? (data.duration / totalDuration) * 100 : 0
-			}))
+			.map(([category, data]) => {
+				const prevData = prevCategoryData.get(category);
+				const durationTrend = prevData && prevData.duration > 0
+					? ((data.duration - prevData.duration) / prevData.duration) * 100
+					: undefined;
+				const countTrend = prevData && prevData.count > 0
+					? ((data.count - prevData.count) / prevData.count) * 100
+					: undefined;
+
+				return {
+					category,
+					count: data.count,
+					duration: data.duration,
+					percentage: totalDuration > 0 ? (data.duration / totalDuration) * 100 : 0,
+					durationTrend,
+					countTrend
+				};
+			})
 			.sort((a, b) => b.duration - a.duration);
 	}
 
@@ -4388,7 +4415,7 @@ export class OmiHubView extends ItemView {
 							maxIntensity < 0.75 ? 3 : 4;
 
 				cellEl.addClass(`omi-stats-hm-level-${level}`);
-				cellEl.setAttribute('title', `${count} conversations\n${this.formatDuration(duration)}`);
+				cellEl.setAttribute('title', `${count} conversations\n${this.formatDuration(duration, true)}`);
 
 				// Click to filter by this time slot
 				if (count > 0) {
@@ -4873,15 +4900,29 @@ export class OmiHubView extends ItemView {
 			catTile.createEl('span', { text: this.formatDuration(cat.duration), cls: 'omi-category-duration' });
 			catTile.createEl('span', { text: `${cat.count} conv`, cls: 'omi-category-count' });
 
-			// Mini progress bar
-			const bar = catTile.createDiv('omi-category-bar');
-			const fill = bar.createDiv('omi-category-bar-fill');
-			fill.style.width = `${cat.percentage}%`;
+			// Trend indicators (hours and convos)
+			const trendsRow = catTile.createDiv('omi-category-trends');
+
+			// Duration trend
+			if (cat.durationTrend !== undefined) {
+				const durationTrendEl = trendsRow.createEl('span', { cls: 'omi-category-trend' });
+				const arrow = cat.durationTrend >= 0 ? '↑' : '↓';
+				durationTrendEl.setText(`${arrow}${Math.abs(Math.round(cat.durationTrend))}% hrs`);
+				durationTrendEl.addClass(cat.durationTrend >= 0 ? 'positive' : 'negative');
+			}
+
+			// Count trend
+			if (cat.countTrend !== undefined) {
+				const countTrendEl = trendsRow.createEl('span', { cls: 'omi-category-trend' });
+				const arrow = cat.countTrend >= 0 ? '↑' : '↓';
+				countTrendEl.setText(`${arrow}${Math.abs(Math.round(cat.countTrend))}% conv`);
+				countTrendEl.addClass(cat.countTrend >= 0 ? 'positive' : 'negative');
+			}
 
 			// Click to filter
 			catTile.addEventListener('click', () => {
 				// TODO: Implement category filter navigation
-				new Notice(`${cat.category}: ${cat.count} conversations, ${this.formatDuration(cat.duration)}`);
+				new Notice(`${cat.category}: ${cat.count} conversations, ${this.formatDuration(cat.duration, true)}`);
 			});
 		}
 	}
@@ -5537,7 +5578,7 @@ export class OmiHubView extends ItemView {
 				else level = 1; // Any day with conversations gets at least level 1
 
 				cell.addClass(`omi-heatmap-level-${level}`);
-				cell.setAttribute('title', `${cellDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}\n${count} conversations\n${this.formatDuration(duration)}`);
+				cell.setAttribute('title', `${cellDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}\n${count} conversations\n${this.formatDuration(duration, true)}`);
 
 				// Click to navigate to that day in conversations view
 				if (count > 0) {
