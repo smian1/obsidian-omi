@@ -143,9 +143,9 @@ export default class OmiConversationsPlugin extends Plugin {
 			}
 		});
 
-		// Initialize Tasks Hub if enabled
+		// Initialize Tasks Hub if enabled (non-blocking for faster plugin load)
 		if (this.settings.enableTasksHub) {
-			await this.initializeTasksHub();
+			this.initializeTasksHub();
 		}
 
 		// Set up conversation auto-sync if enabled
