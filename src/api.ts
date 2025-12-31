@@ -171,42 +171,53 @@ export class OmiAPI {
 	}
 
 	/**
-	 * Fetch conversations for a specific local date (YYYY-MM-DD)
-	 * Used for "Resync Single Day" feature
+	 * Fetch conversations for a date or date range (YYYY-MM-DD)
+	 * Used for "Resync Single Day" or "Resync Date Range" feature
 	 *
 	 * Uses server-side filtering with start_date + end_date for efficiency:
 	 * - start_date is inclusive
 	 * - end_date is exclusive
-	 * So for "2025-04-01", we use start_date=2025-04-01&end_date=2025-04-02
+	 * For single day "2025-04-01": start_date=2025-04-01&end_date=2025-04-02
+	 * For range "2025-04-01" to "2025-04-05": start_date=2025-04-01&end_date=2025-04-06
 	 *
-	 * This fetches only that day's conversations in 1-2 API calls instead of 50+
+	 * This fetches only the requested date(s) in a few API calls instead of 50+
 	 */
-	async getConversationsForDate(
-		localDateStr: string,  // YYYY-MM-DD in user's local timezone
+	async getConversationsForDateRange(
+		startDateStr: string,  // YYYY-MM-DD in user's local timezone
+		endDateStr?: string,   // YYYY-MM-DD optional end date (inclusive)
 		onProgress?: (step: string, progress: number) => void
 	): Promise<Conversation[]> {
 		const conversations: Conversation[] = [];
 		let offset = 0;
 		let apiCalls = 0;
 
-		// Calculate the next day for end_date (exclusive)
-		const targetDate = new Date(localDateStr + 'T00:00:00');
-		const nextDay = new Date(targetDate);
-		nextDay.setDate(nextDay.getDate() + 1);
-		const endDateStr = `${nextDay.getFullYear()}-${String(nextDay.getMonth() + 1).padStart(2, '0')}-${String(nextDay.getDate()).padStart(2, '0')}`;
+		// Calculate the API end_date (exclusive)
+		// If endDateStr is provided, add 1 day to make it inclusive
+		// If not provided, it's a single day so add 1 day to startDateStr
+		const targetEndDate = endDateStr
+			? new Date(endDateStr + 'T00:00:00')
+			: new Date(startDateStr + 'T00:00:00');
+		const apiEndDate = new Date(targetEndDate);
+		apiEndDate.setDate(apiEndDate.getDate() + 1);
+		const apiEndDateStr = `${apiEndDate.getFullYear()}-${String(apiEndDate.getMonth() + 1).padStart(2, '0')}-${String(apiEndDate.getDate()).padStart(2, '0')}`;
+
+		// Date label for progress messages
+		const dateLabel = endDateStr && endDateStr !== startDateStr
+			? `${startDateStr} to ${endDateStr}`
+			: startDateStr;
 
 		try {
 			while (true) {
 				apiCalls++;
-				onProgress?.(`Fetching page ${apiCalls} for ${localDateStr}...`, Math.min(80, apiCalls * 20));
+				onProgress?.(`Fetching page ${apiCalls} for ${dateLabel}...`, Math.min(80, apiCalls * 15));
 
 				// Use server-side date filtering: start_date (inclusive) to end_date (exclusive)
 				const params = new URLSearchParams({
 					limit: this.batchSize.toString(),
 					offset: offset.toString(),
 					include_transcript: 'true',
-					start_date: localDateStr,  // Inclusive: include this date
-					end_date: endDateStr       // Exclusive: don't include this date
+					start_date: startDateStr,  // Inclusive: include this date
+					end_date: apiEndDateStr    // Exclusive: don't include this date
 				});
 
 				const batch = await this.makeRequest(
@@ -218,7 +229,7 @@ export class OmiAPI {
 
 				// Server handles filtering, just add all returned conversations
 				conversations.push(...batch);
-				onProgress?.(`Found ${conversations.length} conversations...`, Math.min(90, apiCalls * 20 + 10));
+				onProgress?.(`Found ${conversations.length} conversations...`, Math.min(90, apiCalls * 15 + 10));
 
 				// If we got less than the batch size, we've reached the end
 				if (batch.length < this.batchSize) break;
@@ -227,12 +238,23 @@ export class OmiAPI {
 				await new Promise(resolve => setTimeout(resolve, 500));
 			}
 
-			onProgress?.(`Found ${conversations.length} conversations for ${localDateStr}`, 100);
+			onProgress?.(`Found ${conversations.length} conversations for ${dateLabel}`, 100);
 			return conversations;
 		} catch (error) {
-			console.error('Error fetching conversations for date:', error);
+			console.error('Error fetching conversations for date range:', error);
 			throw error;
 		}
+	}
+
+	/**
+	 * Fetch conversations for a specific local date (YYYY-MM-DD)
+	 * Convenience wrapper for getConversationsForDateRange with single date
+	 */
+	async getConversationsForDate(
+		localDateStr: string,
+		onProgress?: (step: string, progress: number) => void
+	): Promise<Conversation[]> {
+		return this.getConversationsForDateRange(localDateStr, undefined, onProgress);
 	}
 
 	private async makeRequest(url: string, params: URLSearchParams): Promise<Conversation[]> {

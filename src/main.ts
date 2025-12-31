@@ -634,107 +634,151 @@ export default class OmiConversationsPlugin extends Plugin {
 	}
 
 	/**
-	 * Resync conversations for a specific date
-	 * Used when Omi device loads historical data and user wants to sync just that day
+	 * Resync conversations for a specific date or date range
+	 * Used when Omi device loads historical data and user wants to sync specific dates
 	 * Handles timezone: filters by LOCAL date (user's timezone)
+	 * @param startDateStr - Start date in YYYY-MM-DD format
+	 * @param endDateStr - Optional end date in YYYY-MM-DD format (inclusive)
 	 */
-	async resyncDay(dateStr: string) {
+	async resyncDay(startDateStr: string, endDateStr?: string) {
 		if (!this.settings.apiKey) {
 			new Notice('Please set your Omi API key in settings');
 			return;
 		}
 
 		// Validate date format (YYYY-MM-DD)
-		if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-			new Notice('Invalid date format. Use YYYY-MM-DD');
+		if (!/^\d{4}-\d{2}-\d{2}$/.test(startDateStr)) {
+			new Notice('Invalid start date format. Use YYYY-MM-DD');
+			return;
+		}
+		if (endDateStr && !/^\d{4}-\d{2}-\d{2}$/.test(endDateStr)) {
+			new Notice('Invalid end date format. Use YYYY-MM-DD');
 			return;
 		}
 
-		this.updateSyncProgress('conversations', `Resyncing ${dateStr}...`, 0);
+		// Ensure end date is not before start date
+		if (endDateStr && endDateStr < startDateStr) {
+			new Notice('End date cannot be before start date');
+			return;
+		}
+
+		// Date label for user messages
+		const dateLabel = endDateStr && endDateStr !== startDateStr
+			? `${startDateStr} to ${endDateStr}`
+			: startDateStr;
+
+		this.updateSyncProgress('conversations', `Resyncing ${dateLabel}...`, 0);
 
 		try {
 			const folderPath = normalizePath(this.settings.folderPath);
 
-			// Fetch conversations for just this date
-			const conversations = await this.api.getConversationsForDate(
-				dateStr,
+			// Fetch conversations for the date range
+			const conversations = await this.api.getConversationsForDateRange(
+				startDateStr,
+				endDateStr,
 				(step, progress) => this.updateSyncProgress('conversations', step, progress)
 			);
 
 			if (conversations.length === 0) {
-				new Notice(`No conversations found for ${dateStr}`);
+				new Notice(`No conversations found for ${dateLabel}`);
 				this.clearSyncProgress();
 				return;
 			}
 
-			this.updateSyncProgress('conversations', `Writing files for ${dateStr}...`, 70);
+			this.updateSyncProgress('conversations', `Writing files...`, 70);
 
-			// Write files for this date
-			const dateFolderPath = this.getDateFolderPath(folderPath, dateStr);
-			await this.ensureFolderExists(dateFolderPath);
-
-			// Get prev/next dates for navigation
-			const allDates = this.getAllSyncedDates();
-			const allDatesSet = new Set([...allDates, dateStr]);
-			const sortedDates = Array.from(allDatesSet).sort();
-			const dateIndex = sortedDates.indexOf(dateStr);
-			const prevDate = dateIndex > 0 ? sortedDates[dateIndex - 1] : null;
-			const nextDate = dateIndex < sortedDates.length - 1 ? sortedDates[dateIndex + 1] : null;
-
-			// Create files
-			await this.createIndexFile(dateFolderPath, dateStr, conversations, prevDate, nextDate);
-			if (this.settings.includeOverview) {
-				await this.createOverviewFile(dateFolderPath, conversations);
-			}
-			if (this.settings.includeActionItems) {
-				await this.createActionItemsFile(dateFolderPath, conversations);
-			}
-			if (this.settings.includeEvents) {
-				await this.createEventsFile(dateFolderPath, conversations);
-			}
-			if (this.settings.includeTranscript) {
-				await this.createTranscriptFile(dateFolderPath, conversations);
-			}
-
-			this.updateSyncProgress('conversations', 'Updating metadata...', 85);
-
-			// Update metadata for these conversations
+			// Group conversations by local date
+			const conversationsByDate = new Map<string, Conversation[]>();
 			for (const conv of conversations) {
 				const localDate = new Date(conv.created_at);
-				const time = localDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+				const dateStr = `${localDate.getFullYear()}-${String(localDate.getMonth() + 1).padStart(2, '0')}-${String(localDate.getDate()).padStart(2, '0')}`;
+				if (!conversationsByDate.has(dateStr)) {
+					conversationsByDate.set(dateStr, []);
+				}
+				conversationsByDate.get(dateStr)!.push(conv);
+			}
 
-				// Calculate duration in minutes
-				const startTime = new Date(conv.started_at);
-				const endTime = new Date(conv.finished_at);
-				const durationMs = endTime.getTime() - startTime.getTime();
-				const durationMinutes = Math.max(1, Math.round(durationMs / 60000));
+			const allWrittenDates: string[] = [];
+			const totalDates = conversationsByDate.size;
+			let processedDates = 0;
 
-				// Get overview snippet
-				const overviewSnippet = conv.structured?.overview
-					? conv.structured.overview.substring(0, 150)
-					: undefined;
+			// Get all existing dates for navigation calculation
+			const existingDates = this.getAllSyncedDates();
 
-				const meta: SyncedConversationMeta = {
-					id: conv.id,
-					date: dateStr,
-					title: conv.structured?.title || 'Untitled',
-					emoji: conv.structured?.emoji || getCategoryEmoji(conv.structured?.category || 'other'),
-					time: time,
-					category: conv.structured?.category,
-					startedAt: conv.started_at,
-					finishedAt: conv.finished_at,
-					duration: durationMinutes,
-					overview: overviewSnippet,
-					actionItemCount: conv.structured?.action_items?.length || 0,
-					eventCount: conv.structured?.events?.length || 0,
-					geolocation: conv.geolocation || undefined
-				};
-				this.settings.syncedConversations[conv.id] = meta;
+			// Write files for each date
+			for (const [dateStr, dateConversations] of conversationsByDate) {
+				processedDates++;
+				this.updateSyncProgress(
+					'conversations',
+					`Writing ${dateStr} (${processedDates}/${totalDates})...`,
+					70 + (processedDates / totalDates) * 15
+				);
+
+				const dateFolderPath = this.getDateFolderPath(folderPath, dateStr);
+				await this.ensureFolderExists(dateFolderPath);
+
+				// Calculate prev/next for this date
+				const allDatesSet = new Set([...existingDates, ...Array.from(conversationsByDate.keys())]);
+				const sortedDates = Array.from(allDatesSet).sort();
+				const dateIndex = sortedDates.indexOf(dateStr);
+				const prevDate = dateIndex > 0 ? sortedDates[dateIndex - 1] : null;
+				const nextDate = dateIndex < sortedDates.length - 1 ? sortedDates[dateIndex + 1] : null;
+
+				// Create files
+				await this.createIndexFile(dateFolderPath, dateStr, dateConversations, prevDate, nextDate);
+				if (this.settings.includeOverview) {
+					await this.createOverviewFile(dateFolderPath, dateConversations);
+				}
+				if (this.settings.includeActionItems) {
+					await this.createActionItemsFile(dateFolderPath, dateConversations);
+				}
+				if (this.settings.includeEvents) {
+					await this.createEventsFile(dateFolderPath, dateConversations);
+				}
+				if (this.settings.includeTranscript) {
+					await this.createTranscriptFile(dateFolderPath, dateConversations);
+				}
+
+				allWrittenDates.push(dateStr);
+
+				// Update metadata for conversations on this date
+				for (const conv of dateConversations) {
+					const localDate = new Date(conv.created_at);
+					const time = localDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+
+					// Calculate duration in minutes
+					const startTime = new Date(conv.started_at);
+					const endTime = new Date(conv.finished_at);
+					const durationMs = endTime.getTime() - startTime.getTime();
+					const durationMinutes = Math.max(1, Math.round(durationMs / 60000));
+
+					// Get overview snippet
+					const overviewSnippet = conv.structured?.overview
+						? conv.structured.overview.substring(0, 150)
+						: undefined;
+
+					const meta: SyncedConversationMeta = {
+						id: conv.id,
+						date: dateStr,
+						title: conv.structured?.title || 'Untitled',
+						emoji: conv.structured?.emoji || getCategoryEmoji(conv.structured?.category || 'other'),
+						time: time,
+						category: conv.structured?.category,
+						startedAt: conv.started_at,
+						finishedAt: conv.finished_at,
+						duration: durationMinutes,
+						overview: overviewSnippet,
+						actionItemCount: conv.structured?.action_items?.length || 0,
+						eventCount: conv.structured?.events?.length || 0,
+						geolocation: conv.geolocation || undefined
+					};
+					this.settings.syncedConversations[conv.id] = meta;
+				}
 			}
 
 			// Update navigation for adjacent days
 			this.updateSyncProgress('conversations', 'Updating navigation...', 90);
-			await this.updateAdjacentDayNavigation(folderPath, [dateStr], conversations);
+			await this.updateAdjacentDayNavigation(folderPath, allWrittenDates, conversations);
 
 			// Regenerate master index
 			this.updateSyncProgress('conversations', 'Updating index...', 95);
@@ -747,14 +791,17 @@ export default class OmiConversationsPlugin extends Plugin {
 				type: 'conversations',
 				action: 'sync',
 				count: conversations.length,
-				apiCalls: 1
+				apiCalls: Math.ceil(conversations.length / 100) || 1
 			});
 
 			this.clearSyncProgress();
-			new Notice(`Resynced ${conversations.length} conversations for ${dateStr}`);
+
+			// Format result message
+			const daysText = totalDates === 1 ? '1 day' : `${totalDates} days`;
+			new Notice(`Resynced ${conversations.length} conversations across ${daysText} for ${dateLabel}`);
 
 		} catch (error) {
-			console.error('Error resyncing day:', error);
+			console.error('Error resyncing date range:', error);
 
 			// Log failed sync
 			this.logSyncHistory({
@@ -766,7 +813,7 @@ export default class OmiConversationsPlugin extends Plugin {
 			await this.saveSettings();
 
 			this.clearSyncProgress();
-			new Notice(`Failed to resync ${dateStr}. Check console for details.`);
+			new Notice(`Failed to resync ${dateLabel}. Check console for details.`);
 		}
 	}
 

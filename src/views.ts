@@ -2916,7 +2916,7 @@ export class OmiHubView extends ItemView {
 
 	/**
 	 * Render collapsible Advanced Options section for Conversations card
-	 * Contains "Resync Single Day" feature
+	 * Contains "Resync Date Range" feature (single day or range)
 	 */
 	private renderSyncCardAdvanced(card: HTMLElement, isSyncing: boolean): void {
 		const advancedSection = card.createDiv('omi-sync-card__advanced');
@@ -2930,40 +2930,75 @@ export class OmiHubView extends ItemView {
 		const advancedContent = advancedSection.createDiv('omi-sync-card__advanced-content');
 		advancedContent.style.display = 'none';
 
-		// Resync Single Day section
+		// Resync Date Range section
 		const resyncDaySection = advancedContent.createDiv('omi-sync-card__resync-day');
 		resyncDaySection.createDiv({
 			cls: 'omi-sync-card__resync-day-title',
-			text: 'Resync Single Day'
+			text: 'Resync Date Range'
 		});
 		resyncDaySection.createDiv({
 			cls: 'omi-sync-card__resync-day-desc',
-			text: 'Re-fetch conversations for a specific date (useful when Omi device loads historical data)'
+			text: 'Re-fetch conversations for a specific date or date range (useful when Omi device loads historical data)'
 		});
 
-		// Date picker row
-		const dateRow = resyncDaySection.createDiv('omi-sync-card__resync-day-row');
+		// Date picker row - Start date
+		const startDateRow = resyncDaySection.createDiv('omi-sync-card__resync-day-row');
+		startDateRow.createEl('label', {
+			text: 'From:',
+			cls: 'omi-sync-card__date-label'
+		});
 
-		const dateInput = dateRow.createEl('input', {
+		const startDateInput = startDateRow.createEl('input', {
 			type: 'date',
 			cls: 'omi-sync-card__date-input omi-sync-card__resync-date'
 		});
 		// Default to today
 		const today = new Date();
-		dateInput.value = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+		startDateInput.value = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
-		const resyncBtn = dateRow.createEl('button', {
-			text: 'Resync Day',
+		// Date picker row - End date (optional)
+		const endDateRow = resyncDaySection.createDiv('omi-sync-card__resync-day-row');
+		endDateRow.createEl('label', {
+			text: 'To:',
+			cls: 'omi-sync-card__date-label'
+		});
+
+		const endDateInput = endDateRow.createEl('input', {
+			type: 'date',
+			cls: 'omi-sync-card__date-input omi-sync-card__resync-date'
+		});
+		// Leave empty by default (single day mode)
+
+		// Helper text
+		resyncDaySection.createDiv({
+			cls: 'omi-sync-card__resync-day-hint',
+			text: 'Leave "To" empty to resync a single day'
+		});
+
+		// Button row
+		const buttonRow = resyncDaySection.createDiv('omi-sync-card__resync-day-row omi-sync-card__resync-day-buttons');
+
+		const resyncBtn = buttonRow.createEl('button', {
+			text: 'Resync',
 			cls: 'omi-sync-card__btn omi-sync-card__btn--secondary'
 		});
 		resyncBtn.disabled = isSyncing;
 		resyncBtn.addEventListener('click', async () => {
-			const dateStr = dateInput.value;
-			if (!dateStr) {
-				new Notice('Please select a date');
+			const startDate = startDateInput.value;
+			const endDate = endDateInput.value || undefined;
+
+			if (!startDate) {
+				new Notice('Please select a start date');
 				return;
 			}
-			await this.plugin.resyncDay(dateStr);
+
+			// Validate end date is not before start date
+			if (endDate && endDate < startDate) {
+				new Notice('End date cannot be before start date');
+				return;
+			}
+
+			await this.plugin.resyncDay(startDate, endDate);
 			this.render();
 		});
 
