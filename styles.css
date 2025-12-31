@@ -5785,7 +5785,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
 .omi-stats-subtitle {
     font-size: 12px;
     color: var(--text-muted);
-    margin-top: auto;
+    margin-top: 4px;
 }
 
 /* Sparkline */
@@ -6272,14 +6272,17 @@ svg.leaflet-image-layer.leaflet-interactive path {
 
 /* Duration Distribution */
 .omi-stats-duration-tile {
-    min-height: 200px;
+    display: flex;
+    flex-direction: column;
 }
 
 .omi-stats-duration-chart {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    margin-top: 8px;
+    gap: 6px;
+    margin-top: 4px;
+    flex: 1;
+    justify-content: center;
 }
 
 .omi-stats-duration-row {
