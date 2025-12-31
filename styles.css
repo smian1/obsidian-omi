@@ -5950,23 +5950,22 @@ svg.leaflet-image-layer.leaflet-interactive path {
     grid-column: span 1;
 }
 
-/* KPI Row - 4 mini stats at top */
+/* KPI Row - 2x2 grid for compact layout */
 .omi-insights-kpi-row {
-    display: flex;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 12px 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    padding: 8px 0;
     border-bottom: 1px solid var(--background-modifier-border);
-    margin-bottom: 12px;
+    margin-bottom: 8px;
 }
 
 .omi-insights-kpi {
     text-align: center;
-    flex: 1;
 }
 
 .omi-insights-kpi-value {
-    font-size: 1.4em;
+    font-size: 1.2em;
     font-weight: 700;
     color: var(--text-normal);
     line-height: 1.2;

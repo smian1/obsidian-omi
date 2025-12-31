@@ -4574,19 +4574,6 @@ export class OmiHubView extends ItemView {
 			const p = insightsContainer.createEl('p', { cls: 'omi-insight-item' });
 			p.innerHTML = insight;
 		}
-
-		// Mini bar chart showing day distribution
-		const chart = content.createDiv('omi-insights-chart');
-		const maxCount = Math.max(...dayTotals.map(d => d.count));
-		const orderedDays = [1, 2, 3, 4, 5, 6, 0]; // Mon-Sun
-
-		for (const dayIdx of orderedDays) {
-			const dayData = dayTotals.find(d => d.day === dayIdx)!;
-			const barWrapper = chart.createDiv('omi-insights-bar-wrapper');
-			const bar = barWrapper.createDiv('omi-insights-bar');
-			bar.style.height = `${maxCount > 0 ? (dayData.count / maxCount) * 100 : 0}%`;
-			barWrapper.createEl('span', { text: dayData.name.slice(0, 3), cls: 'omi-insights-bar-label' });
-		}
 	}
 
 	private renderRadialClock(container: HTMLElement, stats: StatsData): void {
