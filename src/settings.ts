@@ -1,5 +1,6 @@
-import { App, PluginSettingTab, Setting, Notice } from 'obsidian';
+import { App, PluginSettingTab, Setting, Notice, Modal, TFolder } from 'obsidian';
 import type OmiConversationsPlugin from './main';
+import { DEFAULT_SETTINGS } from './constants';
 
 export class OmiConversationsSettingTab extends PluginSettingTab {
 	plugin: OmiConversationsPlugin;
@@ -166,26 +167,15 @@ export class OmiConversationsSettingTab extends PluginSettingTab {
 					this.plugin.setupConversationAutoSync();
 				}));
 
-		// Show sync status and reset button
+		// Show sync status
 		const syncedCount = Object.keys(this.plugin.settings.syncedConversations).length;
 		const syncStatusDesc = this.plugin.settings.lastConversationSyncTimestamp
 			? `Last synced: ${new Date(this.plugin.settings.lastConversationSyncTimestamp).toLocaleString()}. ${syncedCount} conversations tracked.`
 			: 'No sync history yet. Run a sync to start tracking.';
 
 		new Setting(containerEl)
-			.setName('Sync history')
-			.setDesc(syncStatusDesc)
-			.addButton(button => button
-				.setButtonText('Reset')
-				.setTooltip('Clear sync history to force a full resync next time')
-				.onClick(async () => {
-					this.plugin.settings.lastConversationSyncTimestamp = null;
-					this.plugin.settings.syncedConversations = {};
-					await this.plugin.saveSettings();
-					new Notice('Sync history cleared. Next sync will fetch all conversations.');
-					// Refresh the settings display
-					this.display();
-				}));
+			.setName('Sync status')
+			.setDesc(syncStatusDesc);
 
 		// Content toggles
 		new Setting(containerEl)
@@ -324,5 +314,89 @@ export class OmiConversationsSettingTab extends PluginSettingTab {
 					this.plugin.settings.memoriesFetchLimit = value;
 					await this.plugin.saveSettings();
 				}));
+
+		// ============================================
+		// DANGER ZONE
+		// ============================================
+		new Setting(containerEl)
+			.setName('Danger Zone')
+			.setHeading();
+
+		new Setting(containerEl)
+			.setName('Full reset')
+			.setDesc('Completely reset plugin to fresh-install state. Deletes all synced files and clears all settings.')
+			.addButton(button => button
+				.setButtonText('Reset Everything')
+				.setWarning()
+				.onClick(async () => {
+					const confirmed = await this.showResetConfirmation();
+					if (confirmed) {
+						await this.performFullReset();
+					}
+				}));
+	}
+
+	private async showResetConfirmation(): Promise<boolean> {
+		return new Promise((resolve) => {
+			const modal = new Modal(this.app);
+			modal.titleEl.setText('⚠️ Full Reset Warning');
+
+			modal.contentEl.createEl('p', {
+				text: 'This will permanently delete:'
+			});
+
+			const list = modal.contentEl.createEl('ul');
+			list.createEl('li', { text: 'All synced conversation files' });
+			list.createEl('li', { text: 'Tasks.md backup file' });
+			list.createEl('li', { text: 'Memories.md backup file' });
+			list.createEl('li', { text: 'All sync history and activity logs' });
+			list.createEl('li', { text: 'Your API key and all settings' });
+
+			modal.contentEl.createEl('p', {
+				text: 'This cannot be undone. Are you sure?',
+				cls: 'mod-warning'
+			});
+
+			new Setting(modal.contentEl)
+				.addButton(btn => btn
+					.setButtonText('Cancel')
+					.onClick(() => {
+						modal.close();
+						resolve(false);
+					}))
+				.addButton(btn => btn
+					.setButtonText('Reset Everything')
+					.setWarning()
+					.onClick(() => {
+						modal.close();
+						resolve(true);
+					}));
+
+			modal.open();
+		});
+	}
+
+	private async performFullReset(): Promise<void> {
+		const folderPath = this.plugin.settings.folderPath;
+
+		// 1. Delete all files in the Omi folder
+		const folder = this.app.vault.getAbstractFileByPath(folderPath);
+		if (folder && folder instanceof TFolder) {
+			// Delete the entire folder recursively
+			await this.app.vault.delete(folder, true);
+		}
+
+		// 2. Reset all settings to defaults
+		Object.assign(this.plugin.settings, DEFAULT_SETTINGS);
+		await this.plugin.saveSettings();
+
+		// 3. Stop any running sync intervals
+		this.plugin.stopTasksHubPeriodicSync();
+
+		// 4. Show success notice
+		new Notice('Plugin has been fully reset to fresh-install state.');
+
+		// 5. Refresh settings display
+		this.display();
 	}
 }
