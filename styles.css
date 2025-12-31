@@ -5943,6 +5943,254 @@ svg.leaflet-image-layer.leaflet-interactive path {
     background: var(--interactive-accent);
 }
 
+/* ==================== EXPERIMENTAL VISUALIZATIONS ==================== */
+
+/* Insights Summary Tile - Enhanced with KPIs and rotation */
+.omi-stats-insights-tile {
+    grid-column: span 2; /* Make it wider for the KPIs */
+}
+
+/* KPI Row - 4 mini stats at top */
+.omi-insights-kpi-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--background-modifier-border);
+    margin-bottom: 12px;
+}
+
+.omi-insights-kpi {
+    text-align: center;
+    flex: 1;
+}
+
+.omi-insights-kpi-value {
+    font-size: 1.4em;
+    font-weight: 700;
+    color: var(--text-normal);
+    line-height: 1.2;
+}
+
+.omi-insights-kpi-label {
+    font-size: 0.7em;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 2px;
+}
+
+.omi-insights-kpi-trend {
+    font-size: 0.7em;
+    margin-top: 2px;
+}
+
+.omi-insights-kpi-trend.positive {
+    color: #10b981;
+}
+
+.omi-insights-kpi-trend.negative {
+    color: #ef4444;
+}
+
+.omi-stats-insights-content {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* Insights list - display all at once */
+.omi-insights-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.omi-insight-item {
+    margin: 0;
+    padding: 4px 0;
+    line-height: 1.4;
+    font-size: 0.85em;
+    color: var(--text-normal);
+    border-bottom: 1px solid var(--background-modifier-border-hover);
+}
+
+.omi-insight-item:last-child {
+    border-bottom: none;
+}
+
+.omi-insight-item strong {
+    color: var(--interactive-accent);
+    font-weight: 600;
+}
+
+.omi-insights-text {
+    flex: 1;
+}
+
+.omi-insights-text p {
+    margin: 0 0 6px 0;
+    line-height: 1.4;
+    font-size: 0.9em;
+    color: var(--text-normal);
+}
+
+.omi-insights-text p strong {
+    color: var(--interactive-accent);
+    font-weight: 600;
+}
+
+.omi-insights-text .omi-insights-quiet {
+    font-size: 0.8em;
+    color: var(--text-muted);
+}
+
+.omi-insights-chart {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 4px;
+    height: 50px;
+    padding-top: 8px;
+    border-top: 1px solid var(--background-modifier-border);
+}
+
+.omi-insights-bar-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    flex: 1;
+    height: 100%;
+}
+
+.omi-insights-bar {
+    width: 100%;
+    max-width: 28px;
+    background: linear-gradient(to top, var(--interactive-accent), rgba(139, 92, 246, 0.5));
+    border-radius: 3px 3px 0 0;
+    min-height: 3px;
+    transition: height 0.3s ease;
+}
+
+.omi-insights-bar-label {
+    font-size: 9px;
+    color: var(--text-muted);
+}
+
+/* Radial Clock Tile */
+.omi-stats-radial-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.omi-stats-radial-container {
+    display: flex;
+    justify-content: center;
+    padding: 10px;
+}
+
+.omi-radial-clock {
+    width: 100%;
+    max-width: 280px;
+    height: auto;
+}
+
+.omi-radial-hour-label {
+    font-size: 9px;
+    fill: var(--text-muted);
+    font-weight: 500;
+}
+
+.omi-radial-center-label {
+    font-size: 14px;
+    fill: var(--interactive-accent);
+    font-weight: 700;
+}
+
+.omi-radial-legend {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-align: center;
+    margin-top: 8px;
+}
+
+/* Ridge Plot Tile */
+.omi-stats-ridge-tile {
+    display: flex;
+    flex-direction: column;
+}
+
+.omi-stats-ridge-container {
+    display: flex;
+    justify-content: center;
+    padding: 10px 0;
+}
+
+.omi-ridge-plot {
+    width: 100%;
+    max-width: 320px;
+    height: auto;
+}
+
+.omi-ridge-day-label {
+    font-size: 10px;
+    fill: var(--text-muted);
+    font-weight: 500;
+}
+
+.omi-ridge-hour-label {
+    font-size: 9px;
+    fill: var(--text-muted);
+}
+
+/* Activity Fingerprint Tile */
+.omi-stats-fingerprint-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.omi-stats-fingerprint-container {
+    display: flex;
+    justify-content: center;
+    padding: 10px;
+}
+
+.omi-fingerprint {
+    width: 100%;
+    max-width: 260px;
+    height: auto;
+}
+
+.omi-fingerprint-day-label {
+    font-size: 9px;
+    fill: var(--text-muted);
+    font-weight: 500;
+}
+
+/* Activity Flow Tile - Square */
+.omi-stats-flow-tile {
+    /* Single column square tile */
+}
+
+.omi-stats-flow-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 8px;
+    border-radius: var(--omi-radius-md);
+    overflow: hidden;
+}
+
+.omi-stats-flow-container canvas {
+    border-radius: var(--omi-radius-md);
+    width: 100% !important;
+    height: auto !important;
+    aspect-ratio: 1;
+}
+
 /* Category Tiles */
 .omi-stats-categories-tile {
     min-height: 200px;

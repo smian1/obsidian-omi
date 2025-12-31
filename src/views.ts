@@ -3208,6 +3208,9 @@ export class OmiHubView extends ItemView {
 		// Row 2: Time patterns heatmap (full width)
 		this.renderTimePatternHeatmap(grid, stats);
 
+		// Activity Insights with rotating highlights
+		this.renderInsightsSummary(grid, stats);
+
 		// Row 3: Categories and Duration Distribution
 		this.renderCategoryTilesGrid(grid, stats);
 		this.renderDurationDistributionTile(grid, stats);
@@ -3220,9 +3223,6 @@ export class OmiHubView extends ItemView {
 		if (stats.uniqueLocations > 0) {
 			this.renderLocationsTile(grid, stats);
 		}
-
-		// Row 6: Period Highlights (This Week/Month)
-		this.renderHighlightsTile(grid, stats);
 	}
 
 	private async loadStatsData(): Promise<void> {
@@ -4400,6 +4400,471 @@ export class OmiHubView extends ItemView {
 				}
 			}
 		}
+	}
+
+	// ==================== EXPERIMENTAL VISUALIZATIONS ====================
+
+	private renderInsightsSummary(container: HTMLElement, stats: StatsData): void {
+		const tile = container.createDiv('omi-stats-tile omi-stats-insights-tile');
+
+		// Header with period indicator
+		const header = tile.createDiv('omi-stats-tile-header');
+		header.createEl('span', { text: '💡', cls: 'omi-stats-tile-icon' });
+		const titleText = this.getHighlightsTitle();
+		header.createEl('span', { text: titleText, cls: 'omi-stats-tile-title' });
+
+		// KPI row - 4 mini stats
+		const kpiRow = tile.createDiv('omi-insights-kpi-row');
+
+		// Conversations
+		const kpi1 = kpiRow.createDiv('omi-insights-kpi');
+		kpi1.createEl('div', { text: String(stats.conversationCount), cls: 'omi-insights-kpi-value' });
+		kpi1.createEl('div', { text: 'convos', cls: 'omi-insights-kpi-label' });
+		if (stats.conversationTrend !== 0) {
+			const trend1 = kpi1.createDiv('omi-insights-kpi-trend');
+			trend1.addClass(stats.conversationTrend > 0 ? 'positive' : 'negative');
+			trend1.setText(`${stats.conversationTrend > 0 ? '↑' : '↓'}${Math.abs(Math.round(stats.conversationTrend))}%`);
+		}
+
+		// Time recorded
+		const kpi2 = kpiRow.createDiv('omi-insights-kpi');
+		kpi2.createEl('div', { text: this.formatDuration(stats.totalDuration), cls: 'omi-insights-kpi-value' });
+		kpi2.createEl('div', { text: 'recorded', cls: 'omi-insights-kpi-label' });
+		if (stats.durationTrend !== 0) {
+			const trend2 = kpi2.createDiv('omi-insights-kpi-trend');
+			trend2.addClass(stats.durationTrend > 0 ? 'positive' : 'negative');
+			trend2.setText(`${stats.durationTrend > 0 ? '↑' : '↓'}${Math.abs(Math.round(stats.durationTrend))}%`);
+		}
+
+		// Tasks done
+		const tasksCompleted = stats.taskStats?.completed || 0;
+		const kpi3 = kpiRow.createDiv('omi-insights-kpi');
+		kpi3.createEl('div', { text: String(tasksCompleted), cls: 'omi-insights-kpi-value' });
+		kpi3.createEl('div', { text: 'tasks done', cls: 'omi-insights-kpi-label' });
+
+		// Streak
+		const kpi4 = kpiRow.createDiv('omi-insights-kpi');
+		kpi4.createEl('div', { text: stats.streak > 0 ? `${stats.streak}🔥` : '0', cls: 'omi-insights-kpi-value' });
+		kpi4.createEl('div', { text: 'day streak', cls: 'omi-insights-kpi-label' });
+
+		const content = tile.createDiv('omi-stats-insights-content');
+
+		// Calculate day totals
+		const dayTotals: { day: number; name: string; count: number }[] = [];
+		const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+		for (let d = 0; d < 7; d++) {
+			const dayCount = stats.heatmap.filter(c => c.day === d).reduce((sum, c) => sum + c.count, 0);
+			dayTotals.push({ day: d, name: dayNames[d], count: dayCount });
+		}
+		dayTotals.sort((a, b) => b.count - a.count);
+
+		const busiestDay = dayTotals[0];
+		const quietestDay = dayTotals[dayTotals.length - 1];
+		const avgDaily = dayTotals.reduce((sum, d) => sum + d.count, 0) / 7;
+
+		// Calculate time of day patterns
+		const morningCount = stats.heatmap.filter(c => c.hour >= 6 && c.hour < 12).reduce((sum, c) => sum + c.count, 0);
+		const afternoonCount = stats.heatmap.filter(c => c.hour >= 12 && c.hour < 18).reduce((sum, c) => sum + c.count, 0);
+		const eveningCount = stats.heatmap.filter(c => c.hour >= 18 && c.hour < 24).reduce((sum, c) => sum + c.count, 0);
+		const nightCount = stats.heatmap.filter(c => c.hour >= 0 && c.hour < 6).reduce((sum, c) => sum + c.count, 0);
+
+		const timeSlots = [
+			{ name: 'mornings', count: morningCount },
+			{ name: 'afternoons', count: afternoonCount },
+			{ name: 'evenings', count: eveningCount },
+			{ name: 'late nights', count: nightCount }
+		].sort((a, b) => b.count - a.count);
+
+		// Weekend vs weekday
+		const weekdayCount = dayTotals.filter(d => d.day >= 1 && d.day <= 5).reduce((sum, d) => sum + d.count, 0);
+		const weekendCount = dayTotals.filter(d => d.day === 0 || d.day === 6).reduce((sum, d) => sum + d.count, 0);
+		const weekdayAvg = weekdayCount / 5;
+		const weekendAvg = weekendCount / 2;
+
+		// Calculate category peak times from conversation data
+		const conversations = Object.values(this.plugin.settings.syncedConversations || {}) as SyncedConversationMeta[];
+		const categoryTimeData = new Map<string, { morning: number; afternoon: number; evening: number; night: number; total: number }>();
+
+		for (const conv of conversations) {
+			const cat = conv.category || 'other';
+			const hour = new Date(conv.startedAt).getHours();
+
+			if (!categoryTimeData.has(cat)) {
+				categoryTimeData.set(cat, { morning: 0, afternoon: 0, evening: 0, night: 0, total: 0 });
+			}
+			const data = categoryTimeData.get(cat)!;
+			data.total++;
+
+			if (hour >= 6 && hour < 12) data.morning++;
+			else if (hour >= 12 && hour < 18) data.afternoon++;
+			else if (hour >= 18 && hour < 24) data.evening++;
+			else data.night++;
+		}
+
+		// Get top 3 categories and their peak times
+		const categoryPeaks = Array.from(categoryTimeData.entries())
+			.sort((a, b) => b[1].total - a[1].total)
+			.slice(0, 3)
+			.map(([cat, data]) => {
+				const times = [
+					{ name: 'mornings', count: data.morning },
+					{ name: 'afternoons', count: data.afternoon },
+					{ name: 'evenings', count: data.evening },
+					{ name: 'late night', count: data.night }
+				];
+				const peak = times.sort((a, b) => b.count - a.count)[0];
+				return { category: cat, peakTime: peak.name, count: data.total };
+			});
+
+		// Build all insights as an array for rotation
+		const allInsights: string[] = [];
+
+		// Main insight - busiest day
+		const busiestMultiplier = avgDaily > 0 ? (busiestDay.count / avgDaily).toFixed(1) : '1.0';
+		allInsights.push(`You're most active on <strong>${busiestDay.name}s</strong> (${busiestMultiplier}x average), especially during <strong>${timeSlots[0].name}</strong>.`);
+
+		// Weekend/weekday insight
+		if (weekendAvg < weekdayAvg * 0.7) {
+			const pctLess = Math.round((1 - weekendAvg / weekdayAvg) * 100);
+			allInsights.push(`Weekends are <strong>${pctLess}% quieter</strong> than weekdays.`);
+		} else if (weekendAvg > weekdayAvg * 1.3) {
+			const pctMore = Math.round((weekendAvg / weekdayAvg - 1) * 100);
+			allInsights.push(`Weekends are <strong>${pctMore}% busier</strong> than weekdays.`);
+		} else {
+			allInsights.push(`Your activity is <strong>consistent</strong> throughout the week.`);
+		}
+
+		// Category peak times
+		if (categoryPeaks.length > 0) {
+			const topCat = categoryPeaks[0];
+			let catInsight = `<strong>${topCat.category}</strong> peaks in <strong>${topCat.peakTime}</strong>`;
+			if (categoryPeaks.length > 1) {
+				catInsight += `, <strong>${categoryPeaks[1].category}</strong> in <strong>${categoryPeaks[1].peakTime}</strong>`;
+			}
+			allInsights.push(catInsight + '.');
+		}
+
+		// Peak time insight
+		if (stats.peakHour) {
+			allInsights.push(`Peak activity time: <strong>${stats.peakHour}</strong>`);
+		}
+
+		// Top category
+		if (stats.topCategory && stats.topCategory !== 'Unknown') {
+			allInsights.push(`Top category: <strong>${stats.topCategory}</strong>`);
+		}
+
+		// Memory insight
+		if (stats.memoryStats && stats.memoryStats.recentCount > 0) {
+			allInsights.push(`<strong>${stats.memoryStats.recentCount}</strong> new memories this week`);
+		}
+
+		// Task completion rate
+		if (stats.taskStats && stats.taskStats.completed > 0) {
+			const rate = Math.round(stats.taskStats.completionRate * 100);
+			allInsights.push(`Task completion rate: <strong>${rate}%</strong>`);
+		}
+
+		// Quietest time
+		allInsights.push(`Quietest: <strong>${quietestDay.name}s</strong> and <strong>${timeSlots[timeSlots.length - 1].name}</strong>`);
+
+		// Display all insights at once
+		const insightsContainer = content.createDiv('omi-insights-list');
+		for (const insight of allInsights) {
+			const p = insightsContainer.createEl('p', { cls: 'omi-insight-item' });
+			p.innerHTML = insight;
+		}
+
+		// Mini bar chart showing day distribution
+		const chart = content.createDiv('omi-insights-chart');
+		const maxCount = Math.max(...dayTotals.map(d => d.count));
+		const orderedDays = [1, 2, 3, 4, 5, 6, 0]; // Mon-Sun
+
+		for (const dayIdx of orderedDays) {
+			const dayData = dayTotals.find(d => d.day === dayIdx)!;
+			const barWrapper = chart.createDiv('omi-insights-bar-wrapper');
+			const bar = barWrapper.createDiv('omi-insights-bar');
+			bar.style.height = `${maxCount > 0 ? (dayData.count / maxCount) * 100 : 0}%`;
+			barWrapper.createEl('span', { text: dayData.name.slice(0, 3), cls: 'omi-insights-bar-label' });
+		}
+	}
+
+	private renderRadialClock(container: HTMLElement, stats: StatsData): void {
+		const tile = container.createDiv('omi-stats-tile omi-stats-radial-tile');
+
+		const header = tile.createDiv('omi-stats-tile-header');
+		header.createEl('span', { text: '🕐', cls: 'omi-stats-tile-icon' });
+		header.createEl('span', { text: 'Activity Clock', cls: 'omi-stats-tile-title' });
+
+		const clockContainer = tile.createDiv('omi-stats-radial-container');
+
+		// SVG setup
+		const size = 280;
+		const center = size / 2;
+		const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+		svg.setAttribute('viewBox', `0 0 ${size} ${size}`);
+		svg.setAttribute('class', 'omi-radial-clock');
+
+		// Find max count for normalization
+		const maxCount = Math.max(...stats.heatmap.map(c => c.count), 1);
+
+		// Draw 7 concentric rings (one per day, Mon-Sun from inner to outer)
+		const dayOrder = [1, 2, 3, 4, 5, 6, 0]; // Mon-Sun
+		const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+		const ringWidth = 16;
+		const innerRadius = 35;
+
+		for (let ringIdx = 0; ringIdx < 7; ringIdx++) {
+			const dayIdx = dayOrder[ringIdx];
+			const radius = innerRadius + ringIdx * ringWidth;
+
+			// Draw 24 segments for each hour
+			for (let hour = 0; hour < 24; hour++) {
+				const cell = stats.heatmap.find(c => c.day === dayIdx && c.hour === hour);
+				const count = cell?.count || 0;
+				const intensity = count / maxCount;
+
+				// Calculate arc angles (0 = top, clockwise)
+				const startAngle = (hour / 24) * 2 * Math.PI - Math.PI / 2;
+				const endAngle = ((hour + 1) / 24) * 2 * Math.PI - Math.PI / 2;
+
+				const x1 = center + radius * Math.cos(startAngle);
+				const y1 = center + radius * Math.sin(startAngle);
+				const x2 = center + radius * Math.cos(endAngle);
+				const y2 = center + radius * Math.sin(endAngle);
+				const x3 = center + (radius + ringWidth - 2) * Math.cos(endAngle);
+				const y3 = center + (radius + ringWidth - 2) * Math.sin(endAngle);
+				const x4 = center + (radius + ringWidth - 2) * Math.cos(startAngle);
+				const y4 = center + (radius + ringWidth - 2) * Math.sin(startAngle);
+
+				const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+				const d = `M ${x1} ${y1} A ${radius} ${radius} 0 0 1 ${x2} ${y2} L ${x3} ${y3} A ${radius + ringWidth - 2} ${radius + ringWidth - 2} 0 0 0 ${x4} ${y4} Z`;
+				path.setAttribute('d', d);
+
+				// Color based on intensity
+				const alpha = intensity === 0 ? 0.08 : 0.2 + intensity * 0.8;
+				path.setAttribute('fill', `rgba(139, 92, 246, ${alpha})`);
+				path.setAttribute('stroke', 'rgba(255,255,255,0.3)');
+				path.setAttribute('stroke-width', '0.5');
+
+				// Tooltip
+				const hourLabel = hour === 0 ? '12am' : hour < 12 ? `${hour}am` : hour === 12 ? '12pm' : `${hour - 12}pm`;
+				const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+				title.textContent = `${dayNames[dayIdx]} ${hourLabel}: ${count} conversations`;
+				path.appendChild(title);
+
+				svg.appendChild(path);
+			}
+		}
+
+		// Hour labels around the edge
+		for (let hour = 0; hour < 24; hour += 3) {
+			const angle = (hour / 24) * 2 * Math.PI - Math.PI / 2;
+			const labelRadius = center - 8;
+			const x = center + labelRadius * Math.cos(angle);
+			const y = center + labelRadius * Math.sin(angle);
+
+			const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+			text.setAttribute('x', String(x));
+			text.setAttribute('y', String(y));
+			text.setAttribute('text-anchor', 'middle');
+			text.setAttribute('dominant-baseline', 'middle');
+			text.setAttribute('class', 'omi-radial-hour-label');
+			const hourLabel = hour === 0 ? '12a' : hour < 12 ? `${hour}a` : hour === 12 ? '12p' : `${hour - 12}p`;
+			text.textContent = hourLabel;
+			svg.appendChild(text);
+		}
+
+		// Center label
+		const centerText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+		centerText.setAttribute('x', String(center));
+		centerText.setAttribute('y', String(center));
+		centerText.setAttribute('text-anchor', 'middle');
+		centerText.setAttribute('dominant-baseline', 'middle');
+		centerText.setAttribute('class', 'omi-radial-center-label');
+		centerText.textContent = stats.peakHour;
+		svg.appendChild(centerText);
+
+		clockContainer.appendChild(svg);
+
+		// Legend
+		const legend = tile.createDiv('omi-radial-legend');
+		legend.innerHTML = '<span>Inner → Outer: Mon → Sun</span>';
+	}
+
+	private renderRidgePlot(container: HTMLElement, stats: StatsData): void {
+		const tile = container.createDiv('omi-stats-tile omi-stats-ridge-tile');
+
+		const header = tile.createDiv('omi-stats-tile-header');
+		header.createEl('span', { text: '📈', cls: 'omi-stats-tile-icon' });
+		header.createEl('span', { text: 'Daily Rhythms', cls: 'omi-stats-tile-title' });
+
+		const plotContainer = tile.createDiv('omi-stats-ridge-container');
+
+		const width = 320;
+		const height = 220;
+		const rowHeight = 28;
+		const leftPadding = 40;
+
+		const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+		svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+		svg.setAttribute('class', 'omi-ridge-plot');
+
+		// Find max count for normalization
+		const maxCount = Math.max(...stats.heatmap.map(c => c.count), 1);
+
+		const dayOrder = [1, 2, 3, 4, 5, 6, 0]; // Mon-Sun
+		const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+		// Draw each day as a ridge line
+		dayOrder.forEach((dayIdx, rowIdx) => {
+			const baseY = 20 + rowIdx * rowHeight;
+
+			// Get hourly data for this day
+			const hourlyData: number[] = [];
+			for (let hour = 0; hour < 24; hour++) {
+				const cell = stats.heatmap.find(c => c.day === dayIdx && c.hour === hour);
+				hourlyData.push(cell?.count || 0);
+			}
+
+			// Create smooth path
+			const points: string[] = [];
+			const xScale = (width - leftPadding - 10) / 23;
+
+			for (let hour = 0; hour < 24; hour++) {
+				const x = leftPadding + hour * xScale;
+				const normalizedHeight = (hourlyData[hour] / maxCount) * (rowHeight * 0.8);
+				const y = baseY - normalizedHeight;
+				points.push(`${hour === 0 ? 'M' : 'L'} ${x} ${y}`);
+			}
+
+			// Close the path for fill
+			const fillPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+			const closedPath = points.join(' ') + ` L ${leftPadding + 23 * xScale} ${baseY} L ${leftPadding} ${baseY} Z`;
+			fillPath.setAttribute('d', closedPath);
+			fillPath.setAttribute('fill', `rgba(139, 92, 246, ${0.3 + rowIdx * 0.08})`);
+			fillPath.setAttribute('stroke', 'rgba(139, 92, 246, 0.8)');
+			fillPath.setAttribute('stroke-width', '1.5');
+			svg.appendChild(fillPath);
+
+			// Day label
+			const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+			label.setAttribute('x', '5');
+			label.setAttribute('y', String(baseY - 2));
+			label.setAttribute('class', 'omi-ridge-day-label');
+			label.textContent = dayNames[rowIdx];
+			svg.appendChild(label);
+		});
+
+		// Hour labels at bottom
+		const hourLabels = ['12a', '6a', '12p', '6p', '12a'];
+		const xScale = (width - leftPadding - 10) / 23;
+		hourLabels.forEach((label, i) => {
+			const hour = i * 6;
+			const x = leftPadding + (hour === 24 ? 23 : hour) * xScale;
+			const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+			text.setAttribute('x', String(x));
+			text.setAttribute('y', String(height - 5));
+			text.setAttribute('text-anchor', 'middle');
+			text.setAttribute('class', 'omi-ridge-hour-label');
+			text.textContent = label;
+			svg.appendChild(text);
+		});
+
+		plotContainer.appendChild(svg);
+	}
+
+	private renderActivityFingerprint(container: HTMLElement, stats: StatsData): void {
+		const tile = container.createDiv('omi-stats-tile omi-stats-fingerprint-tile');
+
+		const header = tile.createDiv('omi-stats-tile-header');
+		header.createEl('span', { text: '🔮', cls: 'omi-stats-tile-icon' });
+		header.createEl('span', { text: 'Your Activity Fingerprint', cls: 'omi-stats-tile-title' });
+
+		const fpContainer = tile.createDiv('omi-stats-fingerprint-container');
+
+		const size = 260;
+		const center = size / 2;
+
+		const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+		svg.setAttribute('viewBox', `0 0 ${size} ${size}`);
+		svg.setAttribute('class', 'omi-fingerprint');
+
+		// Create 168 data points (7 days × 24 hours) as a spiral
+		const maxCount = Math.max(...stats.heatmap.map(c => c.count), 1);
+
+		// Build ordered data: Mon 0h, Mon 1h, ... Sun 23h
+		const orderedData: number[] = [];
+		const dayOrder = [1, 2, 3, 4, 5, 6, 0];
+		for (const dayIdx of dayOrder) {
+			for (let hour = 0; hour < 24; hour++) {
+				const cell = stats.heatmap.find(c => c.day === dayIdx && c.hour === hour);
+				orderedData.push(cell?.count || 0);
+			}
+		}
+
+		// Draw as polar area / flower petals
+		const totalPoints = orderedData.length; // 168
+		const baseRadius = 30;
+		const maxRadius = 115;
+
+		// Draw filled polygon
+		const pathPoints: string[] = [];
+		for (let i = 0; i < totalPoints; i++) {
+			const angle = (i / totalPoints) * 2 * Math.PI - Math.PI / 2;
+			const intensity = orderedData[i] / maxCount;
+			const radius = baseRadius + intensity * (maxRadius - baseRadius);
+
+			const x = center + radius * Math.cos(angle);
+			const y = center + radius * Math.sin(angle);
+			pathPoints.push(`${i === 0 ? 'M' : 'L'} ${x} ${y}`);
+		}
+		pathPoints.push('Z');
+
+		const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+		path.setAttribute('d', pathPoints.join(' '));
+		path.setAttribute('fill', 'rgba(139, 92, 246, 0.3)');
+		path.setAttribute('stroke', 'rgba(139, 92, 246, 0.8)');
+		path.setAttribute('stroke-width', '1.5');
+		svg.appendChild(path);
+
+		// Draw reference circles
+		for (const r of [50, 80, 110]) {
+			const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+			circle.setAttribute('cx', String(center));
+			circle.setAttribute('cy', String(center));
+			circle.setAttribute('r', String(r));
+			circle.setAttribute('fill', 'none');
+			circle.setAttribute('stroke', 'rgba(139, 92, 246, 0.15)');
+			circle.setAttribute('stroke-width', '1');
+			svg.appendChild(circle);
+		}
+
+		// Day markers around the edge
+		const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+		for (let d = 0; d < 7; d++) {
+			const angle = (d * 24 / totalPoints) * 2 * Math.PI - Math.PI / 2;
+			const labelRadius = maxRadius + 12;
+			const x = center + labelRadius * Math.cos(angle);
+			const y = center + labelRadius * Math.sin(angle);
+
+			const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+			text.setAttribute('x', String(x));
+			text.setAttribute('y', String(y));
+			text.setAttribute('text-anchor', 'middle');
+			text.setAttribute('dominant-baseline', 'middle');
+			text.setAttribute('class', 'omi-fingerprint-day-label');
+			text.textContent = dayLabels[d];
+			svg.appendChild(text);
+		}
+
+		fpContainer.appendChild(svg);
+
+		// Subtitle
+		tile.createEl('div', {
+			text: 'Your unique weekly activity pattern',
+			cls: 'omi-stats-subtitle'
+		});
 	}
 
 	private renderCategoryTilesGrid(container: HTMLElement, stats: StatsData): void {
