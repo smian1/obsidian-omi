@@ -214,7 +214,7 @@ export class MemoriesHubSync {
 		}
 
 		try {
-			const memories = await this.plugin.api.getAllMemories();
+			const memories = await this.plugin.api.getAllMemories(this.plugin.settings.memoriesFetchLimit);
 			await this.writeToFile(memories);
 			return { count: memories.length };
 		} catch (error) {

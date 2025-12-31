@@ -224,7 +224,7 @@ export class OmiHubView extends ItemView {
 		this.isLoadingMemories = true;
 		this.render();
 		try {
-			const items = await this.plugin.api.getAllMemories();
+			const items = await this.plugin.api.getAllMemories(this.plugin.settings.memoriesFetchLimit);
 			this.memories = items.map(item => ({
 				...item,
 				isEditing: false
@@ -1174,11 +1174,12 @@ export class OmiHubView extends ItemView {
 		const ctx = canvas.getContext('2d');
 		if (!ctx) return;
 
-		// Set canvas size
+		// Set canvas size - use requestAnimationFrame to ensure layout is ready
 		const resizeCanvas = () => {
 			const rect = graphContainer.getBoundingClientRect();
-			canvas.width = rect.width;
-			canvas.height = Math.max(400, rect.height);
+			// Use fallback dimensions if container isn't laid out yet
+			canvas.width = rect.width > 0 ? rect.width : 600;
+			canvas.height = Math.max(400, rect.height > 0 ? rect.height : 400);
 		};
 		resizeCanvas();
 
@@ -1437,6 +1438,12 @@ export class OmiHubView extends ItemView {
 		const centerPull = 0.006; // Gentle center pull
 		const boundaryForce = 0.2; // Strong boundary to maintain circle
 
+		// Create node lookup for faster access (O(1) instead of O(n) find)
+		const nodeMap = new Map<string, typeof nodes[0]>();
+		for (const node of nodes) {
+			nodeMap.set(node.id, node);
+		}
+
 		// Create edge lookup for faster access
 		const edgeMap = new Map<string, typeof edges[0][]>();
 		for (const edge of edges) {
@@ -1451,7 +1458,8 @@ export class OmiHubView extends ItemView {
 		const maxFrames = 400; // More frames for better settling
 
 		const animate = () => {
-			if (!ctx) return;
+			// Stop if context is invalid or this canvas is no longer the active one
+			if (!ctx || this.graphCanvas !== canvas) return;
 			frameCount++;
 
 			// Apply forces only for first N frames and when not dragging a node
@@ -1477,8 +1485,8 @@ export class OmiHubView extends ItemView {
 
 				// Attraction along edges
 				for (const edge of edges) {
-					const source = nodes.find(n => n.id === edge.source);
-					const target = nodes.find(n => n.id === edge.target);
+					const source = nodeMap.get(edge.source);
+					const target = nodeMap.get(edge.target);
 					if (source && target) {
 						const dx = target.x - source.x;
 						const dy = target.y - source.y;
@@ -1527,8 +1535,8 @@ export class OmiHubView extends ItemView {
 
 			// Draw edges
 			for (const edge of edges) {
-				const source = nodes.find(n => n.id === edge.source);
-				const target = nodes.find(n => n.id === edge.target);
+				const source = nodeMap.get(edge.source);
+				const target = nodeMap.get(edge.target);
 				if (source && target) {
 					const isHighlighted = (hoveredNode && (edge.source === hoveredNode.id || edge.target === hoveredNode.id)) ||
 						(selectedNode && (edge.source === selectedNode.id || edge.target === selectedNode.id));
@@ -3222,7 +3230,7 @@ export class OmiHubView extends ItemView {
 		try {
 			// Load memories and tasks in parallel
 			const [memories, tasks] = await Promise.all([
-				this.plugin.api.getAllMemories().catch(() => []),
+				this.plugin.api.getAllMemories(this.plugin.settings.memoriesFetchLimit).catch(() => []),
 				this.plugin.api.getAllActionItems().catch(() => [])
 			]);
 			this.statsMemories = memories;

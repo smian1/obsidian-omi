@@ -312,5 +312,17 @@ export class OmiConversationsSettingTab extends PluginSettingTab {
 						this.plugin.startTasksHubPeriodicSync();
 					}
 				}));
+
+		new Setting(containerEl)
+			.setName('Memories fetch limit')
+			.setDesc('Maximum number of memories to retrieve per request')
+			.addSlider(slider => slider
+				.setLimits(50, 1000, 50)
+				.setValue(this.plugin.settings.memoriesFetchLimit)
+				.setDynamicTooltip()
+				.onChange(async (value) => {
+					this.plugin.settings.memoriesFetchLimit = value;
+					await this.plugin.saveSettings();
+				}));
 	}
 }

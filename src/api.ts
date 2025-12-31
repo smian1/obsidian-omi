@@ -365,9 +365,9 @@ export class OmiAPI {
 	}
 
 	// Memories API methods
-	async getAllMemories(): Promise<MemoryFromAPI[]> {
+	async getAllMemories(limit: number = 500): Promise<MemoryFromAPI[]> {
 		const url = `${this.baseUrl}/v1/dev/user/memories`;
-		const params = new URLSearchParams({ limit: '500' });
+		const params = new URLSearchParams({ limit: limit.toString() });
 		return this.makeApiRequest<MemoryFromAPI[]>(url, 'GET', params);
 	}
 

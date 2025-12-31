@@ -28,6 +28,7 @@ export interface OmiConversationsSettings {
 	memoriesViewAutoRefresh: number;  // Auto-refresh interval (minutes, 0 = disabled)
 	memoriesViewMode: 'list' | 'graph';  // View mode: list or tag graph
 	memoriesHubFilePath: string;  // Backup file name (e.g., 'Memories.md')
+	memoriesFetchLimit: number;  // Max memories to retrieve per request (default 500)
 	// Daily notes integration
 	enableDailyNotesLink: boolean;  // Toggle daily notes linking
 	dailyNotesFolder: string;  // Path to daily notes folder

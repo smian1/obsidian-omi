@@ -46,6 +46,7 @@ export const DEFAULT_SETTINGS: OmiConversationsSettings = {
 	memoriesViewAutoRefresh: 10,  // Auto-refresh every 10 minutes by default
 	memoriesViewMode: 'list',  // Default to list view
 	memoriesHubFilePath: 'Memories.md',  // Backup file name
+	memoriesFetchLimit: 500,  // Max memories to retrieve per request
 	// Daily notes integration
 	enableDailyNotesLink: false,  // Disabled by default
 	dailyNotesFolder: '',  // Empty = root of vault
