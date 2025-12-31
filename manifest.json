@@ -1,7 +1,7 @@
 {
 	"id": "omi-conversations",
 	"name": "Omi Hub",
-	"version": "2.0.1",
+	"version": "2.0.3",
 	"minAppVersion": "0.15.0",
 	"description": "Sync your Omi AI conversation memories into organized markdown files.",
 	"author": "Salman M.",

@@ -9,11 +9,32 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 cd "$PROJECT_DIR"
 
-# Extract version from manifest.json
+# Extract current version from manifest.json
 VERSION=$(grep '"version"' manifest.json | sed 's/.*: "\(.*\)".*/\1/')
+
+# Parse version into components and increment patch
+IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+NEW_PATCH=$((PATCH + 1))
+NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
+
+echo "Bumping version: $VERSION → $NEW_VERSION"
+
+# Update manifest.json
+sed -i '' "s/\"version\": \"$VERSION\"/\"version\": \"$NEW_VERSION\"/" manifest.json
+
+# Update package.json
+sed -i '' "s/\"version\": \"$VERSION\"/\"version\": \"$NEW_VERSION\"/" package.json
+
+# Add entry to versions.json (insert after last existing entry)
+MIN_APP_VERSION=$(grep '"minAppVersion"' manifest.json | sed 's/.*: "\(.*\)".*/\1/')
+sed -i '' "s/\"$VERSION\": \"$MIN_APP_VERSION\"/\"$VERSION\": \"$MIN_APP_VERSION\",\\
+	\"$NEW_VERSION\": \"$MIN_APP_VERSION\"/" versions.json
+
+# Use new version for package name
+VERSION="$NEW_VERSION"
 PLUGIN_ID="omi-conversations"
 DIST_DIR="dist"
-ZIP_NAME="${PLUGIN_ID}-v${VERSION}.zip"
+ZIP_NAME="omi-obsidian-plugin-v${VERSION}.zip"
 
 echo "Packaging $PLUGIN_ID v$VERSION..."
 
