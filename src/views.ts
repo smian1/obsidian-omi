@@ -5120,12 +5120,12 @@ export class OmiHubView extends ItemView {
 		header.createEl('span', { text: '📍', cls: 'omi-stats-tile-icon' });
 		header.createEl('span', { text: 'Locations', cls: 'omi-stats-tile-title' });
 
-		// Map icon button
+		// Map icon button to go to full map
 		const mapBtn = header.createEl('button', {
 			cls: 'omi-stats-view-btn clickable-icon',
-			attr: { 'aria-label': 'View on map' }
+			attr: { 'aria-label': 'View full map' }
 		});
-		setIcon(mapBtn, 'map');
+		setIcon(mapBtn, 'maximize-2');
 		mapBtn.addEventListener('click', () => {
 			this.activeTab = 'map';
 			this.plugin.settings.activeHubTab = 'map';
@@ -5133,38 +5133,111 @@ export class OmiHubView extends ItemView {
 			this.render();
 		});
 
-		// Big number - unique places
-		const value = tile.createDiv('omi-stats-kpi-value');
-		value.createEl('span', { text: String(stats.uniqueLocations), cls: 'omi-stats-big-number' });
-		tile.createEl('span', { text: 'unique places', cls: 'omi-stats-unit' });
+		// Stats row with count
+		const statsRow = tile.createDiv('omi-locations-stats-row');
+		const countEl = statsRow.createDiv('omi-locations-count');
+		countEl.createEl('span', { text: String(stats.uniqueLocations), cls: 'omi-locations-count-value' });
+		countEl.createEl('span', { text: 'places', cls: 'omi-locations-count-label' });
 
-		// Country and state counts
-		const breakdown = tile.createDiv('omi-stats-location-breakdown');
+		// Mini breakdown
+		const breakdown = statsRow.createDiv('omi-locations-breakdown');
 		if (stats.countries.length > 0) {
-			breakdown.createEl('span', {
-				text: `${stats.countries.length} ${stats.countries.length === 1 ? 'country' : 'countries'}`,
-				cls: 'omi-stats-location-stat'
-			});
+			breakdown.createEl('span', { text: `${stats.countries.length} countries` });
 		}
 		if (stats.states.length > 0) {
-			if (stats.countries.length > 0) {
-				breakdown.createEl('span', { text: '•', cls: 'omi-stats-separator' });
-			}
-			breakdown.createEl('span', {
-				text: `${stats.states.length} ${stats.states.length === 1 ? 'state' : 'states'}`,
-				cls: 'omi-stats-location-stat'
-			});
+			breakdown.createEl('span', { text: `${stats.states.length} states` });
+		}
+		if (stats.cities.length > 0) {
+			breakdown.createEl('span', { text: `${stats.cities.length} cities` });
 		}
 
-		// Top cities preview
-		if (stats.cities.length > 0) {
-			const citiesPreview = tile.createDiv('omi-stats-cities-preview');
-			const displayCities = stats.cities.slice(0, 4);
-			citiesPreview.createEl('span', {
-				text: displayCities.join(', ') + (stats.cities.length > 4 ? '...' : ''),
-				cls: 'omi-stats-cities-list'
-			});
+		// Mini map container
+		const miniMapContainer = tile.createDiv('omi-locations-mini-map');
+		const mapEl = miniMapContainer.createDiv('omi-mini-map-leaflet');
+		mapEl.id = 'omi-mini-map-' + Date.now();
+
+		// Get conversations with geo data
+		const conversationsWithGeo = Object.values(this.plugin.settings.syncedConversations)
+			.filter(c => c.geolocation?.latitude && c.geolocation?.longitude) as SyncedConversationMeta[];
+
+		if (conversationsWithGeo.length === 0) {
+			miniMapContainer.addClass('omi-mini-map-empty');
+			miniMapContainer.empty();
+			miniMapContainer.createEl('span', { text: 'No location data', cls: 'omi-mini-map-empty-text' });
+			return;
 		}
+
+		// Load Leaflet and render mini map
+		this.loadLeaflet().then(() => {
+			this.initializeMiniMap(mapEl, conversationsWithGeo);
+		}).catch(() => {
+			miniMapContainer.empty();
+			miniMapContainer.createEl('span', { text: 'Map unavailable', cls: 'omi-mini-map-error' });
+		});
+	}
+
+	private initializeMiniMap(mapEl: HTMLElement, conversations: SyncedConversationMeta[]): void {
+		const L = (window as any).L;
+		if (!L) return;
+
+		// Calculate bounds
+		const validCoords = conversations
+			.filter(c => c.geolocation?.latitude && c.geolocation?.longitude)
+			.map(c => [c.geolocation!.latitude, c.geolocation!.longitude] as [number, number]);
+
+		if (validCoords.length === 0) return;
+
+		const bounds = L.latLngBounds(validCoords);
+
+		// Create map with minimal controls
+		const map = L.map(mapEl, {
+			zoomControl: false,
+			attributionControl: false,
+			dragging: false,
+			scrollWheelZoom: false,
+			doubleClickZoom: false,
+			boxZoom: false,
+			keyboard: false,
+			touchZoom: false
+		});
+
+		// Fit bounds with padding
+		map.fitBounds(bounds, { padding: [20, 20], maxZoom: 10 });
+
+		// Use a clean tile layer
+		L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+			maxZoom: 19
+		}).addTo(map);
+
+		// Group conversations by location for clustering
+		const locationGroups = this.groupConversationsByLocation(conversations);
+
+		// Add markers
+		for (const [key, convs] of Object.entries(locationGroups)) {
+			const [lat, lng] = key.split(',').map(Number);
+			const count = convs.length;
+
+			// Create a simple circle marker
+			const marker = L.circleMarker([lat, lng], {
+				radius: Math.min(4 + Math.log2(count + 1) * 2, 12),
+				fillColor: '#8b5cf6',
+				color: '#ffffff',
+				weight: 1.5,
+				opacity: 1,
+				fillOpacity: 0.8
+			});
+
+			marker.addTo(map);
+		}
+
+		// Make the whole tile clickable to go to full map
+		mapEl.style.cursor = 'pointer';
+		mapEl.addEventListener('click', () => {
+			this.activeTab = 'map';
+			this.plugin.settings.activeHubTab = 'map';
+			this.plugin.saveSettings();
+			this.render();
+		});
 	}
 
 	private renderHighlightsTile(container: HTMLElement, stats: StatsData): void {
