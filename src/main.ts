@@ -28,6 +28,25 @@ export default class OmiConversationsPlugin extends Plugin {
 	// Event emitter for sync progress updates
 	private syncEvents = new Events();
 
+	// API call tracking for rate limiting monitoring (runtime only, not persisted)
+	private apiCallTimestamps: number[] = [];
+
+	// Track an API call (called from api.ts)
+	trackApiCall() {
+		const now = Date.now();
+		this.apiCallTimestamps.push(now);
+		// Keep only last 5 minutes of data
+		const cutoff = now - 5 * 60 * 1000;
+		this.apiCallTimestamps = this.apiCallTimestamps.filter(t => t > cutoff);
+	}
+
+	// Get API calls made in the last minute
+	getApiCallsPerMinute(): number {
+		const now = Date.now();
+		const oneMinuteAgo = now - 60 * 1000;
+		return this.apiCallTimestamps.filter(t => t > oneMinuteAgo).length;
+	}
+
 	// Cancel an ongoing sync
 	cancelSync() {
 		if (this.syncProgress.isActive) {
@@ -39,7 +58,7 @@ export default class OmiConversationsPlugin extends Plugin {
 
 	async onload() {
 		await this.loadSettings();
-		this.api = new OmiAPI(this.settings.apiKey);
+		this.api = new OmiAPI(this.settings.apiKey, () => this.trackApiCall());
 		this.tasksHubSync = new TasksHubSync(this);
 		this.memoriesHubSync = new MemoriesHubSync(this);
 
@@ -680,6 +699,14 @@ export default class OmiConversationsPlugin extends Plugin {
 			);
 
 			if (conversations.length === 0) {
+				// Log empty resync to activity log
+				this.logSyncHistory({
+					type: 'conversations',
+					action: 'resync',
+					count: 0,
+					apiCalls: 1
+				});
+				await this.saveSettings();
 				new Notice(`No conversations found for ${dateLabel}`);
 				this.clearSyncProgress();
 				return;
@@ -789,7 +816,7 @@ export default class OmiConversationsPlugin extends Plugin {
 			// Log to sync history
 			this.logSyncHistory({
 				type: 'conversations',
-				action: 'sync',
+				action: 'resync',
 				count: conversations.length,
 				apiCalls: Math.ceil(conversations.length / 100) || 1
 			});
@@ -806,7 +833,7 @@ export default class OmiConversationsPlugin extends Plugin {
 			// Log failed sync
 			this.logSyncHistory({
 				type: 'conversations',
-				action: 'sync',
+				action: 'resync',
 				count: 0,
 				error: error instanceof Error ? error.message : 'Unknown error'
 			});

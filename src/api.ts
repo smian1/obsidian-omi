@@ -7,13 +7,19 @@ export class OmiAPI {
 	private batchSize = 100; // Omi default is 100
 	private maxRetries = 5;
 	private retryDelay = 1000; // 1 second
+	private onApiCall?: () => void; // Callback to track API calls for rate limiting
 
-	constructor(apiKey: string) {
+	constructor(apiKey: string, onApiCall?: () => void) {
 		this.apiKey = apiKey;
+		this.onApiCall = onApiCall;
 	}
 
 	updateCredentials(apiKey: string) {
 		this.apiKey = apiKey;
+	}
+
+	setApiCallTracker(callback: () => void) {
+		this.onApiCall = callback;
 	}
 
 	async getAllConversations(
@@ -261,6 +267,9 @@ export class OmiAPI {
 		let retries = 0;
 		while (true) {
 			try {
+				// Track API call for rate limiting monitoring
+				this.onApiCall?.();
+
 				const response = await requestUrl({
 					url: `${url}?${params.toString()}`,
 					method: 'GET',
@@ -396,6 +405,9 @@ export class OmiAPI {
 
 		while (true) {
 			try {
+				// Track API call for rate limiting monitoring
+				this.onApiCall?.();
+
 				const requestOptions: {
 					url: string;
 					method: string;

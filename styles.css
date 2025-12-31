@@ -7413,6 +7413,11 @@ svg.leaflet-image-layer.leaflet-interactive path {
     color: #3b82f6;
 }
 
+.omi-sync-log__tag--resync {
+    background: rgba(16, 185, 129, 0.15);
+    color: #10b981;
+}
+
 .omi-sync-log__details {
     font-size: 12px;
     color: var(--text-muted);
@@ -7446,6 +7451,53 @@ svg.leaflet-image-layer.leaflet-interactive path {
 
 .omi-sync-log__empty-text {
     font-size: 13px;
+}
+
+/* ============================================
+   API RATE MONITOR
+   ============================================ */
+.omi-sync-rate {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    background: var(--background-secondary);
+    border-radius: var(--omi-radius-md, 8px);
+    margin-bottom: 16px;
+    font-size: 13px;
+    border: 1px solid var(--background-modifier-border);
+}
+
+.omi-sync-rate__icon {
+    font-size: 14px;
+}
+
+.omi-sync-rate__value {
+    font-weight: 600;
+    font-family: var(--font-monospace);
+    font-size: 14px;
+}
+
+.omi-sync-rate__value--normal {
+    color: var(--sync-success, #10b981);
+}
+
+.omi-sync-rate__value--caution {
+    color: #f59e0b;
+}
+
+.omi-sync-rate__value--warning {
+    color: var(--sync-error, #ef4444);
+}
+
+.omi-sync-rate__label {
+    color: var(--text-muted);
+}
+
+.omi-sync-rate__limit {
+    color: var(--text-faint);
+    font-size: 11px;
+    margin-left: auto;
 }
 
 /* ============================================

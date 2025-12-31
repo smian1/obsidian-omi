@@ -294,7 +294,7 @@ export interface StatsData {
 export interface SyncHistoryEntry {
 	timestamp: string;  // ISO timestamp
 	type: 'conversations' | 'tasks' | 'memories';
-	action: 'sync' | 'full-resync' | 'auto-sync';
+	action: 'sync' | 'full-resync' | 'auto-sync' | 'resync';
 	count: number;      // Items synced
 	apiCalls?: number;  // For conversations
 	error?: string;     // If failed

@@ -2509,8 +2509,34 @@ export class OmiHubView extends ItemView {
 		this.renderSyncCardNew(cardsGrid, 'tasks');
 		this.renderSyncCardNew(cardsGrid, 'memories');
 
+		// API Rate Monitor
+		this.renderApiRateMonitor(tabContent);
+
 		// Sync History Log
 		this.renderSyncLogTimeline(tabContent);
+	}
+
+	private renderApiRateMonitor(container: HTMLElement): void {
+		const callsPerMin = this.plugin.getApiCallsPerMinute();
+		const rateStatus = callsPerMin > 80 ? 'warning' : callsPerMin > 50 ? 'caution' : 'normal';
+
+		const rateContainer = container.createDiv('omi-sync-rate');
+		rateContainer.createSpan({
+			cls: 'omi-sync-rate__icon',
+			text: '⚡'
+		});
+		rateContainer.createSpan({
+			cls: `omi-sync-rate__value omi-sync-rate__value--${rateStatus}`,
+			text: `${callsPerMin}/min`
+		});
+		rateContainer.createSpan({
+			cls: 'omi-sync-rate__label',
+			text: 'API calls'
+		});
+		rateContainer.createSpan({
+			cls: 'omi-sync-rate__limit',
+			text: '(limit: 100/min)'
+		});
 	}
 
 	// Update live banner in-place without re-rendering everything
@@ -2616,14 +2642,14 @@ export class OmiHubView extends ItemView {
 			lastSync = settings.lastMemoriesSyncTimestamp;
 		}
 
-		// Check for recent errors
-		const recentErrors = settings.syncHistory
-			.filter(e => e.type === type && e.error)
-			.slice(0, 1);
+		// Check for errors - only show error if the MOST RECENT sync for this type had an error
+		// This ensures successful syncs clear the error state
+		const mostRecentEntry = settings.syncHistory.find(e => e.type === type);
+		const hasRecentError = mostRecentEntry?.error !== undefined;
 
 		if (isSyncing) {
 			status = 'syncing';
-		} else if (recentErrors.length > 0) {
+		} else if (hasRecentError) {
 			status = 'error';
 		} else if (lastSync) {
 			status = 'synced';
@@ -3051,6 +3077,8 @@ export class OmiHubView extends ItemView {
 				main.createSpan({ cls: 'omi-sync-log__tag omi-sync-log__tag--full', text: 'Full' });
 			} else if (entry.action === 'auto-sync') {
 				main.createSpan({ cls: 'omi-sync-log__tag omi-sync-log__tag--auto', text: 'Auto' });
+			} else if (entry.action === 'resync') {
+				main.createSpan({ cls: 'omi-sync-log__tag omi-sync-log__tag--resync', text: 'Resync' });
 			}
 
 			// Details
