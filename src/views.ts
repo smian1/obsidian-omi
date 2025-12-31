@@ -4272,7 +4272,7 @@ export class OmiHubView extends ItemView {
 		value.createEl('span', { text: stats.conversationCount.toLocaleString(), cls: 'omi-stats-big-number' });
 
 		// Sparkline
-		this.renderSparkline(tile, stats.weeklyConversations, 'var(--omi-accent)');
+		this.renderSparkline(tile, stats.weeklyConversations);
 
 		// Trend
 		if (stats.conversationTrend !== 0 && this.statsTimeRange !== 'all') {
@@ -4296,7 +4296,7 @@ export class OmiHubView extends ItemView {
 		value.createEl('span', { text: this.formatDuration(stats.totalDuration), cls: 'omi-stats-big-number' });
 
 		// Sparkline
-		this.renderSparkline(tile, stats.weeklyDuration, 'var(--omi-accent)');
+		this.renderSparkline(tile, stats.weeklyDuration);
 
 		// Trend
 		if (stats.durationTrend !== 0 && this.statsTimeRange !== 'all') {
@@ -5387,42 +5387,92 @@ export class OmiHubView extends ItemView {
 		return highlights.slice(0, 4);
 	}
 
-	private renderSparkline(container: HTMLElement, data: number[], color: string): void {
+	private renderSparkline(container: HTMLElement, data: number[]): void {
 		if (data.length < 2) return;
 
 		const sparkline = container.createDiv('omi-stats-sparkline');
 
 		const svgNS = 'http://www.w3.org/2000/svg';
 		const svg = document.createElementNS(svgNS, 'svg');
-		svg.setAttribute('viewBox', '0 0 100 30');
+		svg.setAttribute('viewBox', '0 0 100 40');
 		svg.setAttribute('preserveAspectRatio', 'none');
+
+		// Create gradient definition
+		const defs = document.createElementNS(svgNS, 'defs');
+		const gradientId = `sparkline-gradient-${Math.random().toString(36).substring(2, 11)}`;
+		const gradient = document.createElementNS(svgNS, 'linearGradient');
+		gradient.setAttribute('id', gradientId);
+		gradient.setAttribute('x1', '0%');
+		gradient.setAttribute('y1', '0%');
+		gradient.setAttribute('x2', '0%');
+		gradient.setAttribute('y2', '100%');
+
+		const stop1 = document.createElementNS(svgNS, 'stop');
+		stop1.setAttribute('offset', '0%');
+		stop1.setAttribute('stop-color', 'var(--interactive-accent)');
+		stop1.setAttribute('stop-opacity', '0.3');
+		gradient.appendChild(stop1);
+
+		const stop2 = document.createElementNS(svgNS, 'stop');
+		stop2.setAttribute('offset', '100%');
+		stop2.setAttribute('stop-color', 'var(--interactive-accent)');
+		stop2.setAttribute('stop-opacity', '0.05');
+		gradient.appendChild(stop2);
+
+		defs.appendChild(gradient);
+		svg.appendChild(defs);
 
 		const max = Math.max(...data, 1);
 		const min = Math.min(...data, 0);
 		const range = max - min || 1;
 
-		// Build path
-		const points = data.map((val, i) => {
-			const x = (i / (data.length - 1)) * 100;
-			const y = 30 - ((val - min) / range) * 28 - 1;
-			return `${x},${y}`;
-		});
+		// Calculate points
+		const points: { x: number; y: number }[] = data.map((val, i) => ({
+			x: (i / (data.length - 1)) * 100,
+			y: 38 - ((val - min) / range) * 34 - 2
+		}));
 
+		// Build smooth bezier curve path
+		const buildSmoothPath = (pts: { x: number; y: number }[]): string => {
+			if (pts.length < 2) return '';
+
+			let path = `M ${pts[0].x},${pts[0].y}`;
+
+			for (let i = 0; i < pts.length - 1; i++) {
+				const p0 = pts[Math.max(0, i - 1)];
+				const p1 = pts[i];
+				const p2 = pts[i + 1];
+				const p3 = pts[Math.min(pts.length - 1, i + 2)];
+
+				// Control points for smooth curve
+				const cp1x = p1.x + (p2.x - p0.x) / 6;
+				const cp1y = p1.y + (p2.y - p0.y) / 6;
+				const cp2x = p2.x - (p3.x - p1.x) / 6;
+				const cp2y = p2.y - (p3.y - p1.y) / 6;
+
+				path += ` C ${cp1x},${cp1y} ${cp2x},${cp2y} ${p2.x},${p2.y}`;
+			}
+
+			return path;
+		};
+
+		const smoothPath = buildSmoothPath(points);
+
+		// Area fill with gradient
+		const area = document.createElementNS(svgNS, 'path');
+		area.setAttribute('d', `${smoothPath} L 100,40 L 0,40 Z`);
+		area.setAttribute('fill', `url(#${gradientId})`);
+		svg.appendChild(area);
+
+		// Smooth line stroke
 		const path = document.createElementNS(svgNS, 'path');
-		path.setAttribute('d', `M ${points.join(' L ')}`);
+		path.setAttribute('d', smoothPath);
 		path.setAttribute('fill', 'none');
-		path.setAttribute('stroke', color);
+		path.setAttribute('stroke', 'var(--interactive-accent)');
 		path.setAttribute('stroke-width', '2');
 		path.setAttribute('stroke-linecap', 'round');
 		path.setAttribute('stroke-linejoin', 'round');
 		svg.appendChild(path);
-
-		// Area fill
-		const area = document.createElementNS(svgNS, 'path');
-		area.setAttribute('d', `M 0,30 L ${points.join(' L ')} L 100,30 Z`);
-		area.setAttribute('fill', color);
-		area.setAttribute('fill-opacity', '0.1');
-		svg.appendChild(area);
 
 		sparkline.appendChild(svg);
 	}

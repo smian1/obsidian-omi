@@ -5719,10 +5719,10 @@ svg.leaflet-image-layer.leaflet-interactive path {
 .omi-stats-tile {
     background: var(--background-secondary);
     border-radius: var(--omi-radius-lg);
-    padding: 16px;
+    padding: 14px 16px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 4px;
 }
 
 .omi-stats-tile--full {
@@ -5733,7 +5733,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-bottom: 4px;
+    margin-bottom: 2px;
 }
 
 .omi-stats-tile-icon {
@@ -5750,11 +5750,11 @@ svg.leaflet-image-layer.leaflet-interactive path {
 
 /* KPI Tiles */
 .omi-stats-kpi-tile {
-    min-height: 120px;
+    /* No min-height - let content determine size */
 }
 
 .omi-stats-kpi-value {
-    margin: 4px 0;
+    margin: 0;
 }
 
 .omi-stats-big-number {
@@ -5790,9 +5790,9 @@ svg.leaflet-image-layer.leaflet-interactive path {
 
 /* Sparkline */
 .omi-stats-sparkline {
-    height: 30px;
+    height: 40px;
     width: 100%;
-    margin: 8px 0;
+    margin: 4px 0 0 0;
 }
 
 .omi-stats-sparkline svg {
