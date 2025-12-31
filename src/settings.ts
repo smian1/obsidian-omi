@@ -31,13 +31,32 @@ export class OmiConversationsSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName('Omi API key')
 			.setDesc('In the Omi app: Settings → Developer Settings → API → Create Key')
-			.addText(text => text
-				.setPlaceholder('omi_dev_xxxxxxxx')
-				.setValue(this.plugin.settings.apiKey)
-				.onChange(async (value) => {
-					this.plugin.settings.apiKey = value;
-					await this.plugin.saveSettings();
-				}));
+			.addText(text => {
+				text
+					.setPlaceholder('omi_dev_xxxxxxxx')
+					.setValue(this.plugin.settings.apiKey)
+					.onChange(async (value) => {
+						// Allow empty value (clearing the key)
+						if (value === '') {
+							this.plugin.settings.apiKey = value;
+							await this.plugin.saveSettings();
+							text.inputEl.classList.remove('omi-input-error');
+							return;
+						}
+
+						// Validate API key format
+						if (!value.startsWith('omi_dev_')) {
+							new Notice('Invalid API key format. Key must start with "omi_dev_"');
+							text.inputEl.classList.add('omi-input-error');
+							return;
+						}
+
+						// Valid key - save it
+						text.inputEl.classList.remove('omi-input-error');
+						this.plugin.settings.apiKey = value;
+						await this.plugin.saveSettings();
+					});
+			});
 
 		// ============================================
 		// TASKS

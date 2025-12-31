@@ -7501,6 +7501,21 @@ svg.leaflet-image-layer.leaflet-interactive path {
 }
 
 /* ============================================
+   INPUT ERROR STATE (Settings validation)
+   ============================================ */
+
+.omi-input-error {
+    border-color: var(--color-red, #ef4444) !important;
+    background-color: rgba(239, 68, 68, 0.1) !important;
+    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2) !important;
+}
+
+.omi-input-error:focus {
+    border-color: var(--color-red, #ef4444) !important;
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.3) !important;
+}
+
+/* ============================================
    TOGGLE SWITCH (custom styled)
    ============================================ */
 
