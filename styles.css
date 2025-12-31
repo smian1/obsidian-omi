@@ -3749,16 +3749,17 @@
 }
 
 /* Purple contribution colors (Light theme) */
+/* Ensure level-1 is clearly distinguishable from gray empty days */
 .omi-heatmap-level-1 {
-    background: #E9D5FF; /* Very light purple */
+    background: #C4B5FD; /* Light purple - visible but soft */
 }
 
 .omi-heatmap-level-2 {
-    background: #C4B5FD; /* Light purple */
+    background: #A78BFA; /* Medium-light purple */
 }
 
 .omi-heatmap-level-3 {
-    background: #A855F7; /* Medium purple */
+    background: #8B5CF6; /* Medium purple */
 }
 
 .omi-heatmap-level-4 {

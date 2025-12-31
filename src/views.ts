@@ -4902,6 +4902,26 @@ export class OmiHubView extends ItemView {
 			dateDuration.set(conv.date, (dateDuration.get(conv.date) || 0) + (conv.duration || 0));
 		}
 
+		// Calculate percentile-based thresholds for color levels
+		// We need 3 thresholds to split days with conversations into 4 levels (1-4)
+		// Level 0 is reserved for days with 0 conversations
+		const counts = Array.from(dateCount.values()).filter(c => c > 0).sort((a, b) => a - b);
+		let thresholds = [2, 4, 8]; // fallback for small datasets
+
+		if (counts.length >= 3) {
+			const p33 = counts[Math.floor(counts.length * 0.33)];
+			const p66 = counts[Math.floor(counts.length * 0.66)];
+			const p90 = counts[Math.floor(counts.length * 0.90)];
+
+			// Use distinct thresholds, avoiding duplicates
+			thresholds = [...new Set([p33, p66, p90])];
+
+			// Ensure we have 3 distinct thresholds
+			while (thresholds.length < 3) {
+				thresholds.push(thresholds[thresholds.length - 1] + 1);
+			}
+		}
+
 		// Show full year: Jan 1 to Dec 31 of current year
 		const now = new Date();
 		const currentYear = now.getFullYear();
@@ -4982,12 +5002,14 @@ export class OmiHubView extends ItemView {
 
 				const cell = row.createDiv('omi-heatmap-cell');
 
-				// Set intensity level (0-4)
+				// Set intensity level (0-4) using percentile-based thresholds
+				// Level 0 (gray) is ONLY for days with 0 conversations
 				let level = 0;
-				if (count >= 5) level = 4;
-				else if (count >= 3) level = 3;
-				else if (count >= 2) level = 2;
-				else if (count >= 1) level = 1;
+				if (count === 0) level = 0;
+				else if (count >= thresholds[2]) level = 4;
+				else if (count >= thresholds[1]) level = 3;
+				else if (count >= thresholds[0]) level = 2;
+				else level = 1; // Any day with conversations gets at least level 1
 
 				cell.addClass(`omi-heatmap-level-${level}`);
 				cell.setAttribute('title', `${cellDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}\n${count} conversations\n${this.formatDuration(duration)}`);
@@ -5009,12 +5031,19 @@ export class OmiHubView extends ItemView {
 			}
 		}
 
-		// Legend
+		// Legend with threshold tooltips
 		const legend = heatmapContainer.createDiv('omi-heatmap-legend');
 		legend.createEl('span', { text: 'Less' });
 		for (let i = 0; i <= 4; i++) {
 			const legendCell = legend.createDiv('omi-heatmap-cell omi-heatmap-legend-cell');
 			legendCell.addClass(`omi-heatmap-level-${i}`);
+			if (i === 0) {
+				legendCell.setAttribute('title', '0 conversations');
+			} else if (i === 1) {
+				legendCell.setAttribute('title', `1-${thresholds[0] - 1} conversations`);
+			} else {
+				legendCell.setAttribute('title', `${thresholds[i - 2]}+ conversations`);
+			}
 		}
 		legend.createEl('span', { text: 'More' });
 
