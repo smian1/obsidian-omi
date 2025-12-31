@@ -5945,9 +5945,9 @@ svg.leaflet-image-layer.leaflet-interactive path {
 
 /* ==================== EXPERIMENTAL VISUALIZATIONS ==================== */
 
-/* Insights Summary Tile - Enhanced with KPIs and rotation */
+/* Insights Summary Tile - Compact single column */
 .omi-stats-insights-tile {
-    grid-column: span 2; /* Make it wider for the KPIs */
+    grid-column: span 1;
 }
 
 /* KPI Row - 4 mini stats at top */

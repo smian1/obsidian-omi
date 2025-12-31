@@ -3267,7 +3267,7 @@ export class OmiHubView extends ItemView {
 
 	private computeStatsData(conversationArray: SyncedConversationMeta[]): StatsData {
 		// Generate cache key based on time range and conversation count
-		const cacheKey = `${this.statsTimeRange}-${conversationArray.length}`;
+		const cacheKey = `${this.statsTimeRange}-${conversationArray.length}-${this.statsDataLoaded}`;
 
 		// Return cached data if cache key matches
 		if (this.statsCacheKey === cacheKey && this.cachedStatsData) {
