@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf, Notice, debounce } from 'obsidian';
+import { ItemView, WorkspaceLeaf, Notice, debounce, setIcon } from 'obsidian';
 import { VIEW_TYPE_OMI_HUB, MEMORY_CATEGORY_EMOJI } from './constants';
 import { TaskWithUI, SyncedConversationMeta, ConversationDetailData, ActionItem, CalendarEvent, TranscriptSegment, MemoryWithUI, StatsData, HeatmapCell, CategoryStat, DurationBucket, MemoryStats, TaskStats, Achievement, AchievementData, AchievementCategory, ActionItemFromAPI, MemoryFromAPI } from './types';
 import { AddTaskModal, DatePickerModal, EditTaskModal, CalendarDatePickerModal, AddMemoryModal, EditMemoryModal, AchievementsModal } from './modals';
@@ -63,6 +63,8 @@ export class OmiHubView extends ItemView {
 	isLoadingMemories = false;
 	private memoriesAutoRefreshInterval: number | null = null;
 	private graphAnimationId: number | null = null;
+	private graphCanvas: HTMLCanvasElement | null = null;
+	private graphListeners: { event: string; handler: EventListener; options?: AddEventListenerOptions }[] = [];
 
 	// Debounced backup sync
 	private requestBackupSync: () => void;
@@ -204,6 +206,14 @@ export class OmiHubView extends ItemView {
 		if (this.graphAnimationId !== null) {
 			cancelAnimationFrame(this.graphAnimationId);
 			this.graphAnimationId = null;
+		}
+		// Clean up canvas event listeners to prevent memory leaks
+		if (this.graphCanvas && this.graphListeners.length > 0) {
+			for (const { event, handler, options } of this.graphListeners) {
+				this.graphCanvas.removeEventListener(event, handler, options);
+			}
+			this.graphListeners = [];
+			this.graphCanvas = null;
 		}
 	}
 
@@ -1277,8 +1287,12 @@ export class OmiHubView extends ItemView {
 			}
 		};
 
+		// Store canvas reference for cleanup
+		this.graphCanvas = canvas;
+		this.graphListeners = [];
+
 		// Zoom handler
-		canvas.addEventListener('wheel', (e) => {
+		const wheelHandler = (e: WheelEvent) => {
 			e.preventDefault();
 			const rect = canvas.getBoundingClientRect();
 			const mouseX = e.clientX - rect.left;
@@ -1295,10 +1309,12 @@ export class OmiHubView extends ItemView {
 				offsetX = mouseX - graphPos.x * scale;
 				offsetY = mouseY - graphPos.y * scale;
 			}
-		}, { passive: false });
+		};
+		canvas.addEventListener('wheel', wheelHandler, { passive: false });
+		this.graphListeners.push({ event: 'wheel', handler: wheelHandler as EventListener, options: { passive: false } });
 
 		// Mouse down - start drag or pan
-		canvas.addEventListener('mousedown', (e) => {
+		const mousedownHandler = (e: MouseEvent) => {
 			const rect = canvas.getBoundingClientRect();
 			const mouseX = e.clientX - rect.left;
 			const mouseY = e.clientY - rect.top;
@@ -1316,10 +1332,12 @@ export class OmiHubView extends ItemView {
 			}
 			lastMouseX = mouseX;
 			lastMouseY = mouseY;
-		});
+		};
+		canvas.addEventListener('mousedown', mousedownHandler);
+		this.graphListeners.push({ event: 'mousedown', handler: mousedownHandler as EventListener });
 
 		// Mouse move - drag node, pan, or hover
-		canvas.addEventListener('mousemove', (e) => {
+		const mousemoveHandler = (e: MouseEvent) => {
 			const rect = canvas.getBoundingClientRect();
 			const mouseX = e.clientX - rect.left;
 			const mouseY = e.clientY - rect.top;
@@ -1355,10 +1373,12 @@ export class OmiHubView extends ItemView {
 					canvas.style.cursor = 'grab';
 				}
 			}
-		});
+		};
+		canvas.addEventListener('mousemove', mousemoveHandler);
+		this.graphListeners.push({ event: 'mousemove', handler: mousemoveHandler as EventListener });
 
 		// Mouse up - end drag or pan, and handle click
-		canvas.addEventListener('mouseup', (e) => {
+		const mouseupHandler = (e: MouseEvent) => {
 			const rect = canvas.getBoundingClientRect();
 			const mouseX = e.clientX - rect.left;
 			const mouseY = e.clientY - rect.top;
@@ -1381,22 +1401,28 @@ export class OmiHubView extends ItemView {
 			draggedNode = null;
 			isPanning = false;
 			canvas.style.cursor = hoveredNode ? 'pointer' : 'grab';
-		});
+		};
+		canvas.addEventListener('mouseup', mouseupHandler);
+		this.graphListeners.push({ event: 'mouseup', handler: mouseupHandler as EventListener });
 
-		canvas.addEventListener('mouseleave', () => {
+		const mouseleaveHandler = () => {
 			tooltip.style.display = 'none';
 			hoveredNode = null;
 			isDragging = false;
 			draggedNode = null;
 			isPanning = false;
-		});
+		};
+		canvas.addEventListener('mouseleave', mouseleaveHandler);
+		this.graphListeners.push({ event: 'mouseleave', handler: mouseleaveHandler as EventListener });
 
 		// Double-click to reset zoom
-		canvas.addEventListener('dblclick', () => {
+		const dblclickHandler = () => {
 			scale = 1;
 			offsetX = 0;
 			offsetY = 0;
-		});
+		};
+		canvas.addEventListener('dblclick', dblclickHandler);
+		this.graphListeners.push({ event: 'dblclick', handler: dblclickHandler as EventListener });
 
 		// Force simulation parameters
 		const centerX = canvas.width / 2;
@@ -4241,7 +4267,7 @@ export class OmiHubView extends ItemView {
 			cls: 'omi-stats-view-btn clickable-icon',
 			attr: { 'aria-label': 'View all achievements' }
 		});
-		viewBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`;
+		setIcon(viewBtn, 'eye');
 		viewBtn.addEventListener('click', () => {
 			new AchievementsModal(this.app, stats.achievements).open();
 		});
@@ -4601,7 +4627,7 @@ export class OmiHubView extends ItemView {
 			cls: 'omi-stats-view-btn clickable-icon',
 			attr: { 'aria-label': 'View on map' }
 		});
-		mapBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"></polygon><line x1="8" y1="2" x2="8" y2="18"></line><line x1="16" y1="6" x2="16" y2="22"></line></svg>`;
+		setIcon(mapBtn, 'map');
 		mapBtn.addEventListener('click', () => {
 			this.activeTab = 'map';
 			this.plugin.settings.activeHubTab = 'map';
@@ -4966,11 +4992,14 @@ export class OmiHubView extends ItemView {
 		const avgPerDay = activeDays > 0 ? (totalConvs / activeDays).toFixed(1) : '0';
 
 		const stat1 = summary.createEl('span');
-		stat1.innerHTML = `<strong>${totalConvs}</strong> conversations in ${currentYear}`;
+		stat1.createEl('strong', { text: String(totalConvs) });
+		stat1.appendText(` conversations in ${currentYear}`);
 		const stat2 = summary.createEl('span');
-		stat2.innerHTML = `<strong>${activeDays}</strong> active days`;
+		stat2.createEl('strong', { text: String(activeDays) });
+		stat2.appendText(' active days');
 		const stat3 = summary.createEl('span');
-		stat3.innerHTML = `<strong>${avgPerDay}</strong> avg/day`;
+		stat3.createEl('strong', { text: String(avgPerDay) });
+		stat3.appendText(' avg/day');
 	}
 
 	// Map view properties
@@ -5591,7 +5620,7 @@ export class OmiHubView extends ItemView {
 		const moreBtn = moreContainer.createEl('button', {
 			cls: `omi-view-tab omi-view-more-btn ${isMoreActive ? 'active' : ''}`
 		});
-		moreBtn.innerHTML = isMoreActive
+		moreBtn.textContent = isMoreActive
 			? `${moreViews.find(v => v.id === this.viewMode)?.label} ▾`
 			: 'More ▾';
 		moreBtn.setAttribute('aria-haspopup', 'true');
