@@ -1,4 +1,4 @@
-# Omi Conversations for Obsidian
+# Omi for Obsidian
 
 Sync your [Omi AI](https://omi.me) conversations, tasks, and memories to Obsidian as searchable markdown files with Dataview-compatible metadata.
 
@@ -20,11 +20,11 @@ Sync your [Omi AI](https://omi.me) conversations, tasks, and memories to Obsidia
 1. Download the latest release
 2. Extract into your vault's `.obsidian/plugins/obsidian-omi` folder
 3. Reload Obsidian
-4. Enable "Omi Conversations" in Community Plugins
+4. Enable "Omi" in Community Plugins
 
 ## Quick Start
 
-1. Open **Settings > Omi Conversations**
+1. Open **Settings > Omi**
 2. Enter your **Omi Developer API Key** (see below)
 3. Click the brain icon in the ribbon to open **Omi Hub**
 4. Go to the **Sync** tab and click **Full Resync**
@@ -42,7 +42,7 @@ Sync your [Omi AI](https://omi.me) conversations, tasks, and memories to Obsidia
 The plugin creates organized markdown files in a nested hierarchy:
 
 ```
-Omi Conversations/
+Omi/
 ├── _omi-index.md          # Master index linking all conversations
 ├── Memories.md            # Searchable backup of all memories
 ├── Tasks.md               # Backup of all tasks
@@ -112,7 +112,7 @@ With the [Dataview plugin](https://github.com/blacksmithgu/obsidian-dataview) in
 #### List work conversations
 ```dataview
 TABLE date, duration, location
-FROM "Omi Conversations"
+FROM "Omi"
 WHERE category = "work"
 SORT date DESC
 ```
@@ -127,7 +127,7 @@ SORT date DESC
 #### Pending action items
 ```dataview
 TASK
-FROM "Omi Conversations"
+FROM "Omi"
 WHERE !completed
 LIMIT 20
 ```
@@ -142,7 +142,7 @@ TABLE
     length(rows) as "Conversations",
     sum(rows.duration) as "Total Min",
     round(sum(rows.duration)/60, 1) as "Hours"
-FROM "Omi Conversations"
+FROM "Omi"
 WHERE date >= date(today) - dur(7 days)
 GROUP BY dateformat(date, "ccc, MMM d") as Day
 SORT date DESC
@@ -155,7 +155,7 @@ TABLE WITHOUT ID
     length(rows) as "Count",
     round(sum(rows.duration)/60, 1) + " hrs" as "Time",
     round(length(rows) / 7 * 100) + "%" as "% of Week"
-FROM "Omi Conversations"
+FROM "Omi"
 WHERE date >= date(today) - dur(7 days)
 GROUP BY category
 SORT length(rows) DESC
@@ -168,7 +168,7 @@ TABLE WITHOUT ID
     length(rows) as "Conversations",
     round(sum(rows.duration)/60, 1) + " hours" as "Total Time",
     round(average(rows.duration), 0) + " min" as "Avg Length"
-FROM "Omi Conversations"
+FROM "Omi"
 GROUP BY dateformat(date, "yyyy-MM")
 SORT date DESC
 LIMIT 6
@@ -181,7 +181,7 @@ LIMIT 6
 #### Long conversations (deep work sessions)
 ```dataview
 TABLE date, category, duration + " min" as "Length", location
-FROM "Omi Conversations"
+FROM "Omi"
 WHERE duration > 30
 SORT duration DESC
 LIMIT 10
@@ -193,7 +193,7 @@ TABLE WITHOUT ID
     location as "Location",
     length(rows) as "Visits",
     round(sum(rows.duration)/60, 1) + " hrs" as "Time Spent"
-FROM "Omi Conversations"
+FROM "Omi"
 WHERE location != null
 GROUP BY location
 SORT sum(rows.duration) DESC
@@ -206,7 +206,7 @@ LIST WITHOUT ID
     "📅 " + dateformat(date, "ccc, MMM d") + " — " +
     length(rows) + " conversations (" +
     sum(rows.duration) + " min)"
-FROM "Omi Conversations"
+FROM "Omi"
 WHERE date >= date(today) - dur(14 days)
 GROUP BY date
 SORT date DESC
@@ -222,7 +222,7 @@ TABLE WITHOUT ID
     file.link as "Day",
     action_items as "Tasks",
     category
-FROM "Omi Conversations"
+FROM "Omi"
 WHERE action_items > 0
 SORT date DESC
 LIMIT 10
@@ -235,7 +235,7 @@ TABLE WITHOUT ID
     action_items as "Tasks Created",
     category,
     duration + " min" as "Duration"
-FROM "Omi Conversations"
+FROM "Omi"
 WHERE action_items > 3
 SORT action_items DESC
 ```
@@ -247,7 +247,7 @@ SORT action_items DESC
 #### Today's conversations
 ```dataview
 LIST
-FROM "Omi Conversations"
+FROM "Omi"
 WHERE date = date(today)
 SORT file.ctime DESC
 ```
@@ -259,7 +259,7 @@ TABLE WITHOUT ID
     category,
     duration + " min" as "Duration",
     action_items as "Tasks"
-FROM "Omi Conversations"
+FROM "Omi"
 WHERE date >= date(today) - dur(7 days)
 SORT date DESC
 ```
@@ -270,7 +270,7 @@ TABLE WITHOUT ID
     dateformat(date, "cccc") as "Day of Week",
     length(rows) as "Total Conversations",
     round(average(rows.duration), 0) + " min" as "Avg Duration"
-FROM "Omi Conversations"
+FROM "Omi"
 GROUP BY dateformat(date, "c")
 SORT length(rows) DESC
 ```
@@ -301,7 +301,7 @@ TABLE WITHOUT ID
     length(rows) as "Count",
     min(rows.date) as "First",
     max(rows.date) as "Latest"
-FROM "Omi Conversations"
+FROM "Omi"
 GROUP BY category
 SORT length(rows) DESC
 ```
@@ -316,14 +316,14 @@ TABLE WITHOUT ID
     file.link as "Conversation",
     duration + " min" as "Duration",
     action_items as "Tasks"
-FROM "Omi Conversations"
+FROM "Omi"
 WHERE date = this.file.day
 ```
 
 #### Link recent conversations from daily note
 ```dataview
 LIST
-FROM "Omi Conversations"
+FROM "Omi"
 WHERE date >= this.file.day - dur(3 days) AND date <= this.file.day
 SORT date DESC
 ```
@@ -369,26 +369,26 @@ Click the brain icon to open Omi Hub, a unified dashboard with multiple tabs:
 
 Automatically add links to Omi conversations in your daily notes:
 
-1. Go to **Settings > Omi Conversations > Daily Notes**
+1. Go to **Settings > Omi > Daily Notes**
 2. Enable **"Daily notes linking"**
 3. Set your daily notes folder and filename format
 
 After syncing, your daily note will include:
 
 ```markdown
-## Omi Conversations
-See [[Omi Conversations/2025/01/09/2025-01-09|today's conversations]]
+## Omi
+See [[Omi/2025/01/09/2025-01-09|today's conversations]]
 ```
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `Omi Conversations: Sync conversations` | Fetch new conversations |
-| `Omi Conversations: Full resync` | Re-download all conversations |
-| `Omi Conversations: Sync Tasks Hub` | Refresh tasks backup file |
-| `Omi Conversations: Sync Memories Hub` | Refresh memories backup file |
-| `Omi Conversations: Open Omi Hub` | Open the main dashboard |
+| `Omi: Sync conversations` | Fetch new conversations |
+| `Omi: Full resync` | Re-download all conversations |
+| `Omi: Sync Tasks Hub` | Refresh tasks backup file |
+| `Omi: Sync Memories Hub` | Refresh memories backup file |
+| `Omi: Open Hub` | Open the main dashboard |
 
 ## Settings
 

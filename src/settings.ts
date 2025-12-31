@@ -132,7 +132,7 @@ export class OmiConversationsSettingTab extends PluginSettingTab {
 				frag.createEl('strong', { text: `Currently: ${this.plugin.settings.folderPath}/` });
 			}))
 			.addText(text => text
-				.setPlaceholder('Omi Conversations')
+				.setPlaceholder('Omi')
 				.setValue(this.plugin.settings.folderPath)
 				.onChange(async (value) => {
 					this.plugin.settings.folderPath = value;
@@ -247,7 +247,7 @@ export class OmiConversationsSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Enable daily notes linking')
-			.setDesc('Add "Omi Conversations" section to daily notes when syncing')
+			.setDesc('Add "Omi" section to daily notes when syncing')
 			.addToggle(toggle => toggle
 				.setValue(this.plugin.settings.enableDailyNotesLink)
 				.onChange(async (value) => {

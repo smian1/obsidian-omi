@@ -21,7 +21,7 @@ export const MEMORY_CATEGORY_EMOJI: Record<string, string> = {
 
 export const DEFAULT_SETTINGS: OmiConversationsSettings = {
 	apiKey: '',
-	folderPath: 'Omi Conversations',
+	folderPath: 'Omi',
 	startDate: '2025-02-09',
 	includeOverview: true,
 	includeActionItems: true,

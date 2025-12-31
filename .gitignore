@@ -23,8 +23,13 @@ data.json
 
 # Claude Code instructions (local development only)
 CLAUDE.md
-
 GEMINI.md
+
+# Claude Code local settings
+.claude/
+
+# Cursor editor
+.cursor/
 
 /dist
 

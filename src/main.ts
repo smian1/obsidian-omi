@@ -968,7 +968,7 @@ export default class OmiConversationsPlugin extends Plugin {
 		}
 
 		const content: string[] = [];
-		content.push('# Omi Conversations Index');
+		content.push('# Omi Index');
 		content.push('');
 		content.push(`> ${conversations.length} conversations | Last updated: ${new Date().toLocaleString()}`);
 		content.push('');
@@ -1130,7 +1130,7 @@ export default class OmiConversationsPlugin extends Plugin {
 			const content = await this.app.vault.read(existingFile);
 
 			// Check if Omi section already exists
-			const omiSectionMarker = '## Omi Conversations';
+			const omiSectionMarker = '## Omi';
 			if (content.includes(omiSectionMarker)) {
 				// Already has Omi section - update it
 				const omiConvPath = this.getDateFolderPath(this.settings.folderPath, dateStr);
